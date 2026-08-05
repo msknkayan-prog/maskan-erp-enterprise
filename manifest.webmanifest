@@ -1,0 +1,11 @@
+{
+  "name": "مسكن الكيان ERP — الإصدار المؤسسي النهائي",
+  "short_name": "Maskan ERP",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f6f5",
+  "theme_color": "#0b6b4f",
+  "lang": "ar",
+  "dir": "rtl",
+  "description": "الإصدار المؤسسي النهائي لإدارة مشاريع وعقود ومالية ومشتريات شركة المقاولات"
+}

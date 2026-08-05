@@ -1,0 +1,2 @@
+Maskan ERP Enterprise Final v1.0
+Official enterprise baseline for GitHub + Vercel + Supabase.

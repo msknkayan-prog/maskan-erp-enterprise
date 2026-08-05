@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b6b4f">
+  <title>مسكن الكيان ERP — Enterprise Final v1.0</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="assets/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div id="offlineBanner" class="offline-banner hidden">أنت تعمل دون اتصال بالإنترنت. ستظهر أحدث البيانات المحفوظة فقط.</div>
+  <div id="toast" class="toast"></div>
+  <div id="modalRoot"></div>
+<section id="loginScreen" class="screen center hidden">
+    <div class="auth-card">
+      <div class="logo">م</div>
+      <h1>مسكن الكيان للمقاولات</h1>
+      <p class="muted">نظام إدارة المشاريع والعقود والمستخلصات والدفعات والمشتريات</p>
+      <form id="loginForm" class="stack">
+        <label>البريد الإلكتروني<input id="email" type="email" required autocomplete="email"></label>
+        <label>كلمة المرور
+          <div class="password-wrap">
+            <input id="password" type="password" required autocomplete="current-password">
+            <button id="togglePassword" type="button" aria-label="إظهار كلمة المرور">◉</button>
+          </div>
+        </label>
+        <button id="forgotPassword" class="text-btn" type="button">نسيت كلمة المرور؟</button>
+        <button class="btn primary" type="submit">تسجيل الدخول</button>
+      </form>
+</div>
+  </section>
+
+  <div id="app" class="app hidden">
+    <aside id="sidebar" class="sidebar">
+      <div class="brand">
+        <div class="logo small">م</div>
+        <div><strong>مسكن الكيان</strong><span>ERP Cloud — Enterprise Final v1.0</span></div>
+      </div>
+      <nav id="nav">
+        <div class="nav-group"><span>الرئيسية</span>
+          <button data-page="dashboard" class="active">لوحة التحكم</button>
+          <button data-page="reports">التقارير التنفيذية</button>
+        </div>
+        <div class="nav-group"><span>المشاريع والعقود</span>
+          <button data-page="projects">المشاريع</button>
+          <button data-page="parties">العملاء والمقاولون والموردون</button>
+          <button data-page="contracts">العقود</button>
+          <button data-page="variations">الأعمال الإضافية</button>
+          <button data-page="claims">المطالبات المالية</button>
+        </div>
+        <div class="nav-group"><span>المالية</span>
+          <button data-page="requests">طلبات الصرف</button>
+          <button data-page="certificates">المستخلصات</button>
+          <button data-page="payments">الدفعات</button>
+          <button data-page="deductions">الخصومات والاستقطاعات</button>
+          <button data-page="advances">العهد والسلف</button>
+        </div>
+        <div class="nav-group"><span>المشتريات والمخزون</span>
+          <button data-page="purchaseOrders">أوامر الشراء</button>
+          <button data-page="inventory">المخزون والمستودعات</button>
+        </div>
+        <div class="nav-group"><span>الإدارة</span>
+          <button data-page="documents">المرفقات والأرشيف</button>
+          <button data-page="notifications">الإشعارات <b id="notificationBadge" class="nav-badge hidden">0</b></button>
+          <button data-page="activity">سجل الاعتمادات</button>
+          <button data-page="users">المستخدمون والصلاحيات</button>
+          <button data-page="launch">بدء التشغيل وإدخال البيانات</button><button data-page="system">إعدادات النظام</button>
+        </div>
+      </nav>
+      <div class="sidebar-bottom">
+<button id="logout">تسجيل الخروج</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="menu" class="icon">☰</button>
+        <div class="title-block"><h2 id="title">لوحة التحكم</h2><small id="identity"></small></div>
+        <div class="global-search">
+          <input id="globalSearch" type="search" placeholder="بحث سريع في المشاريع والعقود والجهات…">
+          <button id="globalSearchBtn" class="icon-btn" title="بحث">⌕</button>
+        </div>
+        <div class="topmeta">
+          <button id="refreshPage" class="icon-btn top-action" title="تحديث البيانات">↻</button>
+          <button id="themeToggle" class="icon-btn top-action" title="تغيير المظهر">◐</button>
+          <button id="installApp" class="install-btn hidden">تثبيت التطبيق</button>
+          <span id="connectionStatus" class="online">متصل</span>
+          <span id="today"></span>
+        </div>
+      </header>
+      <section id="content" class="content"></section><button id="quickAdd" class="quick-add" aria-label="إضافة سريعة">＋</button>
+    </main>
+    <nav class="mobile-tabs" id="mobileTabs">
+      <button data-page="dashboard">الرئيسية</button>
+      <button data-page="projects">المشاريع</button>
+      <button data-page="requests">الصرف</button>
+      <button data-page="purchaseOrders">المشتريات</button>
+      <button id="mobileMore">المزيد</button>
+    </nav>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="assets/app.js"></script>
+  <script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));}</script>
+</body>
+</html>
