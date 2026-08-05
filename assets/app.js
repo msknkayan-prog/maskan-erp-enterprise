@@ -135,7 +135,7 @@ function projectHealth(x){
 
 async function openProjectDetails(projectId){
   const [pResult,execResult,contractsResult,certsResult,paymentsResult]=await Promise.all([
-    sb.from('projects').select('*,parties(name_ar),profiles(full_name)').eq('id',projectId).single(),
+    sb.from('projects').select('*,parties(name_ar),project_manager:profiles!projects_project_manager_id_fkey(full_name)').eq('id',projectId).single(),
     sb.from('v_project_executive_summary').select('*').eq('project_id',projectId).maybeSingle(),
     sb.from('contracts').select('contract_number,title,contract_value,status').eq('project_id',projectId).order('created_at',{ascending:false}),
     sb.from('payment_certificates').select('certificate_number,net_amount,status,certificate_date').eq('project_id',projectId).order('certificate_date',{ascending:false}).limit(8),
