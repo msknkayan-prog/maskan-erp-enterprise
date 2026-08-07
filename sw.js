@@ -1,5 +1,5 @@
-const CACHE='maskan-erp-enterprise-final-v1';
-const ASSETS=['/','/index.html','/assets/style.css','/assets/app.js','/manifest.webmanifest'];
+const CACHE='maskan-erp-enterprise-final-v1-repaired-20260807';
+const ASSETS=['/','/index.html','/assets/style.css','/assets/app.js','/assets/repair-2026-08-07.js','/manifest.webmanifest'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));
