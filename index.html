@@ -4,16 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b6b4f">
-  <title>مسكن الكيان ERP — Enterprise Final v1.4 Go-Live</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="assets/style.css">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>مسكن الكيان ERP — Enterprise Final v1.4.2</title>
+  <link rel="manifest" href="/manifest.webmanifest?v=142">
+  <link rel="stylesheet" href="/assets/style.css?v=142">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div id="offlineBanner" class="offline-banner hidden">أنت تعمل دون اتصال بالإنترنت. ستظهر أحدث البيانات المحفوظة فقط.</div>
   <div id="toast" class="toast"></div>
   <div id="modalRoot"></div>
-<section id="loginScreen" class="screen center hidden">
+
+  <!-- Login is visible by default. The application hides it only after a valid session is restored. -->
+  <section id="loginScreen" class="screen center">
     <div class="auth-card">
       <div class="logo">م</div>
       <h1>مسكن الكيان للمقاولات</h1>
@@ -29,14 +32,15 @@
         <button id="forgotPassword" class="text-btn" type="button">نسيت كلمة المرور؟</button>
         <button class="btn primary" type="submit">تسجيل الدخول</button>
       </form>
-</div>
+      <p id="startupStatus" class="muted" style="margin-top:10px;font-size:12px">جاري تهيئة الاتصال الآمن…</p>
+    </div>
   </section>
 
   <div id="app" class="app hidden">
     <aside id="sidebar" class="sidebar">
       <div class="brand">
         <div class="logo small">م</div>
-        <div><strong>مسكن الكيان</strong><span>ERP Cloud — Enterprise Final v1.4</span></div>
+        <div><strong>مسكن الكيان</strong><span>ERP Cloud — Enterprise Final v1.4.2</span></div>
       </div>
       <nav id="nav">
         <div class="nav-group"><span>الرئيسية</span>
@@ -66,12 +70,11 @@
           <button data-page="notifications">الإشعارات <b id="notificationBadge" class="nav-badge hidden">0</b></button>
           <button data-page="activity">سجل الاعتمادات</button>
           <button data-page="users">المستخدمون والصلاحيات</button>
-          <button data-page="launch">بدء التشغيل وإدخال البيانات</button><button data-page="system">إعدادات النظام</button>
+          <button data-page="launch">بدء التشغيل وإدخال البيانات</button>
+          <button data-page="system">إعدادات النظام</button>
         </div>
       </nav>
-      <div class="sidebar-bottom">
-<button id="logout">تسجيل الخروج</button>
-      </div>
+      <div class="sidebar-bottom"><button id="logout">تسجيل الخروج</button></div>
     </aside>
 
     <main class="main">
@@ -101,13 +104,35 @@
     </nav>
   </div>
 
+  <script>
+    // Never allow a blank screen: login remains visible until the app proves it has a valid session.
+    window.addEventListener('DOMContentLoaded',()=>{
+      const login=document.getElementById('loginScreen');
+      if(login) login.classList.remove('hidden');
+    });
+    window.addEventListener('error',()=>{
+      const login=document.getElementById('loginScreen');
+      const status=document.getElementById('startupStatus');
+      if(login) login.classList.remove('hidden');
+      if(status) status.textContent='تعذر تحميل أحد مكونات النظام. حدّث الصفحة أو تحقق من الاتصال.';
+    });
+    setTimeout(()=>{
+      const login=document.getElementById('loginScreen');
+      const app=document.getElementById('app');
+      const status=document.getElementById('startupStatus');
+      if(login && app && app.classList.contains('hidden')){
+        login.classList.remove('hidden');
+        if(status) status.textContent = window.supabase ? 'جاهز لتسجيل الدخول' : 'تعذر تحميل مكتبة الاتصال. تحقق من الإنترنت ثم أعد المحاولة.';
+      }
+    },3500);
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="assets/app.js"></script>
-  <script src="assets/repair-2026-08-07.js"></script>
-  <script src="assets/import-upsert-fix-2026-08-07.js"></script>
-  <script src="assets/enterprise-v1.3.js"></script>
-  <script src="assets/enterprise-v1.4.js"></script>
-  <script src="assets/numbering-fix-v1.4.js"></script>
-  <script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));}</script>
+  <script src="/assets/app.js?v=142"></script>
+  <script src="/assets/repair-2026-08-07.js?v=142"></script>
+  <script src="/assets/import-upsert-fix-2026-08-07.js?v=142"></script>
+  <script src="/assets/enterprise-v1.3.js?v=142"></script>
+  <script src="/assets/enterprise-v1.4.js?v=142"></script>
+  <script src="/assets/numbering-fix-v1.4.js?v=142"></script>
+  <!-- Service worker intentionally disabled in v1.4.2 until production startup is verified. -->
 </body>
 </html>
