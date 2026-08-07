@@ -1,0 +1,48 @@
+name: Quality Check
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required files
+        run: |
+          test -f index.html
+          test -f assets/app.js
+          test -f assets/style.css
+          test -f assets/repair-2026-08-07.js
+          test -f manifest.webmanifest
+          test -f vercel.json
+          test -f sw.js
+
+      - name: JavaScript syntax check
+        run: |
+          node --check assets/app.js
+          node --check assets/repair-2026-08-07.js
+          node --check sw.js
+
+      - name: JSON syntax check
+        run: |
+          python -m json.tool vercel.json >/dev/null
+          python -m json.tool manifest.webmanifest >/dev/null
+
+      - name: Verify production routing
+        run: |
+          ! grep -q '"rewrites"' vercel.json
+
+      - name: Verify fixed Supabase relationships
+        run: |
+          grep -q "project_manager:profiles!projects_project_manager_id_fkey" assets/repair-2026-08-07.js
+          grep -q "actor:profiles!approval_history_acted_by_fkey" assets/repair-2026-08-07.js
+          grep -q "order('acted_at'" assets/repair-2026-08-07.js
+
+      - name: Prevent privileged Supabase secrets in frontend
+        run: |
+          ! grep -RniE "sb_secret_|service_role_key|SUPABASE_SERVICE_ROLE_KEY" assets index.html vercel.json manifest.webmanifest sw.js
