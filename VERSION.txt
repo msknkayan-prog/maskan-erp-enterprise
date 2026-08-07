@@ -1,3 +1,4 @@
-Maskan ERP — Enterprise Final v1.1 Production
+Maskan ERP — Enterprise Final v1.2 Production Hardened
 Release date: 2026-08-07
-Official production baseline for GitHub + Vercel + Supabase.
+Production hardening baseline for GitHub + Vercel + Supabase.
+Requires sql/06_production_security_hardening.sql to be executed once in Supabase, followed by sql/07_production_security_verify.sql.
