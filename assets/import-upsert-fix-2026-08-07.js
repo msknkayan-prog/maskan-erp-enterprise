@@ -1,6 +1,7 @@
 /* Maskan ERP Enterprise — import upsert + enum normalization fix — 2026-08-07
    Uses tenant-safe composite conflict targets matching production unique indexes.
    Normalizes party, project and contract enum values during CSV/Excel import.
+   v1.4.7: parses percentage values such as "5%" safely before Supabase upsert.
 */
 
 try {
@@ -20,6 +21,12 @@ try {
 
     const norm = value => String(value ?? '').trim();
     const lower = value => norm(value).toLowerCase();
+    const parsePercent = (value, fallback=0) => {
+      const raw=norm(value).replace(/٪/g,'%').replace(/%/g,'').replace(/,/g,'');
+      if(!raw) return fallback;
+      const n=Number(raw);
+      return Number.isFinite(n) ? n : fallback;
+    };
 
     if (IMPORT_SPECS.parties) {
       const partyTypeAliases = new Map([
@@ -70,7 +77,7 @@ try {
         const out=originalMap(r,i,ctx);
         const raw=norm(r.status);
         out.status=projectStatusAliases.get(lower(raw)) || projectStatusAliases.get(raw) || 'planned';
-        out.completion_percentage=Math.max(0,Math.min(100,Number(r.completion_percentage||0)));
+        out.completion_percentage=Math.max(0,Math.min(100,parsePercent(r.completion_percentage,0)));
         return out;
       };
     }
@@ -101,11 +108,14 @@ try {
         const rawStatus=norm(r.status);
         out.contract_type=contractTypeAliases.get(lower(rawType)) || contractTypeAliases.get(rawType) || 'subcontract';
         out.status=recordStatusAliases.get(lower(rawStatus)) || recordStatusAliases.get(rawStatus) || 'draft';
+        // Number('5%') is NaN, and JSON serializes NaN as null. Parse the percent sign explicitly.
+        out.retention_percentage=parsePercent(r.retention_percentage ?? r.percentage,5);
+        if(!Number.isFinite(out.retention_percentage)) out.retention_percentage=5;
         return out;
       };
     }
   }
-  document.documentElement.dataset.importUpsertFix='2026-08-07-enum-v146';
+  document.documentElement.dataset.importUpsertFix='2026-08-07-enum-v147';
 } catch (err) {
   console.error('Maskan import upsert patch failed', err);
 }
