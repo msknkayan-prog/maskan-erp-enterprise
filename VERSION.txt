@@ -1,13 +1,22 @@
-Maskan ERP — Enterprise Final v1.3
+Maskan ERP — Enterprise Final v1.4 Go-Live
 Release date: 2026-08-07
-Production enhancements:
-- Automatic tenant-safe document numbering via sql/09_enterprise_numbering.sql
-- Excel export for operational tables and reports
-- Print/PDF action for operational tables
-- Enhanced permissions guidance and production status markers
-- Existing document archive, notifications, audit/approval log, backup and diagnostics retained
 
-Required database migrations already used in production:
-- sql/08_import_upsert_constraints.sql
-Optional new enterprise feature migration:
-- sql/09_enterprise_numbering.sql (run once in Supabase to enable automatic numbering)
+Production capabilities:
+- Tenant-safe automatic numbering via sql/09_enterprise_numbering.sql
+- Excel export and print/PDF actions
+- Enterprise permissions guidance
+- Executive dashboard extensions
+- Budget versus paid/purchase commitments control
+- Contract expiry alerts (30/60 days and expired)
+- Full ERP audit trail viewer (insert/update/delete)
+- BOQ / contract-items summary
+- Controlled JSON backup restore for admin
+- Existing document archive, notifications, approval log, import center, backup and diagnostics retained
+- PWA cache refreshed for the go-live build
+
+Database migrations required for the complete v1.4 feature set:
+- sql/08_import_upsert_constraints.sql — completed in production
+- sql/09_enterprise_numbering.sql — completed in production
+- sql/10_enterprise_go_live.sql — run once in Supabase to enable audit trail, budget-control view and contract-alert view
+
+After running sql/10_enterprise_go_live.sql, refresh the web app with Ctrl+Shift+R and run System Diagnostics before production data entry.
