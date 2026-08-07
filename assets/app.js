@@ -363,11 +363,11 @@ async function dashboard(){
 }
 
 async function projects(){
-  const {data,error}=await sb.from('projects').select('*,parties(name_ar),profiles(full_name)').order('created_at',{ascending:false});
+  const {data,error}=await sb.from('projects').select('*,parties(name_ar),project_manager:profiles!projects_project_manager_id_fkey(full_name)').order('created_at',{ascending:false});
   if(error)throw error;
   const rows=(data||[]).map(x=>`<tr data-status="${esc(x.status)}">
     <td>${esc(x.project_code)}</td><td><b>${esc(x.project_name_ar)}</b><small class="subline">${esc(x.location||'')}</small></td>
-    <td>${esc(x.parties?.name_ar||'—')}</td><td>${esc(x.profiles?.full_name||'—')}</td>
+    <td>${esc(x.parties?.name_ar||'—')}</td><td>${esc(x.project_manager?.full_name||'—')}</td>
     <td>${money(x.contract_value)}</td>
     <td><div class="mini-progress"><span style="width:${Math.min(100,Number(x.completion_percentage||0))}%"></span></div><small>${Number(x.completion_percentage||0)}%</small></td>
     <td>${statusPill(x.status)}</td>
@@ -386,7 +386,7 @@ async function projects(){
     const v=btn.dataset.status;document.querySelectorAll('tbody tr').forEach(tr=>tr.style.display=!v||tr.dataset.status===v?'':'none');
   });
   if($('#addProject'))$('#addProject').onclick=addProject;
-  if($('#exportProjects'))$('#exportProjects').onclick=()=>downloadCsv('projects.csv',['الكود','المشروع','العميل','مدير المشروع','قيمة العقد','الإنجاز','الحالة'],(data||[]).map(x=>[x.project_code,x.project_name_ar,x.parties?.name_ar||'',x.profiles?.full_name||'',x.contract_value,x.completion_percentage,label(x.status)]));
+  if($('#exportProjects'))$('#exportProjects').onclick=()=>downloadCsv('projects.csv',['الكود','المشروع','العميل','مدير المشروع','قيمة العقد','الإنجاز','الحالة'],(data||[]).map(x=>[x.project_code,x.project_name_ar,x.parties?.name_ar||'',x.project_manager?.full_name||'',x.contract_value,x.completion_percentage,label(x.status)]));
 }
 
 async function addProject(){
