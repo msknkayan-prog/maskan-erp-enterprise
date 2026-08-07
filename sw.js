@@ -1,4 +1,4 @@
-const CACHE='maskan-erp-enterprise-v1.1-production';
+const CACHE='maskan-erp-enterprise-v1.2-production-hardened';
 const SHELL=['/','/index.html','/assets/style.css','/assets/app.js','/assets/repair-2026-08-07.js','/manifest.webmanifest'];
 
 self.addEventListener('install',event=>{
