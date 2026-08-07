@@ -1,4 +1,13 @@
-Maskan ERP — Enterprise Final v1.2 Production Hardened
+Maskan ERP — Enterprise Final v1.3
 Release date: 2026-08-07
-Production hardening baseline for GitHub + Vercel + Supabase.
-Requires sql/06_production_security_hardening.sql to be executed once in Supabase, followed by sql/07_production_security_verify.sql.
+Production enhancements:
+- Automatic tenant-safe document numbering via sql/09_enterprise_numbering.sql
+- Excel export for operational tables and reports
+- Print/PDF action for operational tables
+- Enhanced permissions guidance and production status markers
+- Existing document archive, notifications, audit/approval log, backup and diagnostics retained
+
+Required database migrations already used in production:
+- sql/08_import_upsert_constraints.sql
+Optional new enterprise feature migration:
+- sql/09_enterprise_numbering.sql (run once in Supabase to enable automatic numbering)
