@@ -1,4 +1,4 @@
-/* Maskan ERP Enterprise — Production relationship patch v1.1 — 2026-08-07
+/* Maskan ERP Enterprise — Production relationship patch v1.2 — 2026-08-07
    Loaded after assets/app.js.
    Purpose: remove ambiguous PostgREST embeds and correct approval-history timestamps.
 */
@@ -98,6 +98,5 @@ activity = async function(){
     <td>${statusPill(x.action)}</td><td>${label(x.from_status)}</td><td>${label(x.to_status)}</td><td>${esc(x.comments||'—')}</td></tr>`))}</div>`;
 };
 
-// Visible release marker for production support.
-document.documentElement.dataset.erpRelease='v1.1-production';
-document.title='مسكن الكيان ERP — Enterprise Final v1.1 Production';
+document.documentElement.dataset.erpRelease='v1.2-production-hardened';
+document.title='مسكن الكيان ERP — Enterprise Final v1.2 Production Hardened';
