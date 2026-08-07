@@ -1,5 +1,6 @@
--- Maskan ERP Enterprise v1.4
+-- Maskan ERP Enterprise v1.4.1
 -- Final go-live controls: audit trail + budget control + contract alerts
+-- Fixed enum status handling for Supabase/PostgreSQL record_status values.
 -- Run once in Supabase SQL Editor. Safe: creates new ERP objects and triggers only.
 
 begin;
@@ -103,10 +104,14 @@ select
   coalesce(p.budget_value,0)::numeric as budget_value,
   coalesce(p.completion_percentage,0)::numeric as completion_percentage,
   coalesce((select sum(py.amount) from public.payments py where py.project_id=p.id),0)::numeric as paid_amount,
-  coalesce((select sum(po.total_amount) from public.purchase_orders po where po.project_id=p.id and coalesce(po.status,'') not in ('cancelled','rejected')),0)::numeric as purchase_commitments,
+  coalesce((select sum(po.total_amount) from public.purchase_orders po
+            where po.project_id=p.id
+              and (po.status is null or po.status::text not in ('cancelled','rejected'))),0)::numeric as purchase_commitments,
   (coalesce(p.budget_value,0)
    - coalesce((select sum(py.amount) from public.payments py where py.project_id=p.id),0)
-   - coalesce((select sum(po.total_amount) from public.purchase_orders po where po.project_id=p.id and coalesce(po.status,'') not in ('cancelled','rejected')),0))::numeric as budget_remaining
+   - coalesce((select sum(po.total_amount) from public.purchase_orders po
+               where po.project_id=p.id
+                 and (po.status is null or po.status::text not in ('cancelled','rejected'))),0))::numeric as budget_remaining
 from public.projects p;
 
 grant select on public.v_erp_budget_control to authenticated;
@@ -130,7 +135,7 @@ select
   end as alert_level,
   case when c.end_date is null then null else (c.end_date-current_date) end as days_remaining
 from public.contracts c
-where coalesce(c.status,'') not in ('cancelled','completed');
+where c.status is null or c.status::text not in ('cancelled','completed');
 
 grant select on public.v_erp_contract_alerts to authenticated;
 
