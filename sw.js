@@ -1,5 +1,5 @@
-const CACHE='maskan-erp-enterprise-v1.2.1-import-fix';
-const SHELL=['/','/index.html','/assets/style.css','/assets/app.js','/assets/repair-2026-08-07.js','/assets/import-upsert-fix-2026-08-07.js','/manifest.webmanifest'];
+const CACHE='maskan-erp-enterprise-v1.3';
+const SHELL=['/','/index.html','/assets/style.css','/assets/app.js','/assets/repair-2026-08-07.js','/assets/import-upsert-fix-2026-08-07.js','/assets/enterprise-v1.3.js','/manifest.webmanifest'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)));
