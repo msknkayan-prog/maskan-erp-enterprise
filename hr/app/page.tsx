@@ -1,0 +1,1 @@
+import {cookies} from 'next/headers';import {redirect} from 'next/navigation';import ERP from './ui';export const dynamic='force-dynamic';export default async function Page(){if(!(await cookies()).get('hr_access'))redirect('/login');return <ERP/>;}
