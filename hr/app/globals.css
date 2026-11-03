@@ -7,3 +7,79 @@
 body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-height:1.5;min-height:44px}button{font-size:15px;min-height:40px}.nav{font-size:15px}.nav-label{font-size:13px;color:#a3b6a9}.crumb,.account{font-size:14px}.page-heading p,.panel>p,.next p{font-size:15px;color:#607263}.panel-head>span{font-size:13px;color:#687d6b}.stat>span{font-size:15px;color:#64765e}.stat small{font-size:12px;color:#7a8c75}.company-card b{font-size:15px}.company-card small{font-size:13px;color:#74856c}.company-picker label,.modal label{font-size:15px;color:#4f654d}.tools button,.upload{font-size:14px}.search{max-width:320px}th{font-size:14px;color:#596e4e}td{font-size:15px;color:#344d32;padding:16px}.company-tag{font-size:14px;color:#607254}.badge{font-size:13px}.footnote{font-size:13px;color:#667960}.record-paper{display:none}.attachments{border-top:1px solid #dce5d6;margin-top:25px;padding-top:20px}.attachments ul{list-style:none;padding:0}.attachments li{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #e8eee2;padding:12px 0}.attachments a,.button-link{color:#3f653d;text-decoration:underline}.attachments small{color:#7c8b71}.button-link{display:inline-flex;align-items:center;gap:7px;padding:10px;border:1px solid #ceddc3;border-radius:6px;background:#f6f9f1;text-decoration:none}.checkline{display:flex;align-items:center;gap:10px;margin:18px 0;font-size:16px}.checkline input{width:20px;min-height:20px}.review-warning{display:block;color:#94712b;font-size:12px;margin-top:8px;white-space:normal}.review-warning-box{padding:16px;background:#fff9e9;border:1px solid #e3d19b;border-radius:7px;color:#775f2b;font-size:15px;margin-bottom:20px}.review-warning-box ul{padding-right:20px}.migration-guide li{line-height:2.1;margin-bottom:8px}.member-form select{max-width:320px}.paper-head{display:flex;align-items:center;justify-content:space-between;gap:15px;border-bottom:2px solid #b49b5a;margin-bottom:22px;padding-bottom:15px}.paper-head img{width:100px;max-height:100px;object-fit:contain}.paper-head h1{font-size:21px}.paper-company{padding:15px;border:1px solid #b49b5a;font-weight:700;font-size:18px}.paper-signatures{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:35px 0 20px}.paper-signatures p{font-size:12px}.paper-note,.paper-footer{font-size:11px}.paper-footer{text-align:center;border-top:1px solid #b49b5a;padding-top:10px}.record-paper th,.record-paper td{white-space:normal;overflow-wrap:anywhere}.record-paper table{table-layout:fixed}.record-paper th{width:35%}
 @media print{body:has(.modal-backdrop) .workspace,body:has(.modal-backdrop) aside{display:none!important}body:has(.modal-backdrop) .modal-backdrop{display:block!important;position:static!important;background:white!important;padding:0!important;backdrop-filter:none!important}body:has(.modal-backdrop) .modal{display:block;max-height:none;overflow:visible;width:100%;max-width:none;border-radius:0;box-shadow:none;padding:0}body:has(.modal-backdrop) .modal>*:not(.record-paper){display:none!important}.record-paper{display:block!important;font-size:13px}.record-paper th,.record-paper td{font-size:12px;padding:9px}.record-paper p{color:#263c37}.paper-head h2{font-size:18px}.paper-signatures{break-inside:avoid}.paper-signatures p{font-size:11px}a{color:#263c37;text-decoration:none}}
 .permission-grid{width:100%;padding:14px;border:1px solid #dce5d4;border-radius:7px;font-size:14px}.permission-grid>div{display:flex;gap:15px;align-items:center;flex-wrap:wrap;padding:8px;border-bottom:1px solid #edf1e6}.permission-grid b{min-width:190px}.permission-grid label{display:flex;gap:6px;align-items:center}.permission-grid input{min-height:18px;width:18px}.attachments>label{display:block;margin:12px 0}.attachments>label>input{margin-top:8px}
+
+/* Shared workspace presentation */
+@media screen {
+  .app {
+    font-size: 13px;
+    color: #203b32;
+    background: #f2f5f2;
+  }
+  .app :is(input, select, textarea, button, label, th, td, .nav-label,
+    .crumb, .account, .company-tag, .badge, .footnote, .panel-head > span,
+    .page-heading p, .panel > p, .next p, .upload, .stat > span,
+    .company-card b, .company-card small, .checkline, .permission-grid) {
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .app .page-heading {
+    background: #fff;
+    padding: 20px 24px;
+    border: 1px solid #dbe5dd;
+    border-inline-start: 4px solid #a38344;
+    border-radius: 12px;
+    margin-bottom: 16px;
+  }
+  .app .page-heading p { color: #4f665a; margin-bottom: 0; }
+  .app .toolbar {
+    background: #fff;
+    border: 1px solid #dbe5dd;
+    border-radius: 12px;
+    padding: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .app .tools { flex-wrap: wrap; gap: 8px; }
+  .app .panel, .app .stat, .app .company-card {
+    border-radius: 12px;
+    box-shadow: 0 2px 8px #193c3509;
+  }
+  .app .table-wrap {
+    max-height: min(68vh, 680px);
+    scrollbar-color: #aabdaf #f1f5f1;
+  }
+  .app .table-wrap table { border-collapse: separate; border-spacing: 0; }
+  .app .table-wrap th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #e9f0ea;
+    color: #203b32;
+    font-weight: 700;
+    border-bottom: 1px solid #c7d7ca;
+    padding: 11px 13px;
+  }
+  .app .table-wrap td {
+    color: #273e35;
+    padding: 9px 13px;
+    vertical-align: middle;
+    border-bottom: 1px solid #e2ebe3;
+  }
+  .app .table-wrap tbody tr:nth-child(even) td { background: #f6f9f6; }
+  .app .table-wrap tbody tr:hover td,
+  .app .table-wrap tbody tr:focus-within td { background: #eaf3eb; }
+  .app .row-actions { flex-wrap: wrap; min-width: 112px; }
+  .app .row-actions button { min-height: 34px; padding: 4px 8px; }
+  .app .company-tag { color: #375b4b; }
+  .app .nav { min-height: 38px; }
+  .app .nav.active { color: #f3d591; }
+  .app :is(button, a, input, select, textarea):focus-visible {
+    outline: 2px solid #a38344;
+    outline-offset: 2px;
+  }
+}
+@media screen and (max-width: 720px) {
+  .app .page-heading { padding: 16px; }
+  .app .toolbar > *, .app .search { max-width: 100%; }
+  .app .table-wrap { max-height: 62vh; }
+}
