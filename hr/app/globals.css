@@ -281,3 +281,10 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
   .app .form-grid label { color: #594722; }
   .app .calculation { background: #faf3e1; color: #66501e; border-color: #e5d3a4; }
 }
+
+/* Stack record actions vertically for a clear, consistent action column. */
+@media screen {
+  .app .row-actions { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 6px; min-width: 132px; }
+  .app .row-actions > button { width: 100%; white-space: normal; line-height: 1.5; }
+  .app .review-warning { display: block; margin-top: 6px; line-height: 1.6; }
+}
