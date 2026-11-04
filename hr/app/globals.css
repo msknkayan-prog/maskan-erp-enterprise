@@ -288,3 +288,14 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
   .app .row-actions > button { width: 100%; white-space: normal; line-height: 1.5; }
   .app .review-warning { display: block; margin-top: 6px; line-height: 1.6; }
 }
+
+/* Keep sidebar navigation independent from light content buttons. */
+@media screen {
+  .app aside .nav { background: transparent; border: 1px solid transparent; color: #eee6d2; box-shadow: none; font-size: 13px; font-weight: 500; line-height: 1.6; min-height: 40px; margin-block: 3px; padding: 9px 10px; text-align: right; }
+  .app aside .nav:hover { background: #3a311e; border-color: #655128; color: #ffe7a0; }
+  .app aside .nav.active { background: linear-gradient(135deg, #a77f27, #d7bb62); border-color: #c9a74d; color: #211b0b; box-shadow: inset -3px 0 #f0d987; font-weight: 700; }
+  .app aside .nav:focus-visible { outline: 2px solid #e4c572; outline-offset: 2px; }
+  .app aside .nav svg { color: #c9b27d; flex-shrink: 0; }
+  .app aside .nav.active svg { color: #382b0d; }
+  .app aside .nav-label { margin-top: 23px; margin-bottom: 9px; font-weight: 700; letter-spacing: 0; }
+}
