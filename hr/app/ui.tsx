@@ -11,7 +11,7 @@ const money=n=>Number(n||0).toLocaleString('ar-SA',{maximumFractionDigits:2});
 function download(name,content,type='text/csv;charset=utf-8'){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff',content],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 const csvEscape=v=>'"'+String(v??'').replaceAll('"','""')+'"';
 function csvParse(s){s=s.replace(/^\ufeff/,'');let rows=[],row=[],v='',quoted=false;for(let i=0;i<s.length;i++){let c=s[i];if(c==='"'){if(quoted&&s[i+1]==='"'){v+='"';i++}else quoted=!quoted}else if(c===','&&!quoted){row.push(v);v=''}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&s[i+1]==='\n')i++;row.push(v);if(row.some(Boolean))rows.push(row);row=[];v=''}else v+=c}if(quoted)throw Error('علامات اقتباس غير مكتملة');row.push(v);if(row.some(Boolean))rows.push(row);return rows}
-export default function ERP(){const [module,setModule]=useState('overview'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[edit,setEdit]=useState(null),[saving,setSaving]=useState(false),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberPermissions,setMemberPermissions]=useState({});
+export default function ERP(){const [module,setModule]=useState('overview'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollEdit,setPayrollEdit]=useState(null),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[edit,setEdit]=useState(null),[saving,setSaving]=useState(false),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberPermissions,setMemberPermissions]=useState({});
 const notify=t=>{setToast(t);setTimeout(()=>setToast(''),4500)};
 async function refresh(){setLoading(true);setError('');try{const res=await fetch('/api/erp',{cache:'no-store'});const d=await res.json();if(res.status===401){location.href='/login';return;}if(!res.ok)throw Error(d.error);setRows(d.rows);setUser(d.user)}catch(e){setError(e.message)}finally{setLoading(false)}}
 useEffect(()=>{refresh()},[]);
@@ -41,14 +41,45 @@ const payrollEntries=payrollEmployees.map(emp=>{
  const gross=payrollNumber(d.salary,d.total_monthly_salary,base+housing+transport);
  const bonus=payrollNumber(p.bonus)+payrollNumber(p.extra_allowance);
  const deductions=payrollNumber(p.absence_deduction)+payrollNumber(p.advance_deduction)+payrollNumber(p.deductions);
- const net=Math.round((gross+bonus-deductions)*100)/100;
+ const net=matched&&p.net!==undefined?Number(p.net):Math.round((gross+bonus+payrollNumber(p.overtime)-deductions)*100)/100;
  const status=String(d.employment_status||d.employee_status||'');
- return {id:emp.id,company:emp.company,code:String(d.code||d.employee_number||emp.code||''),name:String(d.name||d.employee_name||''),status:status==='active'||status==='علي راس العمل'?'على رأس العمل':status==='inactive'||status==='موقوف'?'موقوف':status||'غير محدد',base,housing,transport,gross,bonus,deductions,net,record:matched,payment:p.method||d.payment_method||''};
+ return {id:emp.id,company:emp.company,code:String(d.code||d.employee_number||emp.code||''),name:String(d.name||d.employee_name||''),status:status==='active'||status==='علي راس العمل'?'على رأس العمل':status==='inactive'||status==='موقوف'?'موقوف':status||'غير محدد',base,housing,transport,gross,bonus,deductions,net,record:matched,payment:p.method||d.payment_method||'',cash:matched?payrollNumber(p.cash_amount):null,bank:matched?payrollNumber(p.bank_amount):null};
 });
-const payrollSums=payrollEntries.reduce((x,e)=>({count:x.count+1,base:x.base+e.base,housing:x.housing+e.housing,transport:x.transport+e.transport,gross:x.gross+e.gross,bonus:x.bonus+e.bonus,deductions:x.deductions+e.deductions,net:x.net+e.net,existing:x.existing+(e.record?1:0)}),{count:0,base:0,housing:0,transport:0,gross:0,bonus:0,deductions:0,net:0,existing:0});
+const payrollSums=payrollEntries.reduce((x,e)=>({count:x.count+1,base:x.base+e.base,housing:x.housing+e.housing,transport:x.transport+e.transport,gross:x.gross+e.gross,bonus:x.bonus+e.bonus,deductions:x.deductions+e.deductions,net:x.net+e.net,existing:x.existing+(e.record?1:0),cash:x.cash+(e.cash||0),bank:x.bank+(e.bank||0),approved:x.approved+(e.record?.status==='approved'?1:0)}),{count:0,base:0,housing:0,transport:0,gross:0,bonus:0,deductions:0,net:0,existing:0,cash:0,bank:0,approved:0});
+
+function payrollNetDraft(d,gross,basic){
+ const overtime=Math.round(Number(d.overtime_hours||0)*(gross/30/8+0.5*basic/30/8)*100)/100;
+ return Math.round((gross+Number(d.bonus||0)+Number(d.extra_allowance||0)+overtime-Number(d.absence_deduction||0)-Number(d.advance_deduction||0)-Number(d.deductions||0))*100)/100;
+}
+function startPayrollReview(e){
+ if(!canWrite(user?.role,'payroll')||!permission(user||{},'payroll','edit')){notify('ليس لديك صلاحية التعديل');return;}
+ if(e.record&&e.record.status!=='draft'){notify('أعد المسير إلى المسودة أولاً');return;}
+ const p=e.record?.data||{};
+ setPayrollEdit({id:e.record?.id,revision:e.record?.revision,company:e.company,name:e.name,code:e.code,gross:e.gross,basic:e.base,
+ data:{employee_id:e.id,month:payrollMonth,bonus:p.bonus??0,extra_allowance:p.extra_allowance??0,overtime_hours:p.overtime_hours??0,absence_days:p.absence_days??0,absence_deduction:p.absence_deduction??0,advance_deduction:p.advance_deduction??0,deductions:p.deductions??0,cash_amount:p.cash_amount??0,bank_amount:p.bank_amount??e.net,method:p.method??'bank',notes:p.notes??''}});
+}
+async function savePayrollReview(ev){
+ ev.preventDefault();const e=payrollEdit;if(!e)return;
+ const d=e.data,net=payrollNetDraft(d,e.gross,e.basic),cash=Number(d.cash_amount),bank=Number(d.bank_amount),cents=n=>Math.round(n*100);
+ if(!Number.isFinite(net)||net<0||!Number.isFinite(cash)||!Number.isFinite(bank)||cash<0||bank<0||cents(cash)+cents(bank)!==cents(net)){notify('مجموع الكاش والتحويل يجب أن يساوي صافي الراتب');return;}
+ setSaving(true);try{
+ await post({action:'save',module:'payroll',company:e.company,...(e.id?{id:e.id,revision:e.revision}:{}),data:{...d,method:cash>0&&bank>0?'mixed':cash>0?'cash':'bank'}});
+ setPayrollEdit(null);notify('تم حفظ المسير للمراجعة');await refresh();
+ }catch(err){notify(err.message)}finally{setSaving(false)}
+}
+async function changePayrollApproval(e,decision='approve'){
+ if(!e.record||!permission(user||{},'payroll','approve'))return;
+ const s=e.record.status;
+ if(!['draft','hr','finance'].includes(s)||user.role!=='admin'&&((s==='draft'&&!canWrite(user.role,'payroll'))||(s!=='draft'&&s!==user.role))){notify('هذه المرحلة ليست ضمن صلاحياتك');return;}
+ let note='';
+ if(decision==='return'){note=window.prompt('سبب إعادة المسير للتعديل:')||'';if(!note.trim())return;}
+ if(decision==='approve'&&s==='finance'&&!window.confirm('اعتماد مستحق راتب الموظف للصرف؟ لا تُنفذ حوالة بنكية تلقائيًا.'))return;
+ setSaving(true);try{await post({action:'transition',module:'payroll',id:e.record.id,revision:e.record.revision,decision,note});notify(decision==='return'?'تمت إعادة المسير للمراجعة':s==='finance'?'تم اعتماد مستحق الراتب':'تم إرسال المسير للمرحلة التالية');await refresh();}catch(err){notify(err.message)}finally{setSaving(false)}
+}
+
 function exportPayrollPreview(){
- const headers=['الشركة','الرقم الوظيفي','اسم الموظف','حالة الموظف','الراتب الأساسي','بدل السكن','بدل النقل','إجمالي الأجر','مكافآت وبدلات إضافية مسجلة','الخصومات المسجلة','صافي الاستحقاق المبدئي','طريقة الصرف','شهر المسير','حالة مسير الموظف'];
- const data=payrollEntries.map(e=>[e.company,e.code,e.name,e.status,e.base,e.housing,e.transport,e.gross,e.bonus,e.deductions,e.net,e.payment,payrollMonth,e.record?'مسجل':'مبدئي غير معتمد']);
+ const headers=['الشركة','الرقم الوظيفي','اسم الموظف','حالة الموظف','الراتب الأساسي','بدل السكن','بدل النقل','إجمالي الأجر','مكافآت وبدلات إضافية مسجلة','الخصومات المسجلة','صافي الاستحقاق','صرف كاش','تحويل بنكي','طريقة الصرف','شهر المسير','حالة مسير الموظف'];
+ const data=payrollEntries.map(e=>[e.company,e.code,e.name,e.status,e.base,e.housing,e.transport,e.gross,e.bonus,e.deductions,e.net,e.cash??'',e.bank??'',e.payment,payrollMonth,e.record?(states[e.record.status]||e.record.status):'مبدئي غير معتمد']);
  const bytes=workbookBytes([headers,...data]);const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));a.download='مسير-الرواتب-'+(payrollCompany==='__all__'?'جميع-الشركات':payrollCompany)+'-'+payrollMonth+'.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 const approved=scoped.filter(r=>r.status==='approved'),employeeCount=scoped.filter(r=>r.module==='employees').length,projectCount=scoped.filter(r=>r.module==='leave'&&r.status==='approved').length,contractTotal=scoped.filter(r=>r.module==='payroll').reduce((n,r)=>n+Number(r.data.net||0),0),pending=scoped.filter(r=>!['draft','approved','cancelled'].includes(r.status)).length;
