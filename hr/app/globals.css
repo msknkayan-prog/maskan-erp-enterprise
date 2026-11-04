@@ -198,3 +198,86 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
   .app .page-heading { padding: 16px; }
   .app .table-wrap { max-height: 65vh; }
 }
+
+/* Gold and ivory presentation matched to the supplied contractor screenshot. */
+:root {
+  --green: #967126;
+  --deep: #17160f;
+  --gold: #b78e32;
+  --ink: #302b20;
+  --muted: #6d6351;
+  --line: #e5d8bd;
+  --bg: #f4f1e8;
+}
+@media screen {
+  body { background: #f4f1e8; color: #302b20; }
+  .app { background: #f4f1e8; color: #302b20; }
+  .app aside {
+    background: linear-gradient(180deg, #12110c, #242116);
+    box-shadow: -5px 0 16px #30280f1a;
+    padding: 16px 12px;
+  }
+  .app .brand { border-color: #4a3e21; }
+  .app .brand b { color: #efdfad; }
+  .app .brand small, .app .nav-label { color: #d8bb68; }
+  .app .nav-label { border-bottom: 1px solid #463b22; padding-bottom: 8px; }
+  .app .nav { color: #eee6d2; border-radius: 7px; padding: 8px 10px; }
+  .app .nav:hover { background: #3a311e; color: #ffe7a0; box-shadow: none; }
+  .app .nav.active {
+    background: linear-gradient(135deg, #a77f27, #d7bb62);
+    color: #211b0b;
+    box-shadow: inset -3px 0 #f0d987;
+  }
+  .app .nav svg:last-child:not(:first-child) { color: #bda774; }
+  .app .sidebar-bottom { color: #d1c5a7; border-color: #463b22; }
+  .app .sidebar-bottom small { color: #baa77d; }
+  .app header { background: #fffdf8; border-color: #e5d8bd; height: 66px; }
+  .app main { padding: 16px 18px; }
+  .app h1, .app h2, .app .crumb b { color: #4a3a19; }
+  .app .eyebrow { color: #927023; }
+  .app :is(.page-heading, .panel, .stat, .company-card, .toolbar) {
+    background: #fffdf8;
+    border: 1px solid #e5d8bd;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px #55401908;
+  }
+  .app .page-heading { padding: 16px 20px; border-inline-start: 4px solid #b78e32; }
+  .app .toolbar { padding: 10px; gap: 10px; }
+  .app .panel-head { background: #fffbf1; border-color: #e5d8bd; }
+  .app .panel.records { border-radius: 10px; }
+  .app :is(input, select, textarea) {
+    background: #fffefb;
+    color: #302b20;
+    border-color: #d9c7a1;
+    border-radius: 7px;
+  }
+  .app input::placeholder, .app textarea::placeholder { color: #7c705a; }
+  .app button { border-color: #d9c7a1; border-radius: 7px; background: #fffdf8; color: #51401c; }
+  .app button:hover { background: #f8f0dc; border-color: #b28c36; }
+  .app .primary {
+    background: linear-gradient(135deg, #a47a22, #d3b65d);
+    border: 1px solid #9b7728;
+    color: #251e0c;
+    box-shadow: 0 2px 5px #8160191c;
+  }
+  .app .primary:hover { background: linear-gradient(135deg, #97701e, #c9a94c); }
+  .app :is(input, select, textarea, button, a):focus-visible { outline-color: #b78e3299; }
+  .app .table-wrap { border-radius: 0 0 10px 10px; scrollbar-color: #928970 #f2ede1; }
+  .app .table-wrap th {
+    background: #eee7d5;
+    color: #4a3c20;
+    border-bottom: 2px solid #c8ad69;
+    padding: 10px 13px;
+  }
+  .app .table-wrap td { color: #302b20; background: #fffefb; border-color: #e9dfcc; padding: 9px 13px; }
+  .app .table-wrap tbody tr:nth-child(even) td { background: #faf6ed; }
+  .app .table-wrap tbody tr:hover td, .app .table-wrap tbody tr:focus-within td { background: #f5ebd2; }
+  .app .company-tag { color: #71521a; }
+  .app .employee-register :is(th, td):nth-child(3) { border-left-color: #d5c291; }
+  .app .stat strong { color: #9b711c; }
+  .app .stat-icon, .app .company-monogram { background: #f5ecd4; color: #927023; }
+  .app .avatar { background: #efe6d0; color: #725720; }
+  .app .modal { background: #fffdf8; border: 1px solid #dfcea8; }
+  .app .form-grid label { color: #594722; }
+  .app .calculation { background: #faf3e1; color: #66501e; border-color: #e5d3a4; }
+}
