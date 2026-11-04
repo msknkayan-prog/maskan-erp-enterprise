@@ -88,7 +88,7 @@ const cycleBatchIds=new Set(cycleBatches.map(r=>r.id));
 const cyclePayroll=rows.filter(r=>r.module==='payroll'&&cycleBatchIds.has(r.data?.batch_id)).sort((a,b)=>a.company.localeCompare(b.company,'ar')||String(a.data?.employee_name||'').localeCompare(String(b.data?.employee_name||''),'ar'));
 const cycleBatchFor=row=>cycleBatches.find(b=>b.id===row.data?.batch_id);
 const cycleNumeric=n=>Number.isFinite(Number(n))?Number(n):0;
-const cycleTotals=cyclePayroll.reduce((a,r)=>({count:a.count+1,gross:a.gross+cycleNumeric(r.data.salary),net:a.net+cycleNumeric(r.data.net),cash:a.cash+cycleNumeric(r.data.cash_amount),bank:a.bank+cycleNumeric(r.data.bank_amount),reviewed:a.reviewed+(r.data.split_confirmed?1:0)}),{count:0,gross:0,net:0,cash:0,bank:0,reviewed:0});
+const cycleTotals=cyclePayroll.filter(r=>!r.data.excluded).reduce((a,r)=>({count:a.count+1,gross:a.gross+cycleNumeric(r.data.salary),net:a.net+cycleNumeric(r.data.net),cash:a.cash+cycleNumeric(r.data.cash_amount),bank:a.bank+cycleNumeric(r.data.bank_amount),reviewed:a.reviewed+(r.data.split_confirmed?1:0)}),{count:0,gross:0,net:0,cash:0,bank:0,reviewed:0});
 const cycleStatus={draft:'قيد التجهيز',admin_review:'بانتظار اعتماد المدير الإداري',finance:'معتمد إداريًا - بانتظار المالية',paid:'تم الصرف'};
 async function cyclePost(payload){const response=await fetch('/api/payroll-cycle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const result=await response.json();if(!response.ok)throw Error(result.error||'تعذر تنفيذ طلب المسير');return result;}
 async function cycleGenerate(){
@@ -98,6 +98,7 @@ async function cycleGenerate(){
 }
 function cycleEditEmployee(row){
  const b=cycleBatchFor(row);
+ if(row.data.excluded){notify('أعد الموظف المستبعد إلى المسير قبل تعديله');return;}
  if(!b||b.status!=='draft'||!['admin','hr'].includes(user?.role)){notify('التعديل متاح لمرحلة تجهيز المسير فقط');return;}
  setCycleEdit({row_id:row.id,batch_id:b.id,revision:row.revision,company:row.company,name:row.data.employee_name,employee_number:row.data.employee_number,
    status:row.data.employment_status,data:{...row.data}});
@@ -114,6 +115,23 @@ async function cycleSave(ev){
  if(!Number.isFinite(net)||net<0||!Number.isFinite(cash)||!Number.isFinite(bank)||cash<0||bank<0||Math.round((cash+bank)*100)!==Math.round(net*100)){notify('يجب أن يساوي الكاش والتحويل البنكي صافي الراتب');return;}
  setSaving(true);try{await cyclePost({action:'update',batch_id:cycleEdit.batch_id,row_id:cycleEdit.row_id,revision:cycleEdit.revision,data:cycleEdit.data});setCycleEdit(null);notify('تم حفظ تعديل الموظف في مسير الشهر فقط');await refresh();}catch(e){notify(e.message)}finally{setSaving(false)}
 }
+async function cycleExcludeEmployee(row){
+ const batch=cycleBatchFor(row);
+ if(!batch||batch.status!=='draft'||!['admin','hr'].includes(user?.role))return;
+ const reason=window.prompt('سبب استبعاد الموظف من مسير '+batch.data.month+' (لن تُحذف بياناته الأساسية من شؤون الموظفين):');
+ if(!reason?.trim())return;
+ if(!window.confirm('تأكيد استبعاد '+row.data.employee_name+' من مسير '+batch.company+' للشهر الحالي؟ ستظل بيانات الموظف الأصلية محفوظة، ويمكن إعادته قبل الاعتماد.'))return;
+ setSaving(true);
+ try{await cyclePost({action:'exclude',batch_id:batch.id,row_id:row.id,revision:row.revision,reason});notify('تم استبعاد الموظف من مسير الشهر دون حذف ملفه الوظيفي');await refresh();}
+ catch(e){notify(e.message)}finally{setSaving(false)}
+}
+async function cycleRestoreEmployee(row){
+ const batch=cycleBatchFor(row);
+ if(!batch||batch.status!=='draft'||!['admin','hr'].includes(user?.role))return;
+ setSaving(true);
+ try{await cyclePost({action:'restore',batch_id:batch.id,row_id:row.id,revision:row.revision});notify('أعيد الموظف إلى مسير الشهر؛ راجع مبالغ الصرف قبل الإرسال');await refresh();}
+ catch(e){notify(e.message)}finally{setSaving(false)}
+}
 async function cycleTransition(b,action){
  let extras={};
  if(action==='return'){const note=window.prompt('سبب إعادة المسير إلى التجهيز:');if(!note?.trim())return;extras.note=note;}
@@ -122,13 +140,13 @@ async function cycleTransition(b,action){
  setSaving(true);try{await cyclePost({action,batch_id:b.id,...extras});notify(action==='finance_pay'?'تم توثيق الصرف وإتاحة سندات الاستلام':'تم تحديث مرحلة اعتماد المسير');await refresh();}catch(e){notify(e.message)}finally{setSaving(false);}
 }
 function cycleExport(){
- const head=['الشركة','الشهر','الرقم الوظيفي','اسم الموظف','الراتب الأساسي','بدل السكن','بدل النقل','المكافآت','بدلات أخرى','ساعات إضافية','قيمة الإضافي','خصم الغياب','خصم السلف','خصومات أخرى','الصافي','كاش','تحويل بنكي','حالة المراجعة','حالة المسير'];
- const data=cyclePayroll.map(r=>{const d=r.data,b=cycleBatchFor(r);return [r.company,d.month,d.employee_number,d.employee_name,d.basic,d.housing,d.transport,d.bonus,d.extra_allowance,d.overtime_hours,d.overtime,d.absence_deduction,d.advance_deduction,d.deductions,d.net,d.cash_amount,d.bank_amount,d.split_confirmed?'مراجع':'غير مراجع',cycleStatus[b?.status]||b?.status||''];});
+ const head=['الشركة','الشهر','الرقم الوظيفي','اسم الموظف','الراتب الأساسي','بدل السكن','بدل النقل','المكافآت','بدلات أخرى','ساعات إضافية','قيمة الإضافي','خصم الغياب','خصم السلف','خصومات أخرى','الصافي','كاش','تحويل بنكي','حالة المراجعة','حالة إدراج الموظف','حالة المسير'];
+ const data=cyclePayroll.map(r=>{const d=r.data,b=cycleBatchFor(r);return [r.company,d.month,d.employee_number,d.employee_name,d.basic,d.housing,d.transport,d.bonus,d.extra_allowance,d.overtime_hours,d.overtime,d.absence_deduction,d.advance_deduction,d.deductions,d.net,d.cash_amount,d.bank_amount,d.split_confirmed?'مراجع':'غير مراجع',d.excluded?'مستبعد من المسير':'مدرج',cycleStatus[b?.status]||b?.status||''];});
  const bytes=workbookBytes([head,...data]);const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));a.download='مسيرات-'+payrollMonth+'-'+(payrollCompany==='__all__'?'جميع-الشركات':payrollCompany)+'.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 function cycleReceipt(row){
  const b=cycleBatchFor(row);
- if(!b||b.status!=='paid'){notify('لا يمكن توليد سند استلام قبل توثيق الصرف');return;}
+ if(!b||b.status!=='paid'||row.data.excluded){notify('لا يمكن توليد سند استلام لموظف مستبعد أو قبل توثيق الصرف');return;}
  const d=row.data||{};
  const safe=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
  const val=(name,value)=>'<tr><th>'+safe(name)+'</th><td>'+safe(value)+'</td></tr>';
@@ -170,19 +188,19 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:15}}>
  { [['الموظفون في المسيرات',cycleTotals.count],['تمت مراجعتهم',cycleTotals.reviewed],['إجمالي المستحق',money(cycleTotals.net)+' ر.س'],['الصرف النقدي',money(cycleTotals.cash)+' ر.س'],['التحويلات البنكية',money(cycleTotals.bank)+' ر.س']].map(([k,v])=><div key={k} style={{padding:12,border:'1px solid #d9c6a0',borderRadius:12,minWidth:135}}><small style={{display:'block'}}>{k}</small><b>{v}</b></div>)}
  </div>
- <div className="table-wrap" style={{marginBottom:17}}><table><thead><tr><th>الشركة</th><th>الشهر</th><th>الموظفون</th><th>المراجعة</th><th>الحالة</th><th>إجراء المرحلة</th></tr></thead><tbody>{cycleBatches.map(b=>{const employees=cyclePayroll.filter(r=>r.data.batch_id===b.id);const confirmed=employees.filter(r=>r.data.split_confirmed).length;return <tr key={b.id}><td>{b.company}</td><td>{b.data.month}</td><td>{employees.length}</td><td>{confirmed}/{employees.length}</td><td>{cycleStatus[b.status]||b.status}</td><td><div className="row-actions">
-  {b.status==='draft'&&['admin','hr'].includes(user?.role)&&<button disabled={saving||confirmed!==employees.length||!employees.length} onClick={()=>cycleTransition(b,'submit')}>إرسال للمدير الإداري</button>}
+ <div className="table-wrap" style={{marginBottom:17}}><table><thead><tr><th>الشركة</th><th>الشهر</th><th>الموظفون</th><th>المراجعة</th><th>الحالة</th><th>إجراء المرحلة</th></tr></thead><tbody>{cycleBatches.map(b=>{const employees=cyclePayroll.filter(r=>r.data.batch_id===b.id);const eligible=employees.filter(r=>!r.data.excluded);const confirmed=eligible.filter(r=>r.data.split_confirmed).length;return <tr key={b.id}><td>{b.company}</td><td>{b.data.month}</td><td>{eligible.length} <small>({employees.length-eligible.length} مستبعد)</small></td><td>{confirmed}/{eligible.length}</td><td>{cycleStatus[b.status]||b.status}</td><td><div className="row-actions">
+  {b.status==='draft'&&['admin','hr'].includes(user?.role)&&<button disabled={saving||confirmed!==eligible.length||!eligible.length} onClick={()=>cycleTransition(b,'submit')}>إرسال للمدير الإداري</button>}
   {b.status==='admin_review'&&['admin','administrative_manager'].includes(user?.role)&&<><button disabled={saving} onClick={()=>cycleTransition(b,'admin_approve')}>اعتماد إداري وإرسال للمالية</button><button disabled={saving} onClick={()=>cycleTransition(b,'return')}>إعادة للتعديل</button></>}
   {b.status==='finance'&&['admin','finance'].includes(user?.role)&&<><button disabled={saving} onClick={()=>cycleTransition(b,'finance_pay')}>تأكيد الصرف وإصدار السندات</button><button disabled={saving} onClick={()=>cycleTransition(b,'return')}>إعادة للتعديل</button></>}
   {b.status==='paid'&&<b>مصروف · السندات متاحة</b>}
  </div></td></tr>})}</tbody></table></div>
- {!cycleBatches.length?<div className="empty"><h3>لم يتم توليد مسير لهذا الشهر</h3><p>{payrollMonth===ksaMonth?'اختر الشركة أو جميع الشركات واضغط توليد مسير الشهر مرة واحدة.':'لا يمكن إنشاء مسير جديد لشهر سابق؛ المتاح عرض المسيرات المسجلة فقط.'}</p></div>:<div className="table-wrap"><table><thead><tr>{['الشركة','الموظف','الرقم الوظيفي','الأساسي','السكن','النقل','الصافي','صرف كاش','تحويل بنكي','حالة المراجعة','الإجراء'].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{cyclePayroll.map(row=>{const d=row.data,b=cycleBatchFor(row);return <tr key={row.id}><td>{row.company}</td><td>{d.employee_name}</td><td>{d.employee_number}</td><td>{money(d.basic)}</td><td>{money(d.housing)}</td><td>{money(d.transport)}</td><td>{money(d.net)}</td><td>{money(d.cash_amount)}</td><td>{money(d.bank_amount)}</td><td>{d.split_confirmed?'مراجع':'بانتظار المراجعة'}</td><td><div className="row-actions">
- {b?.status==='draft'&&['admin','hr'].includes(user?.role)&&<button onClick={()=>cycleEditEmployee(row)}>تعديل الموظف في المسير</button>}
- {b?.status==='paid'&&<button onClick={()=>cycleReceipt(row)}><FileText size={15}/>سند استلام</button>}
+ {!cycleBatches.length?<div className="empty"><h3>لم يتم توليد مسير لهذا الشهر</h3><p>{payrollMonth===ksaMonth?'اختر الشركة أو جميع الشركات واضغط توليد مسير الشهر مرة واحدة.':'لا يمكن إنشاء مسير جديد لشهر سابق؛ المتاح عرض المسيرات المسجلة فقط.'}</p></div>:<div className="table-wrap"><table><thead><tr>{['الشركة','الموظف','الرقم الوظيفي','الأساسي','السكن','النقل','الصافي','صرف كاش','تحويل بنكي','حالة المراجعة','الإجراء'].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{cyclePayroll.map(row=>{const d=row.data,b=cycleBatchFor(row);return <tr key={row.id}><td>{row.company}</td><td>{d.employee_name}</td><td>{d.employee_number}</td><td>{money(d.basic)}</td><td>{money(d.housing)}</td><td>{money(d.transport)}</td><td>{money(d.net)}</td><td>{money(d.cash_amount)}</td><td>{money(d.bank_amount)}</td><td>{d.excluded?'مستبعد من المسير':d.split_confirmed?'مراجع':'بانتظار المراجعة'}</td><td><div className="row-actions">
+ {b?.status==='draft'&&['admin','hr'].includes(user?.role)&&<>{!d.excluded?<><button disabled={saving} onClick={()=>cycleEditEmployee(row)}>تعديل بيانات المسير</button><button disabled={saving} onClick={()=>cycleExcludeEmployee(row)}>استبعاد الموظف</button></>:<button disabled={saving} onClick={()=>cycleRestoreEmployee(row)}>إعادة الموظف</button>}</>}
+ {b?.status==='paid'&&!d.excluded&&<button onClick={()=>cycleReceipt(row)}><FileText size={15}/>سند استلام</button>}
  </div></td></tr>})}</tbody></table></div>}
  </section>}
  {cycleEdit&&<div className="modal-backdrop" role="presentation"><section className="modal" role="dialog" aria-modal="true" aria-label="مراجعة بيانات الموظف داخل المسير" style={{width:'95vw',maxWidth:780,padding:22,maxHeight:'90vh',overflowY:'auto'}}>
- <h2>تعديل مسير الموظف: {cycleEdit.name}</h2><p>{cycleEdit.company} · {cycleEdit.employee_number} · التعديل لهذا الشهر فقط</p>
+ <h2>تعديل بيانات الموظف داخل مسير الشهر: {cycleEdit.name}</h2><p>{cycleEdit.company} · {cycleEdit.employee_number} · التعديلات خاصة بالمسير الحالي ولا تغيّر سجل الموظف الأساسي</p>
  <form onSubmit={cycleSave}><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(175px,1fr))',gap:10}}>
  { [['basic','الراتب الأساسي'],['housing','بدل السكن'],['transport','بدل النقل'],['bonus','مكافآت'],['extra_allowance','بدلات أخرى'],['overtime_hours','ساعات إضافية'],['absence_days','أيام الغياب'],['absence_deduction','خصم الغياب'],['advance_deduction','خصم السلف'],['deductions','خصومات أخرى'],['cash_amount','صرف كاش'],['bank_amount','تحويل بنكي']].map(([key,label])=><label key={key}>{label}<input type="number" min="0" step="0.01" required value={cycleEdit.data[key]??0} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,[key]:e.target.value}}))}/></label>)}
  </div>
