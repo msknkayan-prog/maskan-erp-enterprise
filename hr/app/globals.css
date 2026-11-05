@@ -369,3 +369,45 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
 .payroll-flow-step{display:flex;gap:8px;align-items:center;justify-content:center;flex:1 1 155px;min-width:145px;border:1px solid #d6bf83;border-radius:7px;padding:10px 8px;background:#f8f3e6;font-size:12px;font-weight:700;color:#69512a;text-align:center}
 .payroll-flow-num{display:inline-grid;place-items:center;flex:0 0 24px;width:24px;height:24px;border-radius:50%;background:#bb9441;color:white;font-family:Arial,sans-serif;font-size:12px}
 @media print{.payroll-approval-flow{display:none!important}}
+
+/* Reference layout v2: faithful A4 corporate letterhead + bordered claim-like form */
+.maskan-standard-paper{max-width:100%;background:#fff;color:#222;font-family:Tajawal,Tahoma,Arial,sans-serif}
+.maskan-standard-paper .paper-letterhead{grid-template-columns:1fr 130px 1.5fr!important;column-gap:22px!important;border-top:1px solid #e3dbc3;border-bottom:0!important;padding:16px 12px 10px!important;margin-bottom:6px!important}
+.maskan-standard-paper .paper-letterhead img{width:130px!important;height:100px!important;object-fit:contain}
+.maskan-standard-paper .paper-license{border-bottom:2px solid #bcad79!important;text-align:center;font-size:13px!important}
+.maskan-standard-paper .paper-brand{text-align:center!important;gap:5px!important;border-bottom:2px solid #bcad79;padding-bottom:10px}
+.maskan-standard-paper .paper-brand strong{font-size:20px!important;line-height:1.5}
+.maskan-standard-paper .paper-brand span{font-size:12px!important;color:#303030!important}
+.maskan-standard-paper .paper-party-line{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:12px 2px 15px;font-size:13px;font-weight:700}
+.maskan-standard-paper .paper-metadata{table-layout:fixed!important;margin:0 0 14px!important}
+.maskan-standard-paper .paper-metadata th,.maskan-standard-paper .paper-metadata td{text-align:center!important;width:auto!important;padding:11px 8px!important;border:1px solid #595c5a!important;vertical-align:middle}
+.maskan-standard-paper .paper-key-row th{font-weight:800;font-size:12px;background:#fff!important}
+.maskan-standard-paper .paper-key-row small{font-size:10px;display:block;color:#57534b}
+.maskan-standard-paper .paper-main-heading{width:30%!important;background:#faf9f4!important}
+.maskan-standard-paper .paper-main-heading strong{font-size:20px;display:block;line-height:1.6;color:#202820}
+.maskan-standard-paper .paper-main-heading span{font:800 13px Arial,Tahoma,sans-serif;display:block;color:#917932;line-height:1.5}
+.maskan-standard-paper .paper-data-table{table-layout:fixed!important;margin:14px 0!important}
+.maskan-standard-paper .paper-data-table th,.maskan-standard-paper .paper-data-table td{border:1px solid #595c5a!important;padding:10px!important}
+.maskan-standard-paper .paper-data-table thead th{background:#f8f7f3!important;color:#222!important;font-size:13px!important}
+.maskan-standard-paper .paper-data-table tbody tr:nth-child(even){background:#fcfbf7}
+.maskan-standard-paper .paper-approval-heading{background:#fff!important;border:1px solid #777!important;color:#393228!important;margin-top:26px!important;padding:9px!important}
+.maskan-standard-paper .paper-signatures{border:1px solid #777!important;border-top:0!important;margin:0 0 15px!important}
+.maskan-standard-paper .paper-signatures>div{border-left:1px solid #777!important;padding:0!important;text-align:center!important;min-height:165px!important}
+.maskan-standard-paper .paper-signatures>div:last-child{border-left:0!important}
+.maskan-standard-paper .paper-signatures b{display:block;padding:11px 6px;border-bottom:1px solid #777;color:#282820!important;background:#f9f8f3}
+.maskan-standard-paper .paper-approval-line{min-height:40px;border-bottom:1px solid #aaa;text-align:right;padding:10px;color:#544f43;font-size:11px}
+.maskan-standard-paper .paper-approval-line:last-child{border-bottom:0}
+.maskan-standard-paper .paper-footer{border:1px solid #aaa!important;border-top:3px solid #b99c4d!important;padding:12px!important;margin-top:14px!important}
+@media print{
+ @page{size:A4 portrait;margin:12mm}
+ .maskan-standard-paper .paper-letterhead{grid-template-columns:1fr 110px 1.5fr!important;padding:6px 3px 12px!important}
+ .maskan-standard-paper .paper-letterhead img{width:110px!important;height:87px!important}
+ .maskan-standard-paper .paper-brand strong{font-size:16px!important}
+ .maskan-standard-paper .paper-party-line{padding:8px 0!important}
+ .maskan-standard-paper .paper-metadata th,.maskan-standard-paper .paper-metadata td{padding:7px 4px!important}
+ .maskan-standard-paper .paper-main-heading strong{font-size:16px!important}
+ .maskan-standard-paper .paper-data-table th,.maskan-standard-paper .paper-data-table td{padding:7px!important}
+ .maskan-standard-paper .paper-signatures>div{min-height:140px!important}
+ .maskan-standard-paper .paper-approval-line{min-height:32px;padding:7px}
+ .maskan-standard-paper .paper-letterhead,.maskan-standard-paper .paper-metadata,.maskan-standard-paper .paper-signatures{break-inside:avoid}
+}
