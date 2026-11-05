@@ -78,3 +78,13 @@ test('corporate print reference includes bilingual letterhead and sign-off',()=>
  assert.match(ui,/payroll-approval-flow/);
  assert.match(css,/payroll-flow-step/);
 });
+
+test('every non-payroll list print opens the official formatted register, including zero records',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/function printModuleRegister\(\)/);
+ assert.match(ui,/onClick=\{printModuleRegister\}/);
+ assert.doesNotMatch(ui,/onClick=\{\(\)=>window\.print\(\)\}/);
+ assert.match(ui,/tableRows\|\|emptyBody/);
+ assert.match(ui,/APPROVAL & SIGNATURE/);
+ assert.match(ui,/MASKAN ALKAYAN CONTRACTING CO\./);
+});
