@@ -88,3 +88,12 @@ test('every non-payroll list print opens the official formatted register, includ
  assert.match(ui,/APPROVAL & SIGNATURE/);
  assert.match(ui,/MASKAN ALKAYAN CONTRACTING CO\./);
 });
+
+test('login remembers email and requests secure browser password storage without storing plaintext locally',()=>{
+ const login=readFileSync(new URL('../app/login/page.tsx',import.meta.url),'utf8');
+ assert.match(login,/autoComplete="username"/);
+ assert.match(login,/autoComplete="current-password"/);
+ assert.match(login,/savePassword/);
+ assert.match(login,/navigator\.credentials\.store/);
+ assert.doesNotMatch(login,/localStorage\.setItem\([^\n]*password/i);
+});
