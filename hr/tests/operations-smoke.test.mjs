@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {companies,normalize,annualLeave} from '../lib/modules.mjs';
+import {companies,normalize,annualLeave,enumOptions,canRead} from '../lib/modules.mjs';
 import {employeeRegisterValue,employeeRegisterFields} from '../lib/employee-register.mjs';
 
 test('all six imported HR companies are supported',()=>{
@@ -32,4 +32,16 @@ test('payroll workspace must be rendered independently from general records',()=
  assert.doesNotMatch(ui,/\{spec&&module!=='payroll'&&<>/);
  assert.match(ui,/cycleExcludeEmployee/);
  assert.match(ui,/cycleReceipt/);
+});
+
+test('inactive employees are labeled غير نشط and project directors can review payroll',()=>{
+ assert.equal(enumOptions.employment.find(([value])=>value==='inactive')?.[1],'غير نشط');
+ assert.equal(canRead('projects_director','payroll'),true);
+ assert.equal(canRead('projects_director','payroll_batches'),true);
+});
+test('monthly payroll print and expanded approval controls exist',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/function cyclePrint\(/);
+ assert.match(ui,/onClick=\{cyclePrint\}/);
+ for(const action of ['finance_approve','projects_approve','finance_pay'])assert.ok(ui.includes(action));
 });
