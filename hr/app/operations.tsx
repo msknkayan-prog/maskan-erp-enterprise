@@ -25,14 +25,16 @@ export function RecordPaper({row,spec,rows,display}){
  const amount=v=>Number(v||0).toLocaleString('ar-SA',{maximumFractionDigits:2})+' ر.س';
  return <article className="record-paper maskan-standard-paper" dir="rtl">
   <div className="paper-letterhead">
-   <div className="paper-license">سجل تجاري: <b>{profile?.data.commercial_registration||'—'}</b></div>
+   <div className="paper-license">سجل تجاري: <b>{profile?.data.commercial_registration||(row.company==='مسكن الكيان'?'7028881634':'—')}</b></div>
    <img src="/maskan-logo.jpg" alt="شعار مسكن الكيان"/>
    <div className="paper-brand"><strong>{brand}</strong><span>{row.company==='مسكن الكيان'?'MASKAN ALKAYAN CONTRACTING CO.':row.company}</span></div>
   </div>
-  <div className="paper-document-title"><h1>{spec.singular}</h1><span>{spec.label}</span></div>
+  <div className="paper-party-line"><span>السادة: <b>{brand}</b></span><span>المحترمون</span></div>
   <table className="paper-metadata"><tbody>
-   <tr><th>رقم النموذج<br/>Document No.</th><td>{docNo}</td><th>التاريخ<br/>Date</th><td>{docDate}</td><th>الشركة<br/>Company</th><td>{brand}</td></tr>
-   {employee&&row.module!=='employees'&&<tr><th>اسم الموظف</th><td colSpan={3}>{employee.data.name||'—'}</td><th>الرقم الوظيفي</th><td>{employee.data.code||'—'}</td></tr>}
+   <tr className="paper-key-row"><th>رقم النموذج<br/><small>Document No.</small></th><th>التاريخ<br/><small>Date</small></th><th>النوع<br/><small>Type</small></th><th rowSpan={2} className="paper-main-heading"><strong>{spec.singular}</strong><span>{spec.label}</span></th><th>حالة الطلب<br/><small>Status</small></th></tr>
+   <tr><td>{docNo}</td><td>{docDate}</td><td>{spec.label}</td><td>{row.status||'—'}</td></tr>
+   <tr><th colSpan={2}>الشركة / Company</th><td colSpan={3}>{brand}</td></tr>
+   {employee&&row.module!=='employees'&&<tr><th colSpan={2}>اسم الموظف / Employee</th><td colSpan={2}>{employee.data.name||'—'}</td><td>{employee.data.code||'—'}</td></tr>}
   </tbody></table>
   <table className="paper-data-table"><thead><tr><th>البيان / Description</th><th>التفاصيل / Details</th></tr></thead><tbody>
    {spec.fields.map(f=><tr key={f.key}><th>{f.label}</th><td>{display(row,f)}</td></tr>)}
@@ -41,7 +43,7 @@ export function RecordPaper({row,spec,rows,display}){
    {['settlements','leave_dues'].includes(row.module)&&<tr className="paper-total"><th>صافي المستحقات / Net Amount</th><td>{amount(row.data.net)}</td></tr>}
   </tbody></table>
   <div className="paper-approval-heading">الاعتماد والتوقيع / APPROVAL & SIGNATURE</div>
-  <div className="paper-signatures">{signatureLabels.map(label=><div key={label}><b>{label}</b><p>الاسم: ........................</p><p>التوقيع: ........................</p><p>التاريخ: ........................</p></div>)}</div>
+  <div className="paper-signatures">{signatureLabels.map(label=><div key={label}><b>{label}</b><div className="paper-approval-line"><span>الاسم</span></div><div className="paper-approval-line"><span>التوقيع</span></div><div className="paper-approval-line"><span>الختم / التاريخ</span></div></div>)}</div>
   <p className="paper-note">هذا النموذج صادر من منصة شؤون الموظفين. الاعتمادات الإلكترونية وسجل القرارات المعتمدة محفوظة في النظام، ولا يُعد هذا النموذج وحده إثباتًا للصرف.</p>
   <div className="paper-footer">{[profile?.data.phone,profile?.data.mobile,profile?.data.email,profile?.data.website,profile?.data.address].filter(Boolean).join(' · ')||'شركة مسكن الكيان للمقاولات | إدارة شؤون الموظفين'}</div>
  </article>
