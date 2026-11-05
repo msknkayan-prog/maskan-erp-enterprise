@@ -364,3 +364,8 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
  .maskan-standard-paper .paper-signatures p{font-size:10px}
  .maskan-standard-paper .paper-approval-heading,.maskan-standard-paper .paper-signatures,.maskan-standard-paper .paper-footer{break-inside:avoid}
 }
+
+.payroll-approval-flow{display:flex;direction:rtl;gap:6px;align-items:stretch;flex-wrap:wrap;margin:13px 0 18px}
+.payroll-flow-step{display:flex;gap:8px;align-items:center;justify-content:center;flex:1 1 155px;min-width:145px;border:1px solid #d6bf83;border-radius:7px;padding:10px 8px;background:#f8f3e6;font-size:12px;font-weight:700;color:#69512a;text-align:center}
+.payroll-flow-num{display:inline-grid;place-items:center;flex:0 0 24px;width:24px;height:24px;border-radius:50%;background:#bb9441;color:white;font-family:Arial,sans-serif;font-size:12px}
+@media print{.payroll-approval-flow{display:none!important}}
