@@ -73,7 +73,7 @@ test('corporate print reference includes bilingual letterhead and sign-off',()=>
  const operations=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
  const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- for(const term of ['paper-letterhead','paper-document-title','paper-metadata','paper-approval-heading','APPROVAL & SIGNATURE','MASKAN ALKAYAN CONTRACTING CO.'])assert.ok(operations.includes(term),term);
+ for(const term of ['paper-letterhead','paper-main-heading','paper-metadata','paper-approval-heading','APPROVAL & SIGNATURE','MASKAN ALKAYAN CONTRACTING CO.'])assert.ok(operations.includes(term),term);
  assert.match(css,/maskan-standard-paper/);
  assert.match(ui,/payroll-approval-flow/);
  assert.match(css,/payroll-flow-step/);
