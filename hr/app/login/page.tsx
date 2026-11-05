@@ -5,6 +5,7 @@ const rememberedEmailKey='maskan-hr-remembered-email';
 export default function Login(){
   const [email,setEmail]=useState('');
   const [remember,setRemember]=useState(true);
+  const [savePassword,setSavePassword]=useState(true);
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
   useEffect(()=>{
@@ -17,6 +18,11 @@ export default function Login(){
       const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(form))});
       if(!r.ok){const d=await r.json();throw Error(d.error||'تعذر تسجيل الدخول');}
       try{if(remember)localStorage.setItem(rememberedEmailKey,email.trim());else localStorage.removeItem(rememberedEmailKey);}catch{}
+      // Use the browser's encrypted/password-manager credential store where supported.
+      // Never persist raw passwords to localStorage, cookies or application records.
+      if(savePassword&&typeof window!=='undefined'&&(window as any).PasswordCredential&&navigator.credentials?.store){
+        try{const credential=new (window as any).PasswordCredential({id:email.trim(),password:String(form.get('password')||''),name:'Maskan HR'});await navigator.credentials.store(credential);}catch{/* Browser/password manager controls saving and permissions. */}
+      }
       window.location.href='/';
     }catch(err){setError(err instanceof Error?err.message:'تعذر تسجيل الدخول');}
     finally{setBusy(false);}
@@ -36,7 +42,11 @@ export default function Login(){
         <input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)} style={{width:17,minHeight:17,height:17,accentColor:'#193c35'}}/>
         تذكّر البريد الإلكتروني على هذا الجهاز
       </label>
-      <p style={{fontSize:12,color:'#7a8981',marginTop:6}}>يمكن حفظ كلمة المرور بشكل آمن من خلال مدير كلمات المرور في المتصفح.</p>
+      <label style={{display:'flex',alignItems:'center',gap:9,marginTop:10,fontSize:14,color:'#42594e',cursor:'pointer'}}>
+        <input type="checkbox" checked={savePassword} onChange={e=>setSavePassword(e.target.checked)} style={{width:17,minHeight:17,height:17,accentColor:'#bc9b61'}}/>
+        حفظ كلمة المرور في مدير كلمات المرور بالمتصفح
+      </label>
+      <p style={{fontSize:12,color:'#7a8981',marginTop:6}}>يُطلب حفظ كلمة المرور من المتصفح عند تسجيل الدخول إن كان يدعم ذلك. قد تحتاج إلى اختيار «حفظ» مرة واحدة. لن تُحفظ كلمة المرور في قاعدة بيانات المنصة أو التخزين المحلي.</p>
       {error&&<p role="alert" style={{color:'#a33'}}>{error}</p>}
       <button disabled={busy} type="submit" style={{width:'100%',marginTop:16,background:'#193c35',borderColor:'#193c35',color:'white',minHeight:48,fontWeight:700}}>{busy?'جارٍ تسجيل الدخول…':'دخول'}</button>
     </form>
