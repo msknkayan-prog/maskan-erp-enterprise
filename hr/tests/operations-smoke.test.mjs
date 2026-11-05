@@ -58,3 +58,13 @@ test('printable monthly payroll includes overtime quantity and value with exactl
  assert.match(receipt,/عدد الساعات الإضافية/);
  assert.match(receipt,/قيمة الساعات الإضافية/);
 });
+
+test('payroll summary table is replaced with compact company and status filters',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/payrollStage,setPayrollStage/);
+ assert.match(ui,/حالة المسير <select/);
+ assert.match(ui,/visibleCycleBatches\.map/);
+ assert.match(ui,/visibleCyclePayroll\.map/);
+ assert.doesNotMatch(ui,/<th>إجراء المرحلة<\/th>/);
+ assert.match(ui,/cycleTransition\(b,'finance_pay'\)/);
+});
