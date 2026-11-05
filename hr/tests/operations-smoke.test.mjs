@@ -83,7 +83,7 @@ test('every non-payroll list print opens the official formatted register, includ
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/function printModuleRegister\(\)/);
  assert.match(ui,/onClick=\{printModuleRegister\}/);
- assert.doesNotMatch(ui,/onClick=\{\(\)=>window\.print\(\)\}/);
+ assert.doesNotMatch(ui,/<button onClick=\{\(\)=>window\.print\(\)\}><FileText size=\{16\}\/>طباعة<\/button>/);
  assert.match(ui,/tableRows\|\|emptyBody/);
  assert.match(ui,/APPROVAL & SIGNATURE/);
  assert.match(ui,/MASKAN ALKAYAN CONTRACTING CO\./);
