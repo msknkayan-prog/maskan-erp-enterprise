@@ -327,3 +327,40 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
 .payroll-stage-row .row-actions{display:flex;gap:7px;flex-wrap:wrap}
 .payroll-stage-row .row-actions button{font-size:12px;padding:7px 10px;min-height:32px}
 @media print{.payroll-stage-actions{display:none!important}}
+
+/* Official Maskan corporate print reference (gold / white / charcoal). */
+.maskan-standard-paper{direction:rtl;color:#202720;font-family:Tajawal,Tahoma,Arial,sans-serif}
+.maskan-standard-paper .paper-letterhead{display:grid;grid-template-columns:1fr 110px 1.3fr;align-items:center;gap:15px;border-bottom:2px solid #aa945a;padding:12px 0 18px;margin-bottom:16px;min-height:105px}
+.maskan-standard-paper .paper-letterhead img{height:95px;width:100%;object-fit:contain}
+.maskan-standard-paper .paper-license{font-size:12px;border-bottom:1px solid #a59565;padding:10px 0;align-self:center}
+.maskan-standard-paper .paper-brand{text-align:center;display:flex;flex-direction:column;gap:5px}
+.maskan-standard-paper .paper-brand strong{font-size:19px;color:#20271f}
+.maskan-standard-paper .paper-brand span{font:700 12px Arial,sans-serif;color:#4b4b42}
+.maskan-standard-paper .paper-document-title{text-align:center;margin:16px 0 12px}
+.maskan-standard-paper .paper-document-title h1{font-size:22px;font-weight:800;margin:0;color:#202720}
+.maskan-standard-paper .paper-document-title span{font-weight:700;color:#a0833d;font-size:13px}
+.maskan-standard-paper table{width:100%;border-collapse:collapse;white-space:normal;table-layout:auto;margin:12px 0}
+.maskan-standard-paper th,.maskan-standard-paper td{border:1px solid #77786f;padding:9px 12px;text-align:right;line-height:1.7;overflow-wrap:anywhere;font-size:13px}
+.maskan-standard-paper th{background:#f1ede1;color:#242720;font-weight:700}
+.maskan-standard-paper .paper-data-table thead th{background:#eae3cf;text-align:center}
+.maskan-standard-paper .paper-data-table tbody th{width:39%}
+.maskan-standard-paper .paper-total th,.maskan-standard-paper .paper-total td{font-weight:800;background:#f5edda}
+.maskan-standard-paper .paper-approval-heading{text-align:center;background:#f1e9d5;border:1px solid #a69671;padding:9px;font-weight:800;margin-top:24px}
+.maskan-standard-paper .paper-signatures{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin:0 0 18px;border:1px solid #a69671;border-top:0}
+.maskan-standard-paper .paper-signatures>div{padding:12px 10px;border-left:1px solid #a69671;min-height:125px;text-align:right}
+.maskan-standard-paper .paper-signatures>div:last-child{border-left:0}
+.maskan-standard-paper .paper-signatures b{color:#514629}
+.maskan-standard-paper .paper-signatures p{font-size:12px;margin:12px 0}
+.maskan-standard-paper .paper-note{font-size:11px;text-align:center;line-height:1.8}
+.maskan-standard-paper .paper-footer{border:1px solid #ad985f;border-top:3px solid #ad985f;padding:11px;text-align:center;font-size:11px;margin-top:20px}
+.payroll-stage-row .row-actions button,.payroll-stage-actions button,.payroll-stage-row button{background:#bd994d!important;border-color:#a67f2c!important;color:#211a0c!important;font-weight:700}
+.payroll-stage-row .row-actions button:hover{background:#d8b366!important}
+@media print{
+ .maskan-standard-paper .paper-letterhead{display:grid!important;grid-template-columns:1fr 100px 1.3fr!important;border-bottom:2px solid #a89662!important}
+ .maskan-standard-paper .paper-letterhead img{width:100px;height:86px}
+ .maskan-standard-paper th,.maskan-standard-paper td{border:1px solid #888!important;padding:7px!important;font-size:11px!important}
+ .maskan-standard-paper .paper-signatures{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important}
+ .maskan-standard-paper .paper-signatures>div{min-height:110px}
+ .maskan-standard-paper .paper-signatures p{font-size:10px}
+ .maskan-standard-paper .paper-approval-heading,.maskan-standard-paper .paper-signatures,.maskan-standard-paper .paper-footer{break-inside:avoid}
+}
