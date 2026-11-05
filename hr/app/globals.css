@@ -320,3 +320,10 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
   .record-paper tr,.record-paper .paper-head,.record-paper .paper-signatures{break-inside:avoid;page-break-inside:avoid}
   .record-paper button,.record-paper .toolbar{display:none!important}
 }
+
+/* Payroll: compact filtered workflow instead of a second full-width batch table. */
+.payroll-stage-actions{display:flex;flex-direction:column;gap:8px;margin:10px 0 18px}
+.payroll-stage-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 13px;border:1px solid #e5dcc9;background:#fcfaf4;border-radius:8px;font-size:13px}
+.payroll-stage-row .row-actions{display:flex;gap:7px;flex-wrap:wrap}
+.payroll-stage-row .row-actions button{font-size:12px;padding:7px 10px;min-height:32px}
+@media print{.payroll-stage-actions{display:none!important}}
