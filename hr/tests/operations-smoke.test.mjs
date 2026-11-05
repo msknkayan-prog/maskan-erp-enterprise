@@ -97,3 +97,17 @@ test('login remembers email and requests secure browser password storage without
  assert.match(login,/navigator\.credentials\.store/);
  assert.doesNotMatch(login,/localStorage\.setItem\([^\n]*password/i);
 });
+
+test('corporate print layouts reproduce the reference structural elements in every print route',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const operations=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ assert.match(operations,/paper-party-line/);
+ assert.match(operations,/paper-main-heading/);
+ assert.match(operations,/paper-approval-line/);
+ assert.match(ui,/function printModuleRegister\(\)/);
+ assert.match(ui,/header \.registration/);
+ assert.match(ui,/header \.reg/);
+ assert.match(css,/maskan-standard-paper \.paper-metadata/);
+ assert.match(css,/maskan-standard-paper \.paper-main-heading/);
+});
