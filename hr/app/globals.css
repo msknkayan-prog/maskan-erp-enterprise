@@ -299,3 +299,24 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
   .app aside .nav.active svg { color: #382b0d; }
   .app aside .nav-label { margin-top: 23px; margin-bottom: 9px; font-weight: 700; letter-spacing: 0; }
 }
+
+/* Unified legacy-inspired printable stationery across all personnel forms. */
+@page{size:A4 portrait;margin:14mm}
+@media print{
+  html,body{direction:rtl!important;background:#fff!important;color:#24362f!important;font-family:Tajawal,Tahoma,Arial,sans-serif!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .record-paper{display:block!important;width:100%;max-width:100%;margin:0 auto;padding:0;border:0;box-shadow:none}
+  .record-paper .paper-head{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:2px solid #b39247;padding:0 0 12px;margin-bottom:15px;break-inside:avoid}
+  .record-paper .paper-head img{width:76px;height:76px;object-fit:contain}
+  .record-paper .paper-head h1,.record-paper .paper-head h2{color:#173b32;font-size:18px;margin:4px 0}
+  .record-paper .paper-company{padding:9px 12px;border:1px solid #b39247;font-weight:700;color:#173b32}
+  .record-paper table{width:100%;table-layout:fixed;border-collapse:collapse;white-space:normal;margin:12px 0}
+  .record-paper th,.record-paper td{border:1px solid #c9bea4!important;padding:8px!important;font-size:11px!important;line-height:1.6;text-align:right!important;overflow-wrap:anywhere}
+  .record-paper th{background:#eee7d6!important;color:#24362f!important;width:35%}
+  .record-paper td{background:#fff!important;color:#24362f!important}
+  .record-paper .paper-signatures{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px;margin:30px 0 15px;break-inside:avoid}
+  .record-paper .paper-signatures>div{min-height:47px}
+  .record-paper .paper-footer{border-top:1px solid #b39247;margin-top:18px;padding-top:9px;font-size:10px;text-align:center}
+  .record-paper .paper-note{font-size:11px;line-height:1.6}
+  .record-paper tr,.record-paper .paper-head,.record-paper .paper-signatures{break-inside:avoid;page-break-inside:avoid}
+  .record-paper button,.record-paper .toolbar{display:none!important}
+}
