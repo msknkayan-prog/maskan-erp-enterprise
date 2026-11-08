@@ -611,3 +611,18 @@ main button:focus-visible,main input:focus-visible,main select:focus-visible,mai
 .employee-register .employee-actions-horizontal button:disabled{opacity:.5}
 .employee-register .company-tag{white-space:normal;max-width:215px;line-height:1.6;display:inline-block}
 @media(max-width:760px){.employee-register tbody tr td{padding:13px 10px!important}.employee-register .employee-actions-horizontal{gap:5px!important}.employee-register .employee-actions-horizontal button{padding:6px 9px!important;min-width:55px}}
+
+
+/* Live take-home salary summary in monthly payroll employee editor */
+.payroll-net-summary{position:sticky;bottom:0;z-index:3;margin:16px 0 12px;padding:16px;background:#fff9eb;border:2px solid #c49b43;border-radius:14px;box-shadow:0 -6px 22px rgba(101,74,25,.13);display:grid;gap:12px;direction:rtl}
+.payroll-net-summary-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;color:#5b421a;font-size:15px;font-weight:800}
+.payroll-net-summary-heading strong{font-size:26px;line-height:1.2;color:#225b43;font-weight:900;white-space:nowrap;font-variant-numeric:tabular-nums}
+.payroll-net-summary-heading strong small{font-size:12px;color:#376b52}
+.payroll-net-breakdown{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.payroll-net-breakdown span{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:white;border:1px solid #eadfc9;border-radius:8px;padding:9px 11px;font-size:12px;color:#6a5940}
+.payroll-net-breakdown b{font-variant-numeric:tabular-nums;color:#342a1a;font-size:13px}
+.payroll-net-check{padding:9px 12px;border-radius:8px;font-size:12px;font-weight:700}
+.payroll-net-check.ok{color:#15643b;background:#e3f5e9;border:1px solid #b1dec3}
+.payroll-net-check.warning{color:#99600c;background:#fff0d5;border:1px solid #edcb87}
+.payroll-net-explanation{font-size:11px;color:#77684d;line-height:1.7}
+@media(max-width:650px){.payroll-net-summary{padding:12px}.payroll-net-breakdown{grid-template-columns:1fr}.payroll-net-summary-heading strong{font-size:23px}}
