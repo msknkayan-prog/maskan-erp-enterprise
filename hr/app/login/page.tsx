@@ -34,13 +34,13 @@ export default function Login(){
     <h1 style={{fontSize:30,color:'#193c35',textAlign:'center',marginBottom:8}}>شؤون الموظفين</h1>
     <p style={{textAlign:'center',color:'#718178',fontSize:14,marginBottom:30}}>شركة مسكن الكيان للمقاولات</p>
     <form onSubmit={submit} autoComplete="on">
-      <label htmlFor="hr-email" style={{display:'block',marginBottom:9,fontWeight:600}}>البريد الإلكتروني</label>
-      <input id="hr-email" name="email" type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} required dir="ltr" style={{borderColor:'#d9c7a6',minHeight:48,marginBottom:19}}/>
+      <label htmlFor="hr-email" style={{display:'block',marginBottom:9,fontWeight:600}}>اسم المستخدم أو البريد الإلكتروني</label>
+      <input id="hr-email" name="email" type="text" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} required dir="ltr" style={{borderColor:'#d9c7a6',minHeight:48,marginBottom:19}}/>
       <label htmlFor="hr-password" style={{display:'block',marginBottom:9,fontWeight:600}}>كلمة المرور</label>
       <input id="hr-password" name="password" type="password" autoComplete="current-password" required minLength={8} style={{borderColor:'#d9c7a6',minHeight:48}}/>
       <label style={{display:'flex',alignItems:'center',gap:9,marginTop:16,fontSize:14,color:'#42594e',cursor:'pointer'}}>
         <input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)} style={{width:17,minHeight:17,height:17,accentColor:'#193c35'}}/>
-        تذكّر البريد الإلكتروني على هذا الجهاز
+        تذكّر اسم المستخدم أو البريد الإلكتروني
       </label>
       <label style={{display:'flex',alignItems:'center',gap:9,marginTop:10,fontSize:14,color:'#42594e',cursor:'pointer'}}>
         <input type="checkbox" checked={savePassword} onChange={e=>setSavePassword(e.target.checked)} style={{width:17,minHeight:17,height:17,accentColor:'#bc9b61'}}/>
