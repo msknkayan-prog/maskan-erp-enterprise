@@ -387,3 +387,16 @@ test('payroll Excel bank-transfer column is explicit and remaining cash is calcu
  assert.match(ui,/المتبقي كاش \(محسوب\)/);
  assert.match(ui,/Number\(d.net\|\|0\)-Number\(d.bank_amount\|\|0\)/);
 });
+
+
+test('employee profile bank and calculated cash always reconcile to monthly salary',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const mod=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ assert.match(mod,/f\('bank_amount','التحويل البنكي الشهري','number'\)/);
+ assert.match(mod,/f\('cash_amount','المبلغ كاش \(محسوب تلقائيًا\)','number'\)/);
+ assert.match(mod,/out.cash_amount=\(cents-bankCents\)\/100/);
+ assert.match(mod,/if\(bankCents>cents\)throw Error/);
+ assert.match(ui,/readOnly=\{module==='employees'&&f.key==='cash_amount'\}/);
+ assert.match(ui,/employee-payout-summary/);
+ assert.match(ui,/المبلغ كاش \+ التحويل البنكي = الراتب المرجعي/);
+});
