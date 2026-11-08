@@ -477,3 +477,10 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
 .member-generated-password code{background:#fff;border:1px dashed #bd9e50;border-radius:7px;padding:10px 14px;font-size:16px;letter-spacing:.8px;user-select:all;max-width:100%;overflow-wrap:anywhere}
 .member-generated-password button{padding:9px 12px;background:#c5a252;color:#251c0c;border-radius:7px;border:0;cursor:pointer}
 .member-generated-password small{flex-basis:100%;font-size:11px;color:#685c44}
+
+/* Complete account-scope editor */
+.member-scope-picker{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px 16px;border:1px solid #e2d2af;background:#fffdf6;border-radius:10px;padding:10px 14px;max-height:180px;overflow-y:auto}
+.member-scope-picker legend{font-weight:700;font-size:12px;color:#644f25;padding:0 7px}
+.member-scope-picker label{display:inline-flex!important;align-items:center;gap:7px;min-width:150px;font-size:12px}
+.member-scope-picker label input{width:16px;height:16px;flex-shrink:0;accent-color:#b58d2d}
+.member-scope-picker>span{font-size:12px;color:#876e3e}
