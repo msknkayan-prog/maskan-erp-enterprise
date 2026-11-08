@@ -542,3 +542,46 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
 .employee-edit-mode{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#fff7df;border:1px solid #e5d3a5;border-radius:10px;padding:11px 14px;margin:10px 0;color:#654816;font-size:12px;font-weight:700}
 .employee-edit-mode button{background:#b79037;border:1px solid #ae8730;color:#251d0c;border-radius:8px;padding:9px 13px;cursor:pointer;font-weight:700}
 .employee-edit-mode button:disabled{opacity:.5;cursor:not-allowed}
+
+/* Maskan HR — refined four-stage monthly payroll approval experience */
+.payroll-main-heading{gap:16px;align-items:center;flex-wrap:wrap}
+.payroll-main-heading h2{font-size:20px!important;color:#352c1a;letter-spacing:-.3px}
+.payroll-main-heading>div>span{font-size:12px;color:#87744e}
+.payroll-month-pill{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:1px solid #c5a25d;background:#fbf0d0;color:#755013;font-weight:800;font-size:14px;box-shadow:0 3px 12px #b58c3326}
+.payroll-legend{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:12px;color:#7a705e;font-size:11px;margin:-8px 0 13px}
+.payroll-legend span{display:flex;align-items:center;gap:6px}
+.payroll-legend .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.payroll-legend .dot.complete{background:#21946a}.payroll-legend .dot.active{background:#e39d2b}.payroll-legend .dot.upcoming{background:#b2b6b9}
+.payroll-stage-actions{gap:12px!important}
+.payroll-stage-row{padding:17px 18px!important;border-radius:13px!important;border:1px solid #e6d6b9!important;background:linear-gradient(135deg,#fffefa,#faf5ea)!important;box-shadow:0 5px 17px #5541170b;display:grid!important;grid-template-columns:minmax(260px,1fr) auto;align-items:center;gap:16px!important}
+.payroll-batch-summary{display:flex;flex-direction:column;gap:10px;min-width:0}
+.payroll-batch-summary>div:first-child{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.payroll-batch-summary strong{font-size:14px;color:#493717}
+.payroll-batch-summary small{font-size:11px;color:#77736a}
+.payroll-month-mini{padding:5px 9px;background:#fff0cb;border:1px solid #e4c58a;color:#885c15;font-size:12px;font-weight:800;border-radius:7px;direction:ltr}
+.payroll-status-chip{display:inline-flex;align-items:center;padding:5px 9px;border-radius:99px;background:#f7ebd1;color:#855b19;font-size:11px;font-weight:700}
+.payroll-status-chip.complete{background:#e6f5ea;color:#176e47}.payroll-status-chip.pending{background:#fff1d9;color:#9a6514}
+.payroll-compact-stages{display:flex;gap:7px;flex-wrap:wrap}
+.payroll-compact-stage{font-size:11px;border:1px solid #dce0e2;border-radius:7px;padding:7px 10px;background:#f0f2f3;color:#727b81;font-weight:700}
+.payroll-compact-stage.done{background:#e4f6e9;border-color:#9fd7b4;color:#167147}
+.payroll-compact-stage.current{background:#fff0d8;border-color:#ecc179;color:#a56410;box-shadow:0 0 0 2px #ffebc433}
+.payroll-compact-stage.later{background:#f3f4f5;color:#91979a}
+.payroll-stage-row .row-actions{display:flex!important;flex-direction:row!important;align-items:center!important;gap:8px!important;justify-content:flex-start;flex-wrap:wrap!important}
+.payroll-stage-row .row-actions button{min-height:39px!important;padding:8px 14px!important;border-radius:8px!important;white-space:nowrap;font-size:12px!important}
+.payroll-stage-row .row-actions button:first-child{background:#faf6ec;color:#5b4218;border:1px solid #d4bb83}
+.payroll-stage-row .row-actions button:not(:first-child):not(:disabled){background:#b89135;color:#261a0c;border:1px solid #b18a35}
+.payroll-all-open{background:#f7ebd1!important;border:1px solid #caa85c!important;color:#684512!important;font-weight:700}
+.payroll-all-modal{width:min(96vw,1100px)!important;max-height:92vh;overflow:auto;padding:24px!important;border-radius:18px!important}
+.payroll-all-header,.payroll-all-footer{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.payroll-all-header h2{margin:0;color:#473715}
+.payroll-all-header p{margin:6px 0;font-size:12px}
+.payroll-all-list{display:grid;gap:10px;margin:18px 0;max-height:55vh;overflow:auto}
+.payroll-all-company{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:space-between;padding:13px;border:1px solid #e6d7bc;background:#fffdf9;border-radius:12px}
+.payroll-all-company>label{display:flex;align-items:center;gap:12px;flex:1 1 230px;cursor:pointer}
+.payroll-all-company>label input{height:19px;width:19px;accent-color:#b78e34}
+.payroll-all-company>label span{display:grid;gap:4px}.payroll-all-company small{color:#82755e}
+.payroll-all-company>button{background:#f8edce;border:1px solid #d7bc83;border-radius:8px;padding:8px 12px}
+.payroll-all-footer{border-top:1px solid #e9dec6;padding-top:15px}
+.payroll-all-footer button.primary{background:#b58b32;color:#211806}
+@media(max-width:900px){.payroll-stage-row{grid-template-columns:1fr}.payroll-stage-row .row-actions{justify-content:flex-start}.payroll-month-pill{font-size:12px}}
+@media print{.payroll-all-modal,.payroll-all-open{display:none!important}.payroll-compact-stage.done{border-color:#567a61!important}.payroll-compact-stage.current{border-color:#b17f2c!important}}
