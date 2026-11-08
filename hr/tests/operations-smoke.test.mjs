@@ -120,7 +120,7 @@ test('member editing saves email, username, role and window permissions without 
  assert.match(ui,/role:memberEdit.role/);
  assert.match(ui,/permissions:memberEditPermissions/);
  assert.match(ui,/تعديل صلاحيات المستخدم/);
- assert.match(ui,/type="email" dir="ltr" required value=\{memberEdit.email\}/);
+ assert.match(ui,/type="email" dir="ltr" required disabled=\{memberEdit.role==='admin'\} value=\{memberEdit.email\}/);
 });
 test('password invitation is gated by username and supports existing and invited accounts',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
