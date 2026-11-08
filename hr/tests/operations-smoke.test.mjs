@@ -249,7 +249,7 @@ test('member directory shows active or inactive and provides a secure retry afte
 test('monthly payroll offers a unified draft-only manager for add, edit, exclude, restore and submit',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
- for(const term of ['payrollManageBatchId','payrollAddEmployeeId','payrollAvailableEmployees','cycleAddEmployee','فتح إدارة المسير','حذف من المسير (استبعاد)','إرسال المسير للاعتماد بعد المراجعة'])assert.ok(ui.includes(term),term);
+ for(const term of ['payrollManageBatchId','payrollAddEmployeeId','payrollAvailableEmployees','cycleAddEmployee','فتح إدارة المسير','حذف من المسير (استبعاد)','إرسال المسير إلى مدراء المشاريع'])assert.ok(ui.includes(term),term);
  assert.match(ui,/action:'add_employee'/);
  assert.match(ui,/batch_revision:batch.revision/);
  assert.match(ui,/payrollManagedBatch.status==='draft'/);
@@ -297,4 +297,21 @@ test('modern standards HVAC company appears and imports use canonical Excel name
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(m,/المعايير العصرية/);
  assert.match(ui,/canonicalCompany\(r\[headers.indexOf\('الشركة'\)\]\)/);
+});
+
+test('monthly payroll approvals use green completion and orange active states with highlighted period',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ const modules=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ assert.match(ui,/payrollStageLabels=\['مساعد الإدارة','مدراء المشاريع','إدارة المشاريع','المالية \/ الصرف'\]/);
+ assert.match(ui,/payrollStages=\['draft','manager_review','projects_review','finance_review','paid'\]/);
+ assert.match(ui,/payroll-compact-stage/);
+ assert.match(ui,/state==='done'\?'✓ '/);
+ assert.match(ui,/payroll-month-pill/);
+ assert.match(css,/\.payroll-compact-stage\.done\{background:#e4f6e9/);
+ assert.match(css,/\.payroll-compact-stage\.current\{background:#fff0d8/);
+ assert.match(ui,/payrollAllOpen&&module==='payroll'/);
+ assert.match(ui,/action:'bulk_submit'/);
+ assert.match(ui,/manager_notes/);
+ assert.match(modules,/administrative_assistant/);
 });
