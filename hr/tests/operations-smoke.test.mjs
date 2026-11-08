@@ -315,3 +315,17 @@ test('monthly payroll approvals use green completion and orange active states wi
  assert.match(ui,/manager_notes/);
  assert.match(modules,/administrative_assistant/);
 });
+
+
+test('employee list displays full HVAC company name without duplicate company key and horizontal spacious rows',()=>{
+ const m=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ assert.match(m,/companyDisplayName=\(value\)=>value==='المعايير العصرية'\?'مؤسسة المعايير العصرية لأعمال التكييف'/);
+ assert.match(ui,/companyDisplayName\(c\)/);
+ assert.match(ui,/companyDisplayName\(row.company\)/);
+ assert.match(ui,/employee-status-horizontal/);
+ assert.match(ui,/employee-actions-horizontal/);
+ assert.match(css,/\.employee-register\{border-collapse:separate!important;border-spacing:0 9px!important/);
+ assert.match(css,/\.employee-register \.employee-actions-horizontal\{display:flex!important;flex-direction:row!important/);
+});
