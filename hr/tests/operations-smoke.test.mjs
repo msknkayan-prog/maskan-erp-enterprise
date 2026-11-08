@@ -155,3 +155,14 @@ test('account and permissions offer the three golden-reference controls with sec
  assert.match(ui,/role="dialog" aria-modal="true" aria-label="إعادة تعيين كلمة المرور"/);
  assert.match(css,/\.member-account-actions/);
 });
+
+
+test('secure administrator-generated temporary passwords are shown once and copyable',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ assert.match(ui,/action:'generate_temporary_password'/);
+ assert.match(ui,/توليد كلمة مرور مؤقتة/);
+ assert.match(ui,/navigator\.clipboard\.writeText/);
+ assert.match(ui,/setGeneratedPassword\(null\)/);
+ assert.match(css,/\.member-generated-password/);
+});
