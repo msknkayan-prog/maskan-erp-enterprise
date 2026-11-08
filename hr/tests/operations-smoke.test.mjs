@@ -111,3 +111,28 @@ test('corporate print layouts reproduce the reference structural elements in eve
  assert.match(css,/maskan-standard-paper \.paper-metadata/);
  assert.match(css,/maskan-standard-paper \.paper-main-heading/);
 });
+
+
+test('member editing saves email, username, role and window permissions without replacing the identity',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/action:'update_member'/);
+ assert.match(ui,/original_email:memberEdit.original_email/);
+ assert.match(ui,/role:memberEdit.role/);
+ assert.match(ui,/permissions:memberEditPermissions/);
+ assert.match(ui,/تعديل صلاحيات المستخدم/);
+ assert.match(ui,/type="email" dir="ltr" required value=\{memberEdit.email\}/);
+});
+test('password invitation is gated by username and supports existing and invited accounts',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const reset=readFileSync(new URL('../app/reset/page.tsx',import.meta.url),'utf8');
+ assert.match(ui,/action:'send_password_link'/);
+ assert.match(ui,/memberUsername.trim\(\)/);
+ assert.match(ui,/disabled=\{memberBusy\|\|!m.username\}/);
+ assert.match(reset,/token_type:url.searchParams.get\('type'\)/);
+});
+test('employee register provides routes to linked personnel records',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/setLinkedEmployee\(\{id:edit.id/);
+ assert.match(ui,/r.data\?\.employee_id!==linkedEmployee.id/);
+ assert.match(ui,/عرض جميع السجلات/);
+});
