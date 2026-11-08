@@ -585,3 +585,10 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
 .payroll-all-footer button.primary{background:#b58b32;color:#211806}
 @media(max-width:900px){.payroll-stage-row{grid-template-columns:1fr}.payroll-stage-row .row-actions{justify-content:flex-start}.payroll-month-pill{font-size:12px}}
 @media print{.payroll-all-modal,.payroll-all-open{display:none!important}.payroll-compact-stage.done{border-color:#567a61!important}.payroll-compact-stage.current{border-color:#b17f2c!important}}
+
+/* Unified approval color semantics across HR records and payroll */
+.badge.approved,.badge.paid,.badge.completed{color:#146c43!important;background:#dff4e7!important;border:1px solid #acd7b9!important;font-weight:700}
+.badge.draft,.badge.project_manager,.badge.projects_director,.badge.hr,.badge.finance,.badge.returned{color:#995e10!important;background:#fff0d6!important;border:1px solid #efd19c!important;font-weight:700}
+.badge.rejected,.badge.cancelled{color:#ad4040!important;background:#fff0ef!important;border:1px solid #f3c1bb!important}
+main>.panel,main .panel{border-radius:13px}
+main button:focus-visible,main input:focus-visible,main select:focus-visible,main textarea:focus-visible{outline:2px solid #bb953e;outline-offset:2px}
