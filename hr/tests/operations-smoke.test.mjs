@@ -452,3 +452,29 @@ test('salary input and base salary input explicitly determine the salary update 
  assert.match(ui,/salary_edit_source:'salary'/);
  assert.match(ui,/result.payroll_synced/);
 });
+
+test('employee second-company registration preserves original company and requires distinct role identity',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/function cloneEmployeeToSecondCompany\(row\)/);
+ assert.match(ui,/إضافة الموظف إلى شركة ثانية \(سجل مستقل\)/);
+ assert.match(ui,/dual_source_company:row\.company/);
+ assert.match(ui,/dual_source_id:row\.id/);
+ assert.match(ui,/code:'',project_id:''/);
+ assert.match(ui,/company===edit\.dual_source_company/);
+ assert.match(ui,/code===edit\.dual_source_code/);
+ assert.match(ui,/يوجد سجل موظف بنفس الهوية في الشركة المختارة/);
+ assert.match(ui,/اختر شركة ثانية مختلفة عن الشركة الأصلية/);
+ assert.match(ui,/لن يتغير سجل الشركة الأولى/);
+});
+test('existing company transfer remains separate from second-company creation',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/سبب نقل أو تصحيح شركة الموظف/);
+ assert.match(ui,/setEdit\(\{\.\.\.edit,company:nextCompany,transfer_reason:reason\.trim\(\),data:\{\.\.\.edit\.data,project_id:''\}\}\)/);
+ assert.match(ui,/notes:\[previousNotes,note\]/);
+ const normalized=normalize('employees',{company:'رياح الاعمار',data:{name:'موظف تجريبي بالشركة الثانية',code:'TEST-SECOND-220',salary:6000,bank_amount:2500,sponsorship:'yes'}});
+ assert.equal(normalized.basic,3900);
+ assert.equal(normalized.housing,1500);
+ assert.equal(normalized.transport,600);
+ assert.equal(normalized.bank_amount,2500);
+ assert.equal(normalized.cash_amount,3500);
+});
