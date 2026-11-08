@@ -58,6 +58,13 @@ async function generateMemberPassword(){
 async function sendMemberPasswordLink(email,username){if(!username){notify('أدخل اسم مستخدم واحفظه أولًا لتفعيل رابط كلمة المرور');return;}if(!window.confirm('إرسال رابط آمن لتعيين كلمة المرور إلى '+email+'؟'))return;setMemberBusy(true);try{const result=await post({action:'send_password_link',email});notify(result.method==='invitation'?'تم طلب إرسال دعوة إنشاء الحساب وكلمة المرور':'تم طلب إرسال رابط تغيير كلمة المرور')}catch(e){notify(e.message||'تعذر إرسال الرابط')}finally{setMemberBusy(false)}}
 async function post(body){const r=await fetch('/api/erp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error);return d}
 async function save(e){e.preventDefault();if(module==='employees'&&employeeReadOnly){notify('انتقل إلى وضع التعديل أولًا');return;}
+ if(module==='employees'&&edit.dual_source_id){
+ if(!companies.includes(edit.company)||edit.company===edit.dual_source_company){notify('اختر شركة ثانية مختلفة عن الشركة الأصلية');return;}
+ const code=String(edit.data.code||'').trim();
+ if(!code||code===edit.dual_source_code){notify('أدخل رقمًا وظيفيًا جديدًا ومستقلًا للشركة الثانية');return;}
+ if(rows.some(r=>r.module==='employees'&&r.company===edit.company&&!r.data?._archived&&String(r.data?.identity||'').trim()&&String(r.data.identity).trim()===String(edit.data.identity||'').trim())){notify('يوجد سجل موظف بنفس الهوية في الشركة المختارة؛ افتحه بدل تكراره');return;}
+ if(!window.confirm('تأكيد إضافة الموظف إلى '+edit.company+' بسجل وظيفي وراتب مستقلين دون نقل أو حذف سجله من '+edit.dual_source_company+'؟'))return;
+ }
  if(module==='employees'){
  const salary=Number(edit.data.salary||0),bank=Number(edit.data.bank_amount||0);
  if(!Number.isFinite(salary)||salary<0||!Number.isFinite(bank)||bank<0||Math.round(bank*100)>Math.round(salary*100)){notify('مبلغ التحويل البنكي يجب ألا يتجاوز الراتب ولا يكون سالبًا');return;}
@@ -72,6 +79,8 @@ async function save(e){e.preventDefault();if(module==='employees'&&employeeReadO
 function openEmployee(row,readOnly=true){setEmployeeReadOnly(readOnly);setEdit({...row,data:{...row.data}})}
 function cloneEmployeeToSecondCompany(row){
  if(!permittedWrite(user||{},'employees')||!['admin','hr'].includes(user?.role)){notify('إضافة موظف إلى شركة ثانية تتطلب صلاحية المدير أو شؤون الموظفين');return;}
+ const current=rows.find(r=>r.module==='employees'&&r.id===row.id)||row;
+ row=current;
  const employeeCode=String(row.data.code||row.code||'').trim();
  const available=companies.filter(c=>c!==row.company);
  if(!available.length){notify('لا توجد شركات أخرى متاحة');return;}
