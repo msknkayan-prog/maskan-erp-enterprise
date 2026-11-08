@@ -265,3 +265,15 @@ test('employee register provides explicit view, editable form, safe archive and 
  assert.match(ui,/module==='employees'&&employeeReadOnly/);
  assert.match(ui,/module==='employees'&&Boolean\(r.data\?\._archived\)!==showArchivedEmployees/);
 });
+
+
+test('credential manager requires a freshly generated temporary password and explicit WhatsApp confirmation',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ for(const phrase of ['بيانات الدخول / واتساب','credentialPhone','openCredentialManager','shareMemberOnWhatsApp','مشاركة بيانات الدخول عبر واتساب','كلمة المرور المؤقتة'])assert.ok(ui.includes(phrase),phrase);
+ assert.match(ui,/window\.confirm\('سيتم فتح واتساب/);
+ assert.match(ui,/https:\/\/wa\.me\//);
+ assert.match(ui,/!generatedPassword\?\.password/);
+ assert.match(ui,/!newMemberCredential.password/);
+ assert.match(css,/\.credential-whatsapp-phone/);
+});
