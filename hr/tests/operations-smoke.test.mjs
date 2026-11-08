@@ -366,3 +366,13 @@ test('new employee creation cannot inherit existing employee id or company trans
  assert.match(ui,/const payload=edit.id\?\{\.\.\.edit\}:\{company:edit.company,data:\{\.\.\.edit.data\}\}/);
  assert.match(ui,/إضافة موظف جديد/);
 });
+
+
+test('payroll card metadata, four approval stages and action buttons stay in one horizontally scrollable row',()=>{
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ assert.match(css,/\.payroll-stage-row\{[\s\S]*?display:flex!important;[\s\S]*?flex-direction:row!important;[\s\S]*?flex-wrap:nowrap!important;/);
+ assert.match(css,/\.payroll-stage-row \.payroll-batch-summary\{display:contents!important\}/);
+ assert.match(css,/\.payroll-stage-row \.payroll-compact-stages\{display:flex!important;flex:0 0 auto;flex-wrap:nowrap!important;/);
+ assert.match(css,/\.payroll-stage-row>\.row-actions\{display:flex!important;flex:0 0 auto;flex-direction:row!important;flex-wrap:nowrap!important;/);
+ assert.match(css,/overflow-x:auto!important/);
+});
