@@ -529,3 +529,10 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
 .employee-register .row-actions button:hover:not(:disabled){background:#f6ebd2}
 .employee-register .row-actions button:disabled{opacity:.45}
 @media(max-width:680px){.employee-register .row-actions{min-width:145px}.employee-register-actions{padding:10px}}
+
+
+/* Secure, explicit WhatsApp credential sharing */
+.credential-whatsapp-phone{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:700;color:#66512d;margin:14px 0}
+.credential-whatsapp-phone input{font-size:14px;letter-spacing:.3px;border:1px solid #dac498;border-radius:9px;padding:10px 12px;background:#fff;min-height:42px;width:100%}
+.member-reset-dialog .member-account-actions{gap:8px}
+.member-reset-dialog .member-account-actions button{white-space:normal}
