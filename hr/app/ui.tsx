@@ -20,7 +20,16 @@ async function post(body){const r=await fetch('/api/erp',{method:'POST',headers:
 async function save(e){e.preventDefault();setSaving(true);try{await post({action:'save',module,...edit});setEdit(null);notify('تم حفظ السجل في قاعدة البيانات السحابية');await refresh()}catch(e){notify(e.message)}finally{setSaving(false)}}
 async function disburse(row){const reference=window.prompt('مرجع صرف السلفة الفعلي — لا يتم تنفيذ تحويل بنكي');if(!reference)return;setSaving(true);try{await post({action:'disburse',module,id:row.id,revision:row.revision,reference});notify('تم توثيق الصرف');await refresh()}catch(e){notify(e.message)}finally{setSaving(false)}}
 async function transition(row,decision='approve',note=''){setSaving(true);try{await post({action:'transition',module,id:row.id,revision:row.revision,decision,note,medical_verified:row.data.leave_type==='sick'?window.confirm('هل راجعت المرفق الطبي وتحققت من صحته؟'):false});notify('تم تحديث مرحلة الاعتماد');await refresh()}catch(e){notify(e.message)}finally{setSaving(false)}}
-let scoped=rows.filter(r=>!company||r.company===company),spec=modules[module],list=scoped.filter(r=>r.module===module&&JSON.stringify(r.data).toLowerCase().includes(search.toLowerCase()));
+const normalizeSearch=value=>String(value??'').normalize('NFKC').toLocaleLowerCase('ar').replace(/[\u064B-\u065F\u0670]/g,'').replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/ـ/g,'').replace(/\s+/g,' ').trim();
+let scoped=rows.filter(r=>!company||r.company===company),spec=modules[module];
+const searchWords=normalizeSearch(search).split(' ').filter(Boolean);
+const list=scoped.filter(r=>{
+ if(r.module!==module)return false;
+ if(!searchWords.length)return true;
+ const visibleValues=module==='employees'?[...employeeRegisterFields,...modules.employees.fields].map(f=>employeeRegisterValue(r,f.key,rows)):[];
+ const haystack=normalizeSearch([r.company,r.code,r.data?.name,r.data?.code,JSON.stringify(r.data),...visibleValues].join(' '));
+ return searchWords.every(word=>haystack.includes(word));
+});
 const name=id=>rows.find(r=>r.id===id)?.data.name||'غير متاح';
 const registerDisplay=(row,f)=>{const value=employeeRegisterValue(row,f.key,rows);const original=modules.employees.fields.find(x=>x.key===f.key);return original&&enumOptions[original.type]?(enumOptions[original.type].find(o=>o[0]===value)?.[1]||'—'):value===0?'0':value||'—';};
 const display=(row,f)=>relationModules[f.type]?name(row.data[f.key]):f.type==='number'?money(row.data[f.key]):enumOptions[f.type]?(enumOptions[f.type].find(o=>o[0]===row.data[f.key])?.[1]||'—'):row.data[f.key]||'—';
