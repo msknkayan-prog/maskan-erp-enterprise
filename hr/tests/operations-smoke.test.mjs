@@ -43,16 +43,16 @@ test('monthly payroll print and expanded approval controls exist',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/function cyclePrint\(/);
  assert.match(ui,/onClick=\{cyclePrint\}/);
- for(const action of ['finance_approve','projects_approve','finance_pay'])assert.ok(ui.includes(action));
+ for(const action of ['managers_approve','projects_approve','finance_pay'])assert.ok(ui.includes(action));
 });
 
-test('printable monthly payroll includes overtime quantity and value with exactly three requested approvals',()=>{
+test('printable monthly payroll includes overtime and four-stage approvals',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const print=ui.slice(ui.indexOf('function cyclePrint(){'),ui.indexOf('function cycleReceipt('));
  assert.match(print,/'الساعات الإضافية','قيمة الساعات الإضافية'/);
  assert.match(print,/money\(d\.overtime_hours\),money\(d\.overtime\)/);
  assert.match(print,/money\(total\('overtime_hours'\)\),money\(total\('overtime'\)\)/);
- assert.match(print,/إعداد شؤون الموظفين<\/div><div>اعتماد مدير إدارة المشاريع<\/div><div>مراجعة الإدارة المالية/);
+ assert.match(print,/إعداد مساعد الإدارة<\/div><div>مراجعة مدراء المشاريع<\/div><div>اعتماد إدارة المشاريع<\/div><div>مراجعة وصرف المالية/);
  assert.doesNotMatch(print,/اعتماد المدير الإداري|توثيق صرف المالية/);
  const receipt=ui.slice(ui.indexOf('function cycleReceipt('),ui.indexOf('function cycleReceipt(')+4500);
  assert.match(receipt,/عدد الساعات الإضافية/);
