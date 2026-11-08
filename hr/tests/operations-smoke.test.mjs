@@ -417,3 +417,15 @@ test('unsaved employee form never renders a paper record without an ID',()=>{
  assert.match(ops,/row\.id\?\.slice\(0,8\)\|\|'سجل جديد'/);
  assert.doesNotMatch(ops,/row\.id\.slice\(0,8\)/);
 });
+
+test('employee job title observer and supervisor variants normalize to مشرف without changing specialized titles',()=>{
+ const m=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ assert.match(m,/out\.job='مشرف'/);
+ assert.match(m,/module==='employees'&&/);
+});
+test('employee register includes bank and cash columns',()=>{
+ const m=readFileSync(new URL('../lib/employee-register.mjs',import.meta.url),'utf8');
+ assert.match(m,/\['bank_amount','تحويل بنكي'\]/);
+ assert.match(m,/\['cash_amount','المتبقي كاش'\]/);
+ assert.equal((m.match(/\['salary','الأجر الشهري الإجمالي'\]/g)||[]).length,1);
+});
