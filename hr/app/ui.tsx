@@ -194,7 +194,7 @@ function cycleSalarySummary(d){
  const additions=round(n('bonus')+n('extra_allowance')+overtime);
  const deductions=round(n('absence_deduction')+n('advance_deduction')+n('deductions'));
  const net=round(gross+additions-deductions);
- const cash=n('cash_amount'),bank=n('bank_amount'),allocated=round(cash+bank);
+ const bank=n('bank_amount'),cash=round(net-bank),allocated=round(cash+bank);
  const values=[gross,overtime,additions,deductions,net,cash,bank];
  const valid=values.every(Number.isFinite)&&values.every(v=>v>=0)&&round(net-allocated)===0;
  return {gross,overtime,additions,deductions,net,cash,bank,allocated,difference:round(net-allocated),valid};
@@ -204,7 +204,7 @@ async function cycleSave(ev){
  ev.preventDefault();if(!cycleEdit)return;
  const summary=cycleSalarySummary(cycleEdit.data);
  if(!summary.valid){notify('تحقق من المبالغ: يجب أن يساوي مجموع الكاش والتحويل صافي الراتب وألا توجد مبالغ سالبة');return;}
- setSaving(true);try{await cyclePost({action:'update',batch_id:cycleEdit.batch_id,row_id:cycleEdit.row_id,revision:cycleEdit.revision,data:cycleEdit.data});setCycleEdit(null);notify('تم حفظ تعديل الموظف في مسير الشهر فقط');await refresh();}catch(e){notify(e.message)}finally{setSaving(false)}
+ setSaving(true);try{await cyclePost({action:'update',batch_id:cycleEdit.batch_id,row_id:cycleEdit.row_id,revision:cycleEdit.revision,data:{...cycleEdit.data,cash_amount:summary.cash,bank_amount:summary.bank}});setCycleEdit(null);notify('تم حفظ تعديل الموظف في مسير الشهر فقط');await refresh();}catch(e){notify(e.message)}finally{setSaving(false)}
 }
 async function cycleAddEmployee(){
  const batch=payrollManagedBatch;
@@ -253,8 +253,8 @@ async function cycleBulkSubmit(){
  }catch(e){notify(e.message)}finally{setSaving(false)}
 }
 function cycleExport(){
- const head=['الشركة','الشهر','الرقم الوظيفي','اسم الموظف','الراتب الأساسي','بدل السكن','بدل النقل','المكافآت','بدلات أخرى','ساعات إضافية','قيمة الإضافي','خصم الغياب','خصم السلف','خصومات أخرى','الصافي','كاش','تحويل بنكي','حالة المراجعة','حالة إدراج الموظف','حالة المسير'];
- const data=cyclePayroll.map(r=>{const d=r.data,b=cycleBatchFor(r);return [r.company,d.month,d.employee_number,d.employee_name,d.basic,d.housing,d.transport,d.bonus,d.extra_allowance,d.overtime_hours,d.overtime,d.absence_deduction,d.advance_deduction,d.deductions,d.net,d.cash_amount,d.bank_amount,d.split_confirmed?'مراجع':'غير مراجع',d.excluded?'مستبعد من المسير':'مدرج',cycleStatus[b?.status]||b?.status||''];});
+ const head=['الشركة','الشهر','الرقم الوظيفي','اسم الموظف','الراتب الأساسي','بدل السكن','بدل النقل','المكافآت','بدلات أخرى','ساعات إضافية','قيمة الإضافي','خصم الغياب','خصم السلف','خصومات أخرى','الصافي','التحويل البنكي (المبلغ المدخل)','المتبقي كاش (محسوب)','حالة المراجعة','حالة إدراج الموظف','حالة المسير'];
+ const data=cyclePayroll.map(r=>{const d=r.data,b=cycleBatchFor(r);return [r.company,d.month,d.employee_number,d.employee_name,d.basic,d.housing,d.transport,d.bonus,d.extra_allowance,d.overtime_hours,d.overtime,d.absence_deduction,d.advance_deduction,d.deductions,d.net,d.excluded?0:Number(d.bank_amount||0),d.excluded?0:Math.round((Number(d.net||0)-Number(d.bank_amount||0))*100)/100,d.split_confirmed?'مراجع':'غير مراجع',d.excluded?'مستبعد من المسير':'مدرج',cycleStatus[b?.status]||b?.status||''];});
  const bytes=workbookBytes([head,...data]);const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));a.download='مسيرات-'+payrollMonth+'-'+(payrollCompany==='__all__'?'جميع-الشركات':payrollCompany)+'.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 function cyclePrint(){
@@ -410,7 +410,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {cycleEdit&&<div className="modal-backdrop" role="presentation"><section className="modal" role="dialog" aria-modal="true" aria-label="مراجعة بيانات الموظف داخل المسير" style={{width:'95vw',maxWidth:780,padding:22,maxHeight:'90vh',overflowY:'auto'}}>
  <h2>تعديل بيانات الموظف داخل مسير الشهر: {cycleEdit.name}</h2>{cycleEdit.data.needs_review&&<p className="review-warning" role="alert">تنبيه للمراجعة: {cycleEdit.data.review_reason||'هناك بيانات تحتاج للتحقق قبل الاعتماد'}</p>}<p>{cycleEdit.company} · {cycleEdit.employee_number} · التعديلات خاصة بالمسير الحالي ولا تغيّر سجل الموظف الأساسي</p>
  <form onSubmit={cycleSave}><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(175px,1fr))',gap:10}}>
- { [['basic','الراتب الأساسي'],['housing','بدل السكن'],['transport','بدل النقل'],['bonus','مكافآت'],['extra_allowance','بدلات أخرى'],['overtime_hours','ساعات إضافية'],['absence_days','أيام الغياب'],['absence_deduction','خصم الغياب'],['advance_deduction','خصم السلف'],['deductions','خصومات أخرى'],['cash_amount','صرف كاش'],['bank_amount','تحويل بنكي']].map(([key,label])=><label key={key}>{label}<input type="number" min="0" step="0.01" required value={cycleEdit.data[key]??0} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,[key]:e.target.value}}))}/></label>)}
+ { [['basic','الراتب الأساسي'],['housing','بدل السكن'],['transport','بدل النقل'],['bonus','مكافآت'],['extra_allowance','بدلات أخرى'],['overtime_hours','ساعات إضافية'],['absence_days','أيام الغياب'],['absence_deduction','خصم الغياب'],['advance_deduction','خصم السلف'],['deductions','خصومات أخرى'],['bank_amount','مبلغ التحويل البنكي فقط']].map(([key,label])=><label key={key}>{label}<input type="number" min="0" step="0.01" required value={cycleEdit.data[key]??0} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,[key]:e.target.value}}))}/></label>)}<label>المتبقي للصرف كاش (محسوب تلقائيًا)<input type="text" readOnly value={money(cycleSalarySummary(cycleEdit.data).cash)} title="صافي الاستحقاق مطروحًا منه مبلغ التحويل البنكي"/></label>
  </div>
  {cycleBatches.find(b=>b.id===cycleEdit.batch_id)?.status==='manager_review'&&<label style={{display:'block',marginTop:10}}>ملاحظات مدير المشروع على بيانات الموظف<textarea value={cycleEdit.data.manager_notes||''} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,manager_notes:e.target.value}}))} placeholder="أدخل ملاحظات المراجعة والتعديل قبل الإرسال لإدارة المشاريع"/></label>}
  {cycleEdit.data.needs_review&&<label style={{display:'block',marginTop:10}}>مبرر استثناء الموظف (حالة التوظيف أو اختلاف الأجر)<textarea required value={cycleEdit.data.exception_note||''} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,exception_note:e.target.value}}))}/></label>}
@@ -421,10 +421,10 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
     <span>إجمالي الراتب <b>{money(cycleSalarySummary(cycleEdit.data).gross)}</b></span>
     <span>إضافات ومكافآت وساعات إضافية <b>+ {money(cycleSalarySummary(cycleEdit.data).additions)}</b></span>
     <span>خصم الغياب والسلف والخصومات الأخرى <b>− {money(cycleSalarySummary(cycleEdit.data).deductions)}</b></span>
-    <span>توزيع الكاش والتحويل <b>{money(cycleSalarySummary(cycleEdit.data).allocated)}</b></span>
+    <span>تحويل بنكي <b>{money(cycleSalarySummary(cycleEdit.data).bank)}</b> · المتبقي كاش <b>{money(cycleSalarySummary(cycleEdit.data).cash)}</b></span>
   </div>
   <div className={cycleSalarySummary(cycleEdit.data).valid?'payroll-net-check ok':'payroll-net-check warning'}>
-    {cycleSalarySummary(cycleEdit.data).valid?'✓ التوزيع مطابق لصافي الاستحقاق':'يلزم مطابقة مجموع الكاش والتحويل مع صافي الراتب قبل الحفظ؛ الفرق: '+money(cycleSalarySummary(cycleEdit.data).difference)+' ر.س'}
+    {cycleSalarySummary(cycleEdit.data).valid?'✓ التحويل البنكي والمتبقي كاش يساويان صافي الراتب':'مبلغ التحويل البنكي يجب ألا يتجاوز صافي الراتب أو يكون سالبًا'}
   </div>
   <small className="payroll-net-explanation">يُحتسب الصافي تلقائيًا من الرواتب والإضافات والخصومات المدخلة. أيام الغياب وحدها لا تُخصم ماليًا إلا بعد تحديد مبلغ «خصم الغياب».</small>
  </div>
