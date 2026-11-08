@@ -4,7 +4,7 @@ export const employeeRegisterFields = [
  ['hire_date','تاريخ التعيين'],['job','المسمى الوظيفي'],['department','القسم'],
  ['nationality','الجنسية'],['identity','الهوية أو الإقامة'],['phone','الجوال'],
  ['email','البريد الإلكتروني'],['basic','الراتب الأساسي'],['housing','بدل السكن'],
- ['transport','بدل النقل'],['payment_method','طريقة الصرف'],['bank','البنك'],
+ ['transport','بدل النقل'],['salary','الراتب الشهري الإجمالي'],['bank_amount','تحويل بنكي'],['cash_amount','المتبقي كاش'],['payment_method','طريقة الصرف'],['bank','البنك'],
  ['iban','الآيبان'],['sponsorship','حالة الكفالة'],['opening_leave','رصيد افتتاحي للإجازات'],
  ['annual_entitlement','الاستحقاق السنوي'],['supervisor_account','رقم حساب المدير المباشر'],
  ['home_phone','هاتف الموظف في البلد الأم'],['employment_status','حالة الموظف'],
