@@ -457,3 +457,17 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
 @media(max-width:1000px){.members-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.members-filter-grid{grid-template-columns:1fr}.members-head{padding:13px}.members-table-scroll{padding:0 6px 8px}}
 @media print{.members-directory .members-head-actions,.members-directory .members-filter-panel,.members-directory .members-add-panel,.members-directory-table .row-actions{display:none!important}.members-directory-table{min-width:0;font-size:10px}.members-directory-table th,.members-directory-table td{padding:6px!important}}
+
+
+/* Account and permissions actions matching the supplied golden reference */
+.member-account-actions{display:flex;direction:rtl;align-items:center;gap:8px;flex-wrap:wrap;margin-top:18px}
+.member-account-actions button{min-height:39px;padding:10px 15px;border-radius:9px;border:1px solid #e2cfaa;background:#fffdf9;color:#705021;font-size:12px;font-weight:700;cursor:pointer}
+.member-account-actions button.primary{background:#b78f2d;border-color:#aa842e;color:#1c190e;box-shadow:0 2px 4px #8b6c301f}
+.member-account-actions button:hover:not(:disabled){background:#f7edda}
+.member-account-actions button.primary:hover:not(:disabled){background:#c9a446}
+.member-account-actions button:disabled{opacity:.48;cursor:not-allowed}
+.member-account-actions .member-close-action{margin-inline-start:auto;color:#746b58}
+.member-reset-dialog{max-width:520px!important;width:min(94vw,520px)!important;padding:24px!important}
+.member-reset-dialog h2{font-size:19px;margin-bottom:16px}
+.member-reset-dialog p{line-height:1.8;color:#594e39}
+@media(max-width:650px){.member-account-actions button{flex:1 1 160px}.member-account-actions .member-close-action{margin-inline-start:0}}
