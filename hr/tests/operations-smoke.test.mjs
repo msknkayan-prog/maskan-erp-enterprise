@@ -146,3 +146,12 @@ test('user permissions directory has reference-style filters and management acti
  assert.match(css,/\.members-directory-table/);
  assert.match(css,/\.members-active-pill/);
 });
+
+
+test('account and permissions offer the three golden-reference controls with secure reset flow',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ for(const text of ['حفظ الحساب والصلاحيات','إعادة تعيين كلمة المرور','إرسال رابط الاستعادة عبر البريد','passwordResetDialog','sendMemberPasswordLink'])assert.ok(ui.includes(text),text);
+ assert.match(ui,/role="dialog" aria-modal="true" aria-label="إعادة تعيين كلمة المرور"/);
+ assert.match(css,/\.member-account-actions/);
+});
