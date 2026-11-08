@@ -244,3 +244,15 @@ test('member directory shows active or inactive and provides a secure retry afte
  assert.match(ui,/setNewMemberCredential\(\{email:memberEmail,username:memberUsername.trim\(\),password:null,error:err.message\}\)/);
  assert.match(ui,/newMemberCredential.password\?/);
 });
+
+
+test('monthly payroll offers a unified draft-only manager for add, edit, exclude, restore and submit',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ for(const term of ['payrollManageBatchId','payrollAddEmployeeId','payrollAvailableEmployees','cycleAddEmployee','فتح إدارة المسير','حذف من المسير (استبعاد)','إرسال المسير للاعتماد بعد المراجعة'])assert.ok(ui.includes(term),term);
+ assert.match(ui,/action:'add_employee'/);
+ assert.match(ui,/batch_revision:batch.revision/);
+ assert.match(ui,/payrollManagedBatch.status==='draft'/);
+ assert.match(ui,/payrollManagedReviewed!==payrollManagedIncluded.length/);
+ assert.match(css,/\.payroll-management-modal/);
+});
