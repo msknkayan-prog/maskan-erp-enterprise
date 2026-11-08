@@ -329,3 +329,18 @@ test('employee list displays full HVAC company name without duplicate company ke
  assert.match(css,/\.employee-register\{border-collapse:separate!important;border-spacing:0 9px!important/);
  assert.match(css,/\.employee-register \.employee-actions-horizontal\{display:flex!important;flex-direction:row!important/);
 });
+
+
+test('employee payroll net recalculates live from all entered monetary amounts and reconciles payouts',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ assert.match(ui,/function cycleSalarySummary\(d\)/);
+ assert.match(ui,/const additions=round\(n\('bonus'\)\+n\('extra_allowance'\)\+overtime\)/);
+ assert.match(ui,/const deductions=round\(n\('absence_deduction'\)\+n\('advance_deduction'\)\+n\('deductions'\)\)/);
+ assert.match(ui,/const net=round\(gross\+additions-deductions\)/);
+ assert.match(ui,/صافي راتب الموظف بعد التعديلات/);
+ assert.match(ui,/payroll-net-breakdown/);
+ assert.match(ui,/!summary.valid/);
+ assert.match(ui,/أيام الغياب وحدها لا تُخصم ماليًا/);
+ assert.match(css,/\.payroll-net-summary\{position:sticky/);
+});
