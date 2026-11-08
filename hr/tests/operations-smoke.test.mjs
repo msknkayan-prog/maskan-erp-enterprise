@@ -224,3 +224,13 @@ test('administrator editing opens but protects admin role and existing password 
  assert.match(ui,/passwordResetDialog.role==='admin'/);
  assert.match(ui,/إرسال رابط الاستعادة عبر البريد/);
 });
+
+test('distinct login identities can share a contact email and receive a one-time temporary password',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/memberContactEmail/);
+ assert.match(ui,/contact_email:memberContactEmail\|\|memberEmail/);
+ assert.match(ui,/action:'generate_temporary_password',email:memberEmail/);
+ assert.match(ui,/newMemberCredential&&module==='members'/);
+ assert.match(ui,/نسخ كلمة المرور/);
+ assert.match(ui,/إرسال رابط استعادة آمن/);
+});
