@@ -256,3 +256,12 @@ test('monthly payroll offers a unified draft-only manager for add, edit, exclude
  assert.match(ui,/payrollManagedReviewed!==payrollManagedIncluded.length/);
  assert.match(css,/\.payroll-management-modal/);
 });
+
+
+test('employee register provides explicit view, editable form, safe archive and restore actions',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ for(const text of ['employeeReadOnly','showArchivedEmployees','openEmployee(row,true)','openEmployee(row,false)','archiveEmployee(row,Boolean(row.data?._archived))','عرض أرشيف الموظفين','استعادة الموظف','عرض بيانات الموظف','تعديل بيانات الموظف'])assert.ok(ui.includes(text),text);
+ assert.match(ui,/action:restore\?'restore_employee':'archive_employee'/);
+ assert.match(ui,/module==='employees'&&employeeReadOnly/);
+ assert.match(ui,/module==='employees'&&Boolean\(r.data\?\._archived\)!==showArchivedEmployees/);
+});
