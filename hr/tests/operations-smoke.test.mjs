@@ -277,3 +277,16 @@ test('credential manager requires a freshly generated temporary password and exp
  assert.match(ui,/!newMemberCredential.password/);
  assert.match(css,/\.credential-whatsapp-phone/);
 });
+
+
+test('authorized employee edits stay enabled regardless of request workflow state',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const p=ui.indexOf('<form onSubmit={save}><fieldset disabled=');
+ const fieldset=ui.slice(p,p+430);
+ assert.ok(p>=0);
+ assert.match(fieldset,/module==='employees'\?\(employeeReadOnly\|\|!permittedWrite\(user\|\|\{\},'employees'\)\)/);
+ assert.match(ui,/module==='employees'\?\(!employeeReadOnly&&permittedWrite\(user\|\|\{\},'employees'\)\)/);
+ assert.match(ui,/تفعيل تعديل بيانات الموظف/);
+ assert.match(ui,/لا توجد رواتب أو طلبات أو حساب دخول مرتبط به/);
+ assert.match(ui,/module!=='employees'&&!!edit.id/);
+});
