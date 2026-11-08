@@ -376,3 +376,14 @@ test('payroll card metadata, four approval stages and action buttons stay in one
  assert.match(css,/\.payroll-stage-row>\.row-actions\{display:flex!important;flex:0 0 auto;flex-direction:row!important;flex-wrap:nowrap!important;/);
  assert.match(css,/overflow-x:auto!important/);
 });
+
+
+test('payroll Excel bank-transfer column is explicit and remaining cash is calculated automatically',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/const bank=n\('bank_amount'\),cash=round\(net-bank\)/);
+ assert.match(ui,/cash_amount:summary.cash,bank_amount:summary.bank/);
+ assert.match(ui,/المتبقي للصرف كاش \(محسوب تلقائيًا\)/);
+ assert.match(ui,/التحويل البنكي \(المبلغ المدخل\)/);
+ assert.match(ui,/المتبقي كاش \(محسوب\)/);
+ assert.match(ui,/Number\(d.net\|\|0\)-Number\(d.bank_amount\|\|0\)/);
+});
