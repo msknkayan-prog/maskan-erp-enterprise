@@ -234,3 +234,13 @@ test('distinct login identities can share a contact email and receive a one-time
  assert.match(ui,/نسخ كلمة المرور/);
  assert.match(ui,/إرسال رابط استعادة آمن/);
 });
+
+test('member directory shows active or inactive and provides a secure retry after password failure',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/memberStatusFilter==='inactive'/);
+ assert.match(ui,/m.is_active!==false\?"نشط":"غير نشط"/);
+ assert.match(ui,/action:'set_member_status'/);
+ assert.match(ui,/إعادة محاولة إنشاء كلمة المرور/);
+ assert.match(ui,/setNewMemberCredential\(\{email:memberEmail,username:memberUsername.trim\(\),password:null,error:err.message\}\)/);
+ assert.match(ui,/newMemberCredential.password\?/);
+});
