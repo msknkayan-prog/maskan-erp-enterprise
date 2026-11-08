@@ -659,3 +659,14 @@ main button:focus-visible,main input:focus-visible,main select:focus-visible,mai
 .payroll-stage-row>.row-actions{display:flex!important;flex:0 0 auto;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center!important;gap:8px!important}
 .payroll-stage-row>.row-actions button{white-space:nowrap!important;flex:0 0 auto}
 @media(max-width:900px){.payroll-stage-row{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important}}
+
+
+/* Employee salary profile: transfer plus cash always reconcile to reference pay */
+.employee-payout-summary{margin:14px 0;padding:15px 16px;border:1px solid #d4b270;background:#fff8e9;border-radius:12px;display:grid;gap:10px;direction:rtl}
+.employee-payout-summary>strong{font-size:14px;color:#634715}
+.employee-payout-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.employee-payout-grid>span{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 12px;background:#fff;border:1px solid #eddec0;border-radius:9px;font-size:12px;color:#69583b;flex-wrap:wrap}
+.employee-payout-grid b{font-size:15px;color:#176749;font-variant-numeric:tabular-nums}
+.employee-payout-summary small{font-size:11px;color:#51735d;line-height:1.65}
+.employee-payout-summary .employee-payout-error{color:#ad422d;font-weight:700}
+@media(max-width:700px){.employee-payout-grid{grid-template-columns:1fr}}
