@@ -536,3 +536,9 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
 .credential-whatsapp-phone input{font-size:14px;letter-spacing:.3px;border:1px solid #dac498;border-radius:9px;padding:10px 12px;background:#fff;min-height:42px;width:100%}
 .member-reset-dialog .member-account-actions{gap:8px}
 .member-reset-dialog .member-account-actions button{white-space:normal}
+
+
+/* Explicit employee display/edit mode */
+.employee-edit-mode{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#fff7df;border:1px solid #e5d3a5;border-radius:10px;padding:11px 14px;margin:10px 0;color:#654816;font-size:12px;font-weight:700}
+.employee-edit-mode button{background:#b79037;border:1px solid #ae8730;color:#251d0c;border-radius:8px;padding:9px 13px;cursor:pointer;font-weight:700}
+.employee-edit-mode button:disabled{opacity:.5;cursor:not-allowed}
