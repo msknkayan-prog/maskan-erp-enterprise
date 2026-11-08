@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {companies,normalize,annualLeave,enumOptions,canRead} from '../lib/modules.mjs';
+import {companies,normalize,annualLeave,enumOptions,canRead,permissionChoice,permittedRead,permittedWrite} from '../lib/modules.mjs';
 import {employeeRegisterValue,employeeRegisterFields} from '../lib/employee-register.mjs';
 
 test('all six imported HR companies are supported',()=>{
@@ -184,4 +184,20 @@ test('admin permissions navigation recovers after role repair and rejects duplic
  assert.match(ui,/تعذر قراءة صلاحيات المستخدمين/);
  assert.match(ui,/المستخدم موجود مسبقًا/);
  assert.match(ui,/m\.auth_confirmed/);
+});
+
+test('every HR permissions box is editable, and read/write choices affect access',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/checked=\{permissionChoice\(memberRole,memberPermissions,k,action\)\}/);
+ assert.match(ui,/checked=\{permissionChoice\(memberEdit.role,memberEditPermissions,k,action\)\}/);
+ assert.ok(!ui.includes("disabled={!(action==='edit'?canWrite"));
+ const u={role:'employee',permissions:{'employees:view':true,'employees:edit':true}};
+ assert.equal(permittedRead(u,'employees'),true);
+ assert.equal(permittedWrite(u,'employees'),true);
+ assert.equal(permittedRead({role:'hr',permissions:{'employees:view':false}},'employees'),false);
+ assert.equal(permittedWrite({role:'hr',permissions:{'employees:edit':false}},'employees'),false);
+ assert.equal(permissionChoice('finance',{'warnings:edit':true},'warnings','edit'),true);
+ assert.equal(permissionChoice('hr',{'leave:view':false},'leave','view'),false);
+ assert.equal(permittedWrite({role:'finance',permissions:{'warnings:view':false,'warnings:edit':true}},'warnings'),false);
+ assert.equal(permittedRead({role:'admin',permissions:{}},'employees'),true);
 });
