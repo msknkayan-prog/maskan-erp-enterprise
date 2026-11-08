@@ -201,3 +201,16 @@ test('every HR permissions box is editable, and read/write choices affect access
  assert.equal(permittedWrite({role:'finance',permissions:{'warnings:view':false,'warnings:edit':true}},'warnings'),false);
  assert.equal(permittedRead({role:'admin',permissions:{}},'employees'),true);
 });
+
+
+test('directory displays every user permission including hidden module permissions in expandable rows',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ assert.match(ui,/memberPermissionRows=m=>Object.keys\(modules\)\.map/);
+ assert.match(ui,/عرض جميع الصلاحيات/);
+ assert.match(ui,/expandedPermissions===m.email/);
+ assert.match(ui,/members-permissions-matrix/);
+ assert.match(ui,/members-permission-note/);
+ assert.match(ui,/m.role!=='admin'/);
+ assert.match(css,/\.members-permissions-expanded/);
+});
