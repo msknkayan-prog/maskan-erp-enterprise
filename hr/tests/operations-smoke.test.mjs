@@ -290,3 +290,11 @@ test('authorized employee edits stay enabled regardless of request workflow stat
  assert.match(ui,/لم توجد رواتب أو طلبات أو حساب دخول مرتبط به/);
  assert.match(ui,/module!=='employees'&&!!edit.id/);
 });
+
+
+test('modern standards HVAC company appears and imports use canonical Excel names',()=>{
+ const m=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(m,/المعايير العصرية/);
+ assert.match(ui,/canonicalCompany\(r\[headers.indexOf\('الشركة'\)\]\)/);
+});
