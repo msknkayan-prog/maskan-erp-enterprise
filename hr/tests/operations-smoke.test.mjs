@@ -4,9 +4,9 @@ import {readFileSync} from 'node:fs';
 import {companies,normalize,annualLeave,enumOptions,canRead,permissionChoice,permittedRead,permittedWrite} from '../lib/modules.mjs';
 import {employeeRegisterValue,employeeRegisterFields} from '../lib/employee-register.mjs';
 
-test('all six imported HR companies are supported',()=>{
- assert.equal(companies.length,6);
- for(const company of ['مسكن الكيان','رياح الاعمار','شركة البلد المتحدة','شركة احواض الطاقة','سمارت برووف','مشاريع حصن الحضارة']) assert.ok(companies.includes(company));
+test('all seven HR companies including Modern Standards are supported',()=>{
+ assert.equal(companies.length,7);
+ for(const company of ['مسكن الكيان','رياح الاعمار','شركة البلد المتحدة','شركة احواض الطاقة','سمارت برووف','مشاريع حصن الحضارة','المعايير العصرية']) assert.ok(companies.includes(company));
 });
 test('employee records can be corrected without fabricating a hire date',()=>{
  const out=normalize('employees',{company:'مسكن الكيان',data:{name:'موظف اختباري',code:'TEST-1',salary:5000,sponsorship:'yes'}});
