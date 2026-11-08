@@ -287,7 +287,7 @@ test('authorized employee edits stay enabled regardless of request workflow stat
  assert.match(fieldset,/module==='employees'\?\(employeeReadOnly\|\|!permittedWrite\(user\|\|\{\},'employees'\)\)/);
  assert.match(ui,/module==='employees'\?\(!employeeReadOnly&&permittedWrite\(user\|\|\{\},'employees'\)\)/);
  assert.match(ui,/تفعيل تعديل بيانات الموظف/);
- assert.match(ui,/لم توجد رواتب أو طلبات أو حساب دخول مرتبط به/);
+ assert.match(ui,/سيُحفظ في سجل التدقيق/);
  assert.match(ui,/module!=='employees'&&!!edit.id/);
 });
 
