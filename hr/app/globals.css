@@ -518,3 +518,14 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
 .payroll-management-list .row-actions button{white-space:nowrap}
 .payroll-management-modal>small{display:block;color:#796e5b;line-height:1.8;margin-top:10px}
 @media(max-width:680px){.payroll-management-modal{padding:13px!important}.payroll-management-list{max-height:43vh}.payroll-management-add{padding:9px}}
+
+
+/* Employee register action buttons and non-destructive archive */
+.employee-register-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 10px;padding:11px 15px;background:#fffaf0;border:1px solid #e4d4af;border-radius:10px}
+.employee-register-actions button{background:#fff;border:1px solid #cfb376;color:#694916;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700}
+.employee-register-actions small{color:#746648;font-size:11px}
+.employee-register .row-actions{display:flex;flex-wrap:wrap;gap:6px;min-width:185px}
+.employee-register .row-actions button{padding:7px 12px;border:1px solid #dac59b;border-radius:7px;background:#fffdf9;white-space:nowrap;font-size:11px}
+.employee-register .row-actions button:hover:not(:disabled){background:#f6ebd2}
+.employee-register .row-actions button:disabled{opacity:.45}
+@media(max-width:680px){.employee-register .row-actions{min-width:145px}.employee-register-actions{padding:10px}}
