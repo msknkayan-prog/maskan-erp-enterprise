@@ -179,16 +179,25 @@ function cycleEditEmployee(row){
  setCycleEdit({row_id:row.id,batch_id:b.id,revision:row.revision,company:row.company,name:row.data.employee_name,employee_number:row.data.employee_number,
    status:row.data.employment_status,data:{...row.data}});
 }
-function cyclePreviewNet(d){
- const n=k=>Number(d[k]||0);
- const gross=n('basic')+n('housing')+n('transport');
- const overtime=Math.round(n('overtime_hours')*(gross/30/8+0.5*n('basic')/30/8)*100)/100;
- return Math.round((gross+n('bonus')+n('extra_allowance')+overtime-n('absence_deduction')-n('advance_deduction')-n('deductions'))*100)/100;
+function cycleSalarySummary(d){
+ const n=k=>Number(d[k]??0);
+ const round=v=>Math.round((v+Number.EPSILON)*100)/100;
+ const basic=n('basic'),housing=n('housing'),transport=n('transport');
+ const gross=round(basic+housing+transport);
+ const overtime=round(n('overtime_hours')*(gross/30/8+0.5*basic/30/8));
+ const additions=round(n('bonus')+n('extra_allowance')+overtime);
+ const deductions=round(n('absence_deduction')+n('advance_deduction')+n('deductions'));
+ const net=round(gross+additions-deductions);
+ const cash=n('cash_amount'),bank=n('bank_amount'),allocated=round(cash+bank);
+ const values=[gross,overtime,additions,deductions,net,cash,bank];
+ const valid=values.every(Number.isFinite)&&values.every(v=>v>=0)&&round(net-allocated)===0;
+ return {gross,overtime,additions,deductions,net,cash,bank,allocated,difference:round(net-allocated),valid};
 }
+function cyclePreviewNet(d){return cycleSalarySummary(d).net;}
 async function cycleSave(ev){
  ev.preventDefault();if(!cycleEdit)return;
- const net=cyclePreviewNet(cycleEdit.data),cash=Number(cycleEdit.data.cash_amount||0),bank=Number(cycleEdit.data.bank_amount||0);
- if(!Number.isFinite(net)||net<0||!Number.isFinite(cash)||!Number.isFinite(bank)||cash<0||bank<0||Math.round((cash+bank)*100)!==Math.round(net*100)){notify('يجب أن يساوي الكاش والتحويل البنكي صافي الراتب');return;}
+ const summary=cycleSalarySummary(cycleEdit.data);
+ if(!summary.valid){notify('تحقق من المبالغ: يجب أن يساوي مجموع الكاش والتحويل صافي الراتب وألا توجد مبالغ سالبة');return;}
  setSaving(true);try{await cyclePost({action:'update',batch_id:cycleEdit.batch_id,row_id:cycleEdit.row_id,revision:cycleEdit.revision,data:cycleEdit.data});setCycleEdit(null);notify('تم حفظ تعديل الموظف في مسير الشهر فقط');await refresh();}catch(e){notify(e.message)}finally{setSaving(false)}
 }
 async function cycleAddEmployee(){
@@ -393,7 +402,19 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {cycleBatches.find(b=>b.id===cycleEdit.batch_id)?.status==='manager_review'&&<label style={{display:'block',marginTop:10}}>ملاحظات مدير المشروع على بيانات الموظف<textarea value={cycleEdit.data.manager_notes||''} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,manager_notes:e.target.value}}))} placeholder="أدخل ملاحظات المراجعة والتعديل قبل الإرسال لإدارة المشاريع"/></label>}
  {cycleEdit.data.needs_review&&<label style={{display:'block',marginTop:10}}>مبرر استثناء الموظف (حالة التوظيف أو اختلاف الأجر)<textarea required value={cycleEdit.data.exception_note||''} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,exception_note:e.target.value}}))}/></label>}
  <label style={{display:'block',marginTop:10}}>ملاحظات التعديل<textarea value={cycleEdit.data.notes||''} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,notes:e.target.value}}))}/></label>
- <p>صافي الاستحقاق المحسوب: <b>{money(cyclePreviewNet(cycleEdit.data))} ر.س</b> · مجموع الكاش والتحويل: <b>{money(Number(cycleEdit.data.cash_amount||0)+Number(cycleEdit.data.bank_amount||0))} ر.س</b></p>
+ <div className="payroll-net-summary" role="status" aria-live="polite">
+  <div className="payroll-net-summary-heading"><span>صافي راتب الموظف بعد التعديلات</span><strong>{Number.isFinite(cycleSalarySummary(cycleEdit.data).net)?money(cycleSalarySummary(cycleEdit.data).net):'—'} <small>ر.س</small></strong></div>
+  <div className="payroll-net-breakdown">
+    <span>إجمالي الراتب <b>{money(cycleSalarySummary(cycleEdit.data).gross)}</b></span>
+    <span>إضافات ومكافآت وساعات إضافية <b>+ {money(cycleSalarySummary(cycleEdit.data).additions)}</b></span>
+    <span>خصم الغياب والسلف والخصومات الأخرى <b>− {money(cycleSalarySummary(cycleEdit.data).deductions)}</b></span>
+    <span>توزيع الكاش والتحويل <b>{money(cycleSalarySummary(cycleEdit.data).allocated)}</b></span>
+  </div>
+  <div className={cycleSalarySummary(cycleEdit.data).valid?'payroll-net-check ok':'payroll-net-check warning'}>
+    {cycleSalarySummary(cycleEdit.data).valid?'✓ التوزيع مطابق لصافي الاستحقاق':'يلزم مطابقة مجموع الكاش والتحويل مع صافي الراتب قبل الحفظ؛ الفرق: '+money(cycleSalarySummary(cycleEdit.data).difference)+' ر.س'}
+  </div>
+  <small className="payroll-net-explanation">يُحتسب الصافي تلقائيًا من الرواتب والإضافات والخصومات المدخلة. أيام الغياب وحدها لا تُخصم ماليًا إلا بعد تحديد مبلغ «خصم الغياب».</small>
+ </div>
  <div style={{display:'flex',gap:10}}><button className="primary" type="submit" disabled={saving}>حفظ ومراجعة بيانات الموظف</button><button type="button" disabled={saving} onClick={()=>setCycleEdit(null)}>إلغاء</button></div></form></section></div>}
  {importRows&&<section className="panel import-panel"><h2>معاينة الاستيراد — {importRows.length} سجل</h2><p>يدعم XLSX بالقيم فقط أو CSV UTF-8 من Excel. لا تستورد بيانات حتى تضغط التأكيد.</p><div className="table-wrap"><table><thead><tr><th>الصف</th><th>الشركة</th><th>الاسم / الرقم</th><th>الملاحظة</th></tr></thead><tbody>{importRows.map((r,i)=><tr key={i}><td>{r.line}</td><td>{r.company}</td><td>{r.data.name} / {r.data.code}</td><td>{r.error||'بانتظار التحقق والحفظ'}</td></tr>)}</tbody></table></div><button className="primary" disabled={saving} onClick={confirmImport}>تأكيد الاستيراد</button><button disabled={saving} onClick={()=>setImportRows(null)}>إلغاء</button></section>}
 {linkedEmployee&&['leave','advances','warnings','resignations','returns','terminations','leave_dues','settlements'].includes(module)&&<div className="panel" style={{padding:12,marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}><span>عرض السجلات المرتبطة بالموظف: <b>{linkedEmployee.name}</b></span><button type="button" onClick={()=>setLinkedEmployee(null)}>عرض جميع السجلات</button></div>}
