@@ -11,7 +11,7 @@ const money=n=>Number(n||0).toLocaleString('ar-SA',{maximumFractionDigits:2});
 function download(name,content,type='text/csv;charset=utf-8'){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff',content],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 const csvEscape=v=>'"'+String(v??'').replaceAll('"','""')+'"';
 function csvParse(s){s=s.replace(/^\ufeff/,'');let rows=[],row=[],v='',quoted=false;for(let i=0;i<s.length;i++){let c=s[i];if(c==='"'){if(quoted&&s[i+1]==='"'){v+='"';i++}else quoted=!quoted}else if(c===','&&!quoted){row.push(v);v=''}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&s[i+1]==='\n')i++;row.push(v);if(row.some(Boolean))rows.push(row);row=[];v=''}else v+=c}if(quoted)throw Error('علامات اقتباس غير مكتملة');row.push(v);if(row.some(Boolean))rows.push(row);return rows}
-export default function ERP(){const [module,setModule]=useState('overview'),[payrollStage,setPayrollStage]=useState('__all__'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollEdit,setPayrollEdit]=useState(null),[cycleEdit,setCycleEdit]=useState(null),[payrollManageBatchId,setPayrollManageBatchId]=useState(null),[payrollAddEmployeeId,setPayrollAddEmployeeId]=useState(''),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[edit,setEdit]=useState(null),[employeeReadOnly,setEmployeeReadOnly]=useState(false),[showArchivedEmployees,setShowArchivedEmployees]=useState(false),[saving,setSaving]=useState(false),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberContactEmail,setMemberContactEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberPermissions,setMemberPermissions]=useState({}),[memberUsername,setMemberUsername]=useState(''),[memberEdit,setMemberEdit]=useState(null),[memberEditPermissions,setMemberEditPermissions]=useState({}),[memberBusy,setMemberBusy]=useState(false),[linkedEmployee,setLinkedEmployee]=useState(null),[memberSearch,setMemberSearch]=useState(''),[memberRoleFilter,setMemberRoleFilter]=useState(''),[memberUserFilter,setMemberUserFilter]=useState(''),[memberStatusFilter,setMemberStatusFilter]=useState(''),[memberFormOpen,setMemberFormOpen]=useState(false),[expandedPermissions,setExpandedPermissions]=useState(null),[passwordResetDialog,setPasswordResetDialog]=useState(null),[generatedPassword,setGeneratedPassword]=useState(null),[credentialPhone,setCredentialPhone]=useState(''),[newMemberCredential,setNewMemberCredential]=useState(null);
+export default function ERP(){const [module,setModule]=useState('overview'),[payrollStage,setPayrollStage]=useState('__all__'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollEdit,setPayrollEdit]=useState(null),[cycleEdit,setCycleEdit]=useState(null),[payrollManageBatchId,setPayrollManageBatchId]=useState(null),[payrollAllOpen,setPayrollAllOpen]=useState(false),[payrollBulkSelected,setPayrollBulkSelected]=useState([]),[payrollAddEmployeeId,setPayrollAddEmployeeId]=useState(''),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[edit,setEdit]=useState(null),[employeeReadOnly,setEmployeeReadOnly]=useState(false),[showArchivedEmployees,setShowArchivedEmployees]=useState(false),[saving,setSaving]=useState(false),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberContactEmail,setMemberContactEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberPermissions,setMemberPermissions]=useState({}),[memberUsername,setMemberUsername]=useState(''),[memberEdit,setMemberEdit]=useState(null),[memberEditPermissions,setMemberEditPermissions]=useState({}),[memberBusy,setMemberBusy]=useState(false),[linkedEmployee,setLinkedEmployee]=useState(null),[memberSearch,setMemberSearch]=useState(''),[memberRoleFilter,setMemberRoleFilter]=useState(''),[memberUserFilter,setMemberUserFilter]=useState(''),[memberStatusFilter,setMemberStatusFilter]=useState(''),[memberFormOpen,setMemberFormOpen]=useState(false),[expandedPermissions,setExpandedPermissions]=useState(null),[passwordResetDialog,setPasswordResetDialog]=useState(null),[generatedPassword,setGeneratedPassword]=useState(null),[credentialPhone,setCredentialPhone]=useState(''),[newMemberCredential,setNewMemberCredential]=useState(null);
 const notify=t=>{setToast(t);setTimeout(()=>setToast(''),4500)};
 async function refresh(){setLoading(true);setError('');try{const res=await fetch('/api/erp',{cache:'no-store'});const d=await res.json();if(res.status===401){location.href='/login';return;}if(!res.ok)throw Error(d.error);setRows(d.rows);setUser(d.user)}catch(e){setError(e.message)}finally{setLoading(false)}}
 useEffect(()=>{refresh();const recheck=()=>{if(document.visibilityState==='visible')refresh()};window.addEventListener('focus',recheck);document.addEventListener('visibilitychange',recheck);return()=>{window.removeEventListener('focus',recheck);document.removeEventListener('visibilitychange',recheck)}},[]);
@@ -156,13 +156,16 @@ const payrollManagedBatch=cycleBatches.find(b=>b.id===payrollManageBatchId);
 const payrollManagedRows=payrollManagedBatch?cyclePayroll.filter(row=>row.data.batch_id===payrollManagedBatch.id):[];
 const payrollManagedIncluded=payrollManagedRows.filter(row=>!row.data.excluded);
 const payrollManagedReviewed=payrollManagedIncluded.filter(row=>row.data.split_confirmed).length;
+const payrollStages=['draft','manager_review','projects_review','finance_review','paid'];
+const payrollStageLabels=['مساعد الإدارة','مدراء المشاريع','إدارة المشاريع','المالية / الصرف'];
+const payrollBatchReady=b=>{const items=cyclePayroll.filter(r=>r.data.batch_id===b.id),inCount=items.filter(r=>!r.data.excluded);return !!inCount.length&&items.length===Number(b.data.employee_count)&&inCount.every(r=>r.data.split_confirmed&&Number.isFinite(Number(r.data.net))&&Math.round((Number(r.data.cash_amount||0)+Number(r.data.bank_amount||0))*100)===Math.round(Number(r.data.net)*100)&&(!r.data.needs_review||r.data.exception_note));};
 const payrollAvailableEmployees=payrollManagedBatch?rows.filter(row=>row.module==='employees'&&row.company===payrollManagedBatch.company
  &&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(row.data?.employment_status||row.data?.employee_status||'').trim())
  &&!payrollManagedRows.some(item=>item.data.employee_id===row.id)):[];
 
 const cycleNumeric=n=>Number.isFinite(Number(n))?Number(n):0;
 const cycleTotals=cyclePayroll.filter(r=>!r.data.excluded).reduce((a,r)=>({count:a.count+1,gross:a.gross+cycleNumeric(r.data.salary),net:a.net+cycleNumeric(r.data.net),cash:a.cash+cycleNumeric(r.data.cash_amount),bank:a.bank+cycleNumeric(r.data.bank_amount),reviewed:a.reviewed+(r.data.split_confirmed?1:0)}),{count:0,gross:0,net:0,cash:0,bank:0,reviewed:0});
-const cycleStatus={draft:'قيد التجهيز',admin_review:'بانتظار المدير الإداري',finance_review:'بانتظار مراجعة المالية',projects_review:'بانتظار اعتماد مدير إدارة المشاريع',finance:'بانتظار توثيق الصرف من المالية',paid:'تم الصرف'};
+const cycleStatus={draft:'مساعد الإدارة · قيد التجهيز',manager_review:'مدراء المشاريع · تحت المراجعة',projects_review:'إدارة المشاريع · تحت الاعتماد',finance_review:'الإدارة المالية · المراجعة والصرف',paid:'تم الاعتماد والصرف',admin_review:'مرحلة سابقة · تتطلب ترحيل',finance:'مرحلة سابقة · تتطلب ترحيل'};
 async function cyclePost(payload){const response=await fetch('/api/payroll-cycle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const result=await response.json();if(!response.ok)throw Error(result.error||'تعذر تنفيذ طلب المسير');return result;}
 async function cycleGenerate(){
  if(payrollMonth!==ksaMonth){notify('يسمح بتوليد مسير الشهر الحالي فقط. الأشهر السابقة للعرض دون إنشاء.');return;}
@@ -172,7 +175,7 @@ async function cycleGenerate(){
 function cycleEditEmployee(row){
  const b=cycleBatchFor(row);
  if(row.data.excluded){notify('أعد الموظف المستبعد إلى المسير قبل تعديله');return;}
- if(!b||b.status!=='draft'||!['admin','hr'].includes(user?.role)){notify('التعديل متاح لمرحلة تجهيز المسير فقط');return;}
+ if(!b||!((b.status==='draft'&&['admin','administrative_assistant'].includes(user?.role))||(b.status==='manager_review'&&['admin','project_manager'].includes(user?.role)))){notify('التعديل متاح لمساعد الإدارة في التجهيز ولمدير المشروع في المراجعة فقط');return;}
  setCycleEdit({row_id:row.id,batch_id:b.id,revision:row.revision,company:row.company,name:row.data.employee_name,employee_number:row.data.employee_number,
    status:row.data.employment_status,data:{...row.data}});
 }
@@ -190,7 +193,7 @@ async function cycleSave(ev){
 }
 async function cycleAddEmployee(){
  const batch=payrollManagedBatch;
- if(!batch||batch.status!=='draft'||!['admin','hr'].includes(user?.role))return notify('الإضافة متاحة قبل الإرسال فقط');
+ if(!batch||batch.status!=='draft'||!['admin','administrative_assistant'].includes(user?.role))return notify('الإضافة متاحة لمساعد الإدارة قبل الإرسال فقط');
  if(!payrollAddEmployeeId)return notify('اختر الموظف المطلوب إضافته');
  if(!window.confirm('إضافة الموظف إلى مسير '+batch.company+' لشهر '+batch.data.month+'؟ يجب مراجعة توزيعه المالي قبل الإرسال.'))return;
  setSaving(true);
@@ -219,10 +222,20 @@ async function cycleTransition(b,action){
  let extras={};
  if(action==='return'){const note=window.prompt('سبب إعادة المسير إلى التجهيز:');if(!note?.trim())return;extras.note=note;}
  if(action==='finance_pay'){const reference=window.prompt('مرجع إثبات صرف الرواتب (الحوالة/سند الصرف):');if(!reference?.trim())return;if(!window.confirm('هل تؤكد صرف جميع مستحقات مسير '+b.company+' لشهر '+b.data.month+' بالفعل؟ سيُفتح إصدار سندات الاستلام بعد التأكيد.'))return;extras.reference=reference;extras.confirm_payment=true;}
- if(action==='admin_approve'&&!window.confirm('اعتماد المسير إداريًا وإرساله للمالية للمراجعة؟'))return;
- if(action==='finance_approve'&&!window.confirm('اعتماد المالية للمسير وإرساله إلى مدير إدارة المشاريع؟'))return;
- if(action==='projects_approve'&&!window.confirm('اعتماد مدير إدارة المشاريع وإرسال المسير للمالية لتوثيق الصرف؟'))return;
+ if(action==='managers_approve'&&!window.confirm('هل اكتملت مراجعة جميع مدراء المشاريع وإرسال المسير لإدارة المشاريع؟'))return;
+ 
+ if(action==='projects_approve'&&!window.confirm('اعتماد إدارة المشاريع وإرسال المسير إلى الإدارة المالية للمراجعة والصرف؟'))return;
  setSaving(true);try{await cyclePost({action,batch_id:b.id,...extras});notify(action==='finance_pay'?'تم توثيق الصرف وإتاحة سندات الاستلام':'تم تحديث مرحلة اعتماد المسير');await refresh();return true;}catch(e){notify(e.message);return false;}finally{setSaving(false);}
+}
+async function cycleBulkSubmit(){
+ const selected=cycleBatches.filter(b=>payrollBulkSelected.includes(b.id));
+ if(!selected.length)return notify('حدد مسير شركة واحدة على الأقل');
+ if(selected.some(b=>b.status!=='draft'||!payrollBatchReady(b)))return notify('بعض المسيرات المختارة لم تكتمل مراجعة بياناتها');
+ if(!window.confirm('إرسال '+selected.length+' مسير شركات دفعة واحدة إلى مدراء المشاريع؟'))return;
+ setSaving(true);
+ try{const result=await cyclePost({action:'bulk_submit',month:payrollMonth,batch_ids:selected.map(b=>b.id),revisions:Object.fromEntries(selected.map(b=>[b.id,b.revision]))});
+  notify('تم إرسال '+result.submitted+' مسير بنجاح لمدراء المشاريع');setPayrollBulkSelected([]);await refresh();
+ }catch(e){notify(e.message)}finally{setSaving(false)}
 }
 function cycleExport(){
  const head=['الشركة','الشهر','الرقم الوظيفي','اسم الموظف','الراتب الأساسي','بدل السكن','بدل النقل','المكافآت','بدلات أخرى','ساعات إضافية','قيمة الإضافي','خصم الغياب','خصم السلف','خصومات أخرى','الصافي','كاش','تحويل بنكي','حالة المراجعة','حالة إدراج الموظف','حالة المسير'];
