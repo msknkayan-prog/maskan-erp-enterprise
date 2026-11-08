@@ -429,3 +429,26 @@ test('employee register includes bank and cash columns',()=>{
  assert.match(m,/\['cash_amount','المتبقي كاش'\]/);
  assert.equal((m.match(/\['salary','الأجر الشهري الإجمالي'\]/g)||[]).length,1);
 });
+
+
+test('editing employee base pay recalculates monthly total and housing transport portions',()=>{
+ const out=normalize('employees',{company:'مسكن الكيان',salary_edit_source:'basic',data:{name:'اختبار تعديل الأساسي',code:'TST-BASIC',salary:5000,basic:3500,bank_amount:3000,sponsorship:'yes'}});
+ assert.equal(out.basic,3500);
+ assert.equal(Math.round(out.salary*100),Math.round(3500/.65));
+ assert.equal(Math.round((out.basic+out.housing+out.transport)*100),Math.round(out.salary*100));
+ assert.equal(Math.round((out.bank_amount+out.cash_amount)*100),Math.round(out.salary*100));
+});
+test('editing employee monthly salary still defaults to basic 65 housing 25 transport remainder',()=>{
+ const out=normalize('employees',{company:'مسكن الكيان',salary_edit_source:'salary',data:{name:'اختبار تعديل الإجمالي',code:'TST-TOTAL',salary:6000,basic:3200,bank_amount:1000,sponsorship:'yes'}});
+ assert.equal(out.basic,3900);
+ assert.equal(out.housing,1500);
+ assert.equal(out.transport,600);
+});
+test('salary input and base salary input explicitly determine the salary update source',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const m=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ assert.match(m,/f\('basic','الراتب الأساسي','number'\)/);
+ assert.match(ui,/salary_edit_source:'basic'/);
+ assert.match(ui,/salary_edit_source:'salary'/);
+ assert.match(ui,/result.payroll_synced/);
+});
