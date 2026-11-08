@@ -189,7 +189,7 @@ async function cycleTransition(b,action){
  if(action==='admin_approve'&&!window.confirm('اعتماد المسير إداريًا وإرساله للمالية للمراجعة؟'))return;
  if(action==='finance_approve'&&!window.confirm('اعتماد المالية للمسير وإرساله إلى مدير إدارة المشاريع؟'))return;
  if(action==='projects_approve'&&!window.confirm('اعتماد مدير إدارة المشاريع وإرسال المسير للمالية لتوثيق الصرف؟'))return;
- setSaving(true);try{await cyclePost({action,batch_id:b.id,...extras});notify(action==='finance_pay'?'تم توثيق الصرف وإتاحة سندات الاستلام':'تم تحديث مرحلة اعتماد المسير');await refresh();}catch(e){notify(e.message)}finally{setSaving(false);}
+ setSaving(true);try{await cyclePost({action,batch_id:b.id,...extras});notify(action==='finance_pay'?'تم توثيق الصرف وإتاحة سندات الاستلام':'تم تحديث مرحلة اعتماد المسير');await refresh();return true;}catch(e){notify(e.message);return false;}finally{setSaving(false);}
 }
 function cycleExport(){
  const head=['الشركة','الشهر','الرقم الوظيفي','اسم الموظف','الراتب الأساسي','بدل السكن','بدل النقل','المكافآت','بدلات أخرى','ساعات إضافية','قيمة الإضافي','خصم الغياب','خصم السلف','خصومات أخرى','الصافي','كاش','تحويل بنكي','حالة المراجعة','حالة إدراج الموظف','حالة المسير'];
@@ -326,7 +326,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
      {payrollManagedBatch.status==='paid'&&!row.data.excluded&&<button type="button" onClick={()=>cycleReceipt(row)}>سند استلام</button>}
    </div></td></tr>)}</tbody></table></div>
   <div className="member-account-actions">
-   {payrollManagedBatch.status==='draft'&&['admin','hr'].includes(user?.role)&&<button type="button" className="primary" disabled={saving||payrollManagedIncluded.length===0||payrollManagedReviewed!==payrollManagedIncluded.length} onClick={async()=>{await cycleTransition(payrollManagedBatch,'submit');setPayrollManageBatchId(null)}}>إرسال المسير للاعتماد بعد المراجعة</button>}
+   {payrollManagedBatch.status==='draft'&&['admin','hr'].includes(user?.role)&&<button type="button" className="primary" disabled={saving||payrollManagedIncluded.length===0||payrollManagedReviewed!==payrollManagedIncluded.length} onClick={async()=>{if(await cycleTransition(payrollManagedBatch,'submit'))setPayrollManageBatchId(null)}}>إرسال المسير للاعتماد بعد المراجعة</button>}
    <button type="button" onClick={()=>setPayrollManageBatchId(null)} disabled={saving}>إغلاق النافذة</button>
   </div>
   <small>الحذف هنا استبعاد قابل للإرجاع قبل إرسال المسير، ولا يحذف ملف الموظف. بعد الإرسال تتوقف الإضافة والتعديل والاستبعاد لحين إعادة المسير إلى التجهيز من صاحب صلاحية الاعتماد.</small>
