@@ -434,7 +434,7 @@ test('employee register includes bank and cash columns',()=>{
 test('editing employee base pay recalculates monthly total and housing transport portions',()=>{
  const out=normalize('employees',{company:'مسكن الكيان',salary_edit_source:'basic',data:{name:'اختبار تعديل الأساسي',code:'TST-BASIC',salary:5000,basic:3500,bank_amount:3000,sponsorship:'yes'}});
  assert.equal(out.basic,3500);
- assert.equal(Math.round(out.salary*100),Math.round(3500/.65));
+ assert.equal(Math.round(out.salary*100),Math.round((3500/.65)*100));
  assert.equal(Math.round((out.basic+out.housing+out.transport)*100),Math.round(out.salary*100));
  assert.equal(Math.round((out.bank_amount+out.cash_amount)*100),Math.round(out.salary*100));
 });
