@@ -363,7 +363,7 @@ test('new employee creation cannot inherit existing employee id or company trans
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/if\(row\)\{setEdit\(\{\.\.\.row,data:\{\.\.\.row.data\}\}\);return\}/);
  assert.match(ui,/setEdit\(\{company,data:defaultData\}\)/);
- assert.match(ui,/const payload=edit.id\?\{\.\.\.edit\}:\{company:edit.company,data:\{\.\.\.edit.data\}\}/);
+ assert.match(ui,/const payload=edit.id\?\{\.\.\.edit\}:\{company:edit.company,data:\{\.\.\.edit.data\},salary_edit_source:edit.salary_edit_source\}/);
  assert.match(ui,/إضافة موظف جديد/);
 });
 
