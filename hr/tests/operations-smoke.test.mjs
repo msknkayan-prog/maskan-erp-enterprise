@@ -136,3 +136,13 @@ test('employee register provides routes to linked personnel records',()=>{
  assert.match(ui,/r.data\?\.employee_id!==linkedEmployee.id/);
  assert.match(ui,/عرض جميع السجلات/);
 });
+
+
+test('user permissions directory has reference-style filters and management actions',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ for(const term of ['members-directory','members-filter-grid','memberSearch','memberRoleFilter','memberStatusFilter','memberUserFilter','visibleMembers','memberExport','memberPrint','startMemberEdit','sendMemberPasswordLink','memberFormOpen'])assert.ok(ui.includes(term),term);
+ assert.match(ui,/عرض \{visibleMembers.length\} من \{members.length\} سجل/);
+ assert.match(css,/\.members-directory-table/);
+ assert.match(css,/\.members-active-pill/);
+});
