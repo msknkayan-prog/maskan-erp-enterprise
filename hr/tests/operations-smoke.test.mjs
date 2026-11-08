@@ -176,3 +176,12 @@ test('full member editor allows scoped company/project edits and Unicode names',
  assert.match(ui,/تعديل جميع بيانات المستخدم وصلاحياته/);
  assert.match(ui,/maxLength=\{64\}/);
 });
+
+test('admin permissions navigation recovers after role repair and rejects duplicate account creation',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/user\?\.role==='admin'/);
+ assert.match(ui,/window\.addEventListener\('focus',recheck\)/);
+ assert.match(ui,/تعذر قراءة صلاحيات المستخدمين/);
+ assert.match(ui,/المستخدم موجود مسبقًا/);
+ assert.match(ui,/m\.auth_confirmed/);
+});
