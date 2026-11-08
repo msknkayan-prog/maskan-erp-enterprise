@@ -503,3 +503,18 @@ body{font-size:16px;color:#263c37}input,select,textarea{font-size:16px;line-heig
 .permission-no{color:#8e8680;background:#f3f0ed;border-radius:6px;padding:4px 7px;display:inline-block}
 .members-edit-from-matrix{justify-self:start;padding:8px 12px;border:1px solid #b99541;border-radius:7px;background:#f7ebcf;color:#5c4010;cursor:pointer}
 @media print{.members-permissions-expanded{display:table-row!important}.members-permissions-scroll{max-height:none;overflow:visible}}
+
+
+/* Dedicated payroll review and approval workspace */
+.payroll-management-modal .panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.payroll-management-modal h2{margin:0;font-size:20px;color:#4b3919}
+.payroll-management-add{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:18px 0;padding:14px;border:1px solid #e6d7bb;background:#fffaf0;border-radius:12px}
+.payroll-management-add label{display:grid;gap:7px;flex:1 1 330px;font-size:12px;font-weight:700}
+.payroll-management-add select{min-height:42px;width:100%;border:1px solid #d9c7a2;border-radius:8px;padding:9px;background:white;color:#362b19}
+.payroll-management-add button{min-height:42px;border-radius:8px;padding:9px 16px;background:#b58b33;color:#231a0c;font-weight:700;border:1px solid #a27a29}
+.payroll-management-list{max-height:50vh;overflow:auto;margin:12px 0}
+.payroll-management-list table{min-width:700px}
+.payroll-management-list .row-actions{display:flex;gap:6px;flex-wrap:wrap}
+.payroll-management-list .row-actions button{white-space:nowrap}
+.payroll-management-modal>small{display:block;color:#796e5b;line-height:1.8;margin-top:10px}
+@media(max-width:680px){.payroll-management-modal{padding:13px!important}.payroll-management-list{max-height:43vh}.payroll-management-add{padding:9px}}
