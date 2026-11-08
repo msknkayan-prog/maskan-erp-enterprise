@@ -670,3 +670,10 @@ main button:focus-visible,main input:focus-visible,main select:focus-visible,mai
 .employee-payout-summary small{font-size:11px;color:#51735d;line-height:1.65}
 .employee-payout-summary .employee-payout-error{color:#ad422d;font-weight:700}
 @media(max-width:700px){.employee-payout-grid{grid-template-columns:1fr}}
+
+
+/* Standardized typography across Maskan HR: body 13px, main/subheadings 14px */
+:root{--maskan-body-font-size:13px;--maskan-heading-font-size:14px}
+body,body :is(p,span,small,label,button,input,select,textarea,td,th,li,caption,summary,a,b,strong,em,code,.nav,.badge,.stat,.pill,.form-grid,.panel,.table-wrap){font-size:var(--maskan-body-font-size)!important}
+body :is(h1,h2,h3,h4,h5,h6),body :is(.page-heading h1,.panel-head h2,.modal h2,.payroll-main-heading h2,.payroll-all-header h2,.employee-payout-summary>strong,.payroll-net-summary-heading>span){font-size:var(--maskan-heading-font-size)!important;line-height:1.6}
+body{line-height:1.55}
