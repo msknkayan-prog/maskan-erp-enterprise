@@ -478,3 +478,19 @@ test('existing company transfer remains separate from second-company creation',(
  assert.equal(normalized.bank_amount,2500);
  assert.equal(normalized.cash_amount,3500);
 });
+
+test('payroll employee addition uses company batch-scoped code and blocks another active company entry',()=>{
+ const cycle=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ assert.match(cycle,/employeeId\+':'\+batch\.data\.month\+':'\+batch\.id/);
+ assert.match(cycle,/periodRows\.map\(r=>\(\{company:r\.company,data:JSON\.parse\(r\.data\)\}\)\)\.find\(r=>r\.company!==batch\.company&&!r\.data\.excluded\)/);
+ assert.match(cycle,/استبعده من المسير السابق/);
+ assert.match(cycle,/employeeId, batch\.data\.month|employeeId,batch\.data\.month/);
+ assert.match(cycle,/batch\.status!=='draft'/);
+ assert.match(cycle,/batch\.revision!==Number\(body\.batch_revision\)/);
+});
+test('monthly generation uses batch scoped codes and guards against duplicate active pay',()=>{
+ const cycle=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ assert.match(cycle,/e\.id\+':'\+month\+':'\+id/);
+ assert.match(cycle,/p\.data\.employee_id===e\.id&&p\.data\.month===month&&!p\.data\.excluded/);
+ assert.match(cycle,/existing\.some\(b=>b\.company===co&&b\.data\.month===month\)/);
+});
