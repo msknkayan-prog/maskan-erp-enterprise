@@ -400,3 +400,12 @@ test('employee profile bank and calculated cash always reconcile to monthly sala
  assert.match(ui,/employee-payout-summary/);
  assert.match(ui,/المبلغ كاش \+ التحويل البنكي = الراتب المرجعي/);
 });
+
+
+test('platform uses 13px general text and 14px primary and secondary headings',()=>{
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ assert.match(css,/--maskan-body-font-size:13px/);
+ assert.match(css,/--maskan-heading-font-size:14px/);
+ assert.match(css,/body :is\(h1,h2,h3,h4,h5,h6\)/);
+ assert.match(css,/font-size:var\(--maskan-body-font-size\)!important/);
+});
