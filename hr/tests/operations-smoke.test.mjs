@@ -409,3 +409,11 @@ test('platform uses 13px general text and 14px primary and secondary headings',(
  assert.match(css,/body :is\(h1,h2,h3,h4,h5,h6\)/);
  assert.match(css,/font-size:var\(--maskan-body-font-size\)!important/);
 });
+
+test('unsaved employee form never renders a paper record without an ID',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const ops=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
+ assert.match(ui,/\{edit\.id&&<RecordPaper row=/);
+ assert.match(ops,/row\.id\?\.slice\(0,8\)\|\|'سجل جديد'/);
+ assert.doesNotMatch(ops,/row\.id\.slice\(0,8\)/);
+});
