@@ -1,4 +1,5 @@
 export const companies=['رياح الاعمار','مسكن الكيان','شركة البلد المتحدة','شركة احواض الطاقة','سمارت برووف','مشاريع حصن الحضارة','المعايير العصرية'];
+export const companyDisplayName=(value)=>value==='المعايير العصرية'?'مؤسسة المعايير العصرية لأعمال التكييف':value;
 export const canonicalCompany=(value)=>{const name=String(value||'').trim().replace(/\s+/g,' ');return /^(مؤسسة |شركة )?المعايير العصرية( لأعمال التكييف)?$/.test(name)?'المعايير العصرية':name;};
 const f=(key,label,type='text',required=false)=>({key,label,type,required});
 export const modules={
