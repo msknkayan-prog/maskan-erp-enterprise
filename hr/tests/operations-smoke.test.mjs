@@ -211,7 +211,7 @@ test('directory displays every user permission including hidden module permissio
  assert.match(ui,/expandedPermissions===m.email/);
  assert.match(ui,/members-permissions-matrix/);
  assert.match(ui,/members-permission-note/);
- assert.match(ui,/m.role!=='admin'/);
+ assert.match(ui,/m.role==='admin'\?'تعديل بيانات المدير'/);
  assert.match(css,/\.members-permissions-expanded/);
 });
 
