@@ -214,3 +214,13 @@ test('directory displays every user permission including hidden module permissio
  assert.match(ui,/m.role!=='admin'/);
  assert.match(css,/\.members-permissions-expanded/);
 });
+
+
+test('administrator editing opens but protects admin role and existing password hashes',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/onClick=\{\(\)=>startMemberEdit\(m\)\}>تعديل الصلاحية/);
+ assert.match(ui,/disabled=\{memberEdit.role==='admin'\} value=\{memberEdit.role\}/);
+ assert.match(ui,/disabled=\{memberEdit.role==='admin'\} value=\{memberEdit.email\}/);
+ assert.match(ui,/passwordResetDialog.role==='admin'/);
+ assert.match(ui,/إرسال رابط الاستعادة عبر البريد/);
+});
