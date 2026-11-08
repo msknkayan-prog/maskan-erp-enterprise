@@ -11,12 +11,12 @@ export async function POST(req:Request){
   if(typeof d.token_hash==='string'&&/^[a-zA-Z0-9_-]{20,256}$/.test(d.token_hash)){
    const verificationUrl=new URL('/auth/v1/verify',base);
    verificationUrl.searchParams.set('token',d.token_hash);
-   verificationUrl.searchParams.set('type','recovery');
+   verificationUrl.searchParams.set('type',d.token_type==='invite'?'invite':'recovery');
    const verification=await fetch(verificationUrl,{redirect:'manual',cache:'no-store'});
    const location=verification.headers.get('location');
    if(location&&verification.status>=300&&verification.status<400){
     const fragment=new URLSearchParams(new URL(location,base).hash.slice(1));
-    if(fragment.get('type')==='recovery')access=fragment.get('access_token')||'';
+    if(['recovery','invite'].includes(fragment.get('type')||''))access=fragment.get('access_token')||'';
    }
    if(!access)return json('رابط الاستعادة غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا.',401);
   }else if(typeof d.access_token==='string'&&d.access_token.length<8000){access=d.access_token;}
