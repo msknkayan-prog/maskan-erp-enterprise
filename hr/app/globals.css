@@ -626,3 +626,10 @@ main button:focus-visible,main input:focus-visible,main select:focus-visible,mai
 .payroll-net-check.warning{color:#99600c;background:#fff0d5;border:1px solid #edcb87}
 .payroll-net-explanation{font-size:11px;color:#77684d;line-height:1.7}
 @media(max-width:650px){.payroll-net-summary{padding:12px}.payroll-net-breakdown{grid-template-columns:1fr}.payroll-net-summary-heading strong{font-size:23px}}
+
+
+/* Auditable employee transfer between company records */
+.employee-company-transfer-note{display:flex;flex-direction:column;gap:6px;background:#fff3dc;border:1px solid #dfb96d;color:#705016;padding:13px 15px;border-radius:10px;margin:10px 0;line-height:1.75}
+.employee-company-transfer-note strong{font-size:13px}
+.employee-company-transfer-note span{font-size:12px}
+.employee-company-transfer-note small{color:#826a3f;font-size:11px}
