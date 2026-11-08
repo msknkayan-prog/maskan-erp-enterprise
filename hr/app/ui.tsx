@@ -166,7 +166,7 @@ const payrollAvailableEmployees=payrollManagedBatch?rows.filter(row=>row.module=
 const cycleNumeric=n=>Number.isFinite(Number(n))?Number(n):0;
 const cycleTotals=cyclePayroll.filter(r=>!r.data.excluded).reduce((a,r)=>({count:a.count+1,gross:a.gross+cycleNumeric(r.data.salary),net:a.net+cycleNumeric(r.data.net),cash:a.cash+cycleNumeric(r.data.cash_amount),bank:a.bank+cycleNumeric(r.data.bank_amount),reviewed:a.reviewed+(r.data.split_confirmed?1:0)}),{count:0,gross:0,net:0,cash:0,bank:0,reviewed:0});
 const cycleStatus={draft:'مساعد الإدارة · قيد التجهيز',manager_review:'مدراء المشاريع · تحت المراجعة',projects_review:'إدارة المشاريع · تحت الاعتماد',finance_review:'الإدارة المالية · المراجعة والصرف',paid:'تم الاعتماد والصرف',admin_review:'مرحلة سابقة · تتطلب ترحيل',finance:'مرحلة سابقة · تتطلب ترحيل'};
-async function cyclePost(payload){const response=await fetch('/api/payroll-cycle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const result=await response.json();if(!response.ok)throw Error(result.error||'تعذر تنفيذ طلب المسير');return result;}
+async function cyclePost(payload){const response=await fetch('/api/payroll-cycle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,workflow_version:2})});const result=await response.json();if(!response.ok)throw Error(result.error||'تعذر تنفيذ طلب المسير');return result;}
 async function cycleGenerate(){
  if(payrollMonth!==ksaMonth){notify('يسمح بتوليد مسير الشهر الحالي فقط. الأشهر السابقة للعرض دون إنشاء.');return;}
  if(!window.confirm('توليد مسير '+payrollMonth+' لمرة واحدة '+(payrollCompany==='__all__'?'لجميع الشركات':'لشركة '+payrollCompany)+'؟'))return;
