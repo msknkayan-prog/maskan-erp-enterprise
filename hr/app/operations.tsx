@@ -19,7 +19,7 @@ export function RecordPaper({row,spec,rows,display}){
  const employee=rows.find(r=>r.id===row.data.employee_id)||(row.module==='employees'&&row);
  const profile=rows.find(r=>r.module==='company_profiles'&&r.company===row.company);
  const brand=row.company==='مسكن الكيان'?'شركة مسكن الكيان للمقاولات':(profile?.data.name||row.company);
- const docNo=row.data.reference||row.data.document_no||row.code||row.id.slice(0,8);
+ const docNo=row.data?.reference||row.data?.document_no||row.code||row.id?.slice(0,8)||'سجل جديد';
  const docDate=row.data.date||row.data.created_at||(row.created_at?String(row.created_at).slice(0,10):'—');
  const signatureLabels=row.module==='payroll'?['إعداد شؤون الموظفين','اعتماد مدير إدارة المشاريع','مراجعة الإدارة المالية']:['إعداد شؤون الموظفين','مدير المشروع','الجهة المختصة','الاعتماد'];
  const amount=v=>Number(v||0).toLocaleString('ar-SA',{maximumFractionDigits:2})+' ر.س';
