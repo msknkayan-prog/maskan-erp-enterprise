@@ -166,3 +166,13 @@ test('secure administrator-generated temporary passwords are shown once and copy
  assert.match(ui,/setGeneratedPassword\(null\)/);
  assert.match(css,/\.member-generated-password/);
 });
+
+test('full member editor allows scoped company/project edits and Unicode names',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/memberEdit.companyMode==='all'/);
+ assert.match(ui,/selectedCompanies/);
+ assert.match(ui,/selectedProjects/);
+ assert.match(ui,/projectMode/);
+ assert.match(ui,/تعديل جميع بيانات المستخدم وصلاحياته/);
+ assert.match(ui,/maxLength=\{64\}/);
+});
