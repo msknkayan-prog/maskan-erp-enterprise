@@ -11,7 +11,7 @@ const money=n=>Number(n||0).toLocaleString('ar-SA',{maximumFractionDigits:2});
 function download(name,content,type='text/csv;charset=utf-8'){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff',content],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 const csvEscape=v=>'"'+String(v??'').replaceAll('"','""')+'"';
 function csvParse(s){s=s.replace(/^\ufeff/,'');let rows=[],row=[],v='',quoted=false;for(let i=0;i<s.length;i++){let c=s[i];if(c==='"'){if(quoted&&s[i+1]==='"'){v+='"';i++}else quoted=!quoted}else if(c===','&&!quoted){row.push(v);v=''}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&s[i+1]==='\n')i++;row.push(v);if(row.some(Boolean))rows.push(row);row=[];v=''}else v+=c}if(quoted)throw Error('علامات اقتباس غير مكتملة');row.push(v);if(row.some(Boolean))rows.push(row);return rows}
-export default function ERP(){const [module,setModule]=useState('overview'),[payrollStage,setPayrollStage]=useState('__all__'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollEdit,setPayrollEdit]=useState(null),[cycleEdit,setCycleEdit]=useState(null),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[edit,setEdit]=useState(null),[saving,setSaving]=useState(false),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberContactEmail,setMemberContactEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberPermissions,setMemberPermissions]=useState({}),[memberUsername,setMemberUsername]=useState(''),[memberEdit,setMemberEdit]=useState(null),[memberEditPermissions,setMemberEditPermissions]=useState({}),[memberBusy,setMemberBusy]=useState(false),[linkedEmployee,setLinkedEmployee]=useState(null),[memberSearch,setMemberSearch]=useState(''),[memberRoleFilter,setMemberRoleFilter]=useState(''),[memberUserFilter,setMemberUserFilter]=useState(''),[memberStatusFilter,setMemberStatusFilter]=useState(''),[memberFormOpen,setMemberFormOpen]=useState(false),[expandedPermissions,setExpandedPermissions]=useState(null),[passwordResetDialog,setPasswordResetDialog]=useState(null),[generatedPassword,setGeneratedPassword]=useState(null),[newMemberCredential,setNewMemberCredential]=useState(null);
+export default function ERP(){const [module,setModule]=useState('overview'),[payrollStage,setPayrollStage]=useState('__all__'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollEdit,setPayrollEdit]=useState(null),[cycleEdit,setCycleEdit]=useState(null),[payrollManageBatchId,setPayrollManageBatchId]=useState(null),[payrollAddEmployeeId,setPayrollAddEmployeeId]=useState(''),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[edit,setEdit]=useState(null),[saving,setSaving]=useState(false),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberContactEmail,setMemberContactEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberPermissions,setMemberPermissions]=useState({}),[memberUsername,setMemberUsername]=useState(''),[memberEdit,setMemberEdit]=useState(null),[memberEditPermissions,setMemberEditPermissions]=useState({}),[memberBusy,setMemberBusy]=useState(false),[linkedEmployee,setLinkedEmployee]=useState(null),[memberSearch,setMemberSearch]=useState(''),[memberRoleFilter,setMemberRoleFilter]=useState(''),[memberUserFilter,setMemberUserFilter]=useState(''),[memberStatusFilter,setMemberStatusFilter]=useState(''),[memberFormOpen,setMemberFormOpen]=useState(false),[expandedPermissions,setExpandedPermissions]=useState(null),[passwordResetDialog,setPasswordResetDialog]=useState(null),[generatedPassword,setGeneratedPassword]=useState(null),[newMemberCredential,setNewMemberCredential]=useState(null);
 const notify=t=>{setToast(t);setTimeout(()=>setToast(''),4500)};
 async function refresh(){setLoading(true);setError('');try{const res=await fetch('/api/erp',{cache:'no-store'});const d=await res.json();if(res.status===401){location.href='/login';return;}if(!res.ok)throw Error(d.error);setRows(d.rows);setUser(d.user)}catch(e){setError(e.message)}finally{setLoading(false)}}
 useEffect(()=>{refresh();const recheck=()=>{if(document.visibilityState==='visible')refresh()};window.addEventListener('focus',recheck);document.addEventListener('visibilitychange',recheck);return()=>{window.removeEventListener('focus',recheck);document.removeEventListener('visibilitychange',recheck)}},[]);
@@ -119,6 +119,14 @@ const cycleBatchIds=new Set(cycleBatches.map(r=>r.id));
 const cyclePayroll=rows.filter(r=>r.module==='payroll'&&cycleBatchIds.has(r.data?.batch_id)).sort((a,b)=>a.company.localeCompare(b.company,'ar')||String(a.data?.employee_name||'').localeCompare(String(b.data?.employee_name||''),'ar'));
 const visibleCyclePayroll=cyclePayroll.filter(r=>visibleCycleIds.has(r.data?.batch_id));
 const cycleBatchFor=row=>cycleBatches.find(b=>b.id===row.data?.batch_id);
+const payrollManagedBatch=cycleBatches.find(b=>b.id===payrollManageBatchId);
+const payrollManagedRows=payrollManagedBatch?cyclePayroll.filter(row=>row.data.batch_id===payrollManagedBatch.id):[];
+const payrollManagedIncluded=payrollManagedRows.filter(row=>!row.data.excluded);
+const payrollManagedReviewed=payrollManagedIncluded.filter(row=>row.data.split_confirmed).length;
+const payrollAvailableEmployees=payrollManagedBatch?rows.filter(row=>row.module==='employees'&&row.company===payrollManagedBatch.company
+ &&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(row.data?.employment_status||row.data?.employee_status||'').trim())
+ &&!payrollManagedRows.some(item=>item.data.employee_id===row.id)):[];
+
 const cycleNumeric=n=>Number.isFinite(Number(n))?Number(n):0;
 const cycleTotals=cyclePayroll.filter(r=>!r.data.excluded).reduce((a,r)=>({count:a.count+1,gross:a.gross+cycleNumeric(r.data.salary),net:a.net+cycleNumeric(r.data.net),cash:a.cash+cycleNumeric(r.data.cash_amount),bank:a.bank+cycleNumeric(r.data.bank_amount),reviewed:a.reviewed+(r.data.split_confirmed?1:0)}),{count:0,gross:0,net:0,cash:0,bank:0,reviewed:0});
 const cycleStatus={draft:'قيد التجهيز',admin_review:'بانتظار المدير الإداري',finance_review:'بانتظار مراجعة المالية',projects_review:'بانتظار اعتماد مدير إدارة المشاريع',finance:'بانتظار توثيق الصرف من المالية',paid:'تم الصرف'};
@@ -146,6 +154,16 @@ async function cycleSave(ev){
  const net=cyclePreviewNet(cycleEdit.data),cash=Number(cycleEdit.data.cash_amount||0),bank=Number(cycleEdit.data.bank_amount||0);
  if(!Number.isFinite(net)||net<0||!Number.isFinite(cash)||!Number.isFinite(bank)||cash<0||bank<0||Math.round((cash+bank)*100)!==Math.round(net*100)){notify('يجب أن يساوي الكاش والتحويل البنكي صافي الراتب');return;}
  setSaving(true);try{await cyclePost({action:'update',batch_id:cycleEdit.batch_id,row_id:cycleEdit.row_id,revision:cycleEdit.revision,data:cycleEdit.data});setCycleEdit(null);notify('تم حفظ تعديل الموظف في مسير الشهر فقط');await refresh();}catch(e){notify(e.message)}finally{setSaving(false)}
+}
+async function cycleAddEmployee(){
+ const batch=payrollManagedBatch;
+ if(!batch||batch.status!=='draft'||!['admin','hr'].includes(user?.role))return notify('الإضافة متاحة قبل الإرسال فقط');
+ if(!payrollAddEmployeeId)return notify('اختر الموظف المطلوب إضافته');
+ if(!window.confirm('إضافة الموظف إلى مسير '+batch.company+' لشهر '+batch.data.month+'؟ يجب مراجعة توزيعه المالي قبل الإرسال.'))return;
+ setSaving(true);
+ try{await cyclePost({action:'add_employee',batch_id:batch.id,batch_revision:batch.revision,employee_id:payrollAddEmployeeId});
+  setPayrollAddEmployeeId('');notify('تم إضافة الموظف إلى مسير الشركة؛ راجع الراتب والكاش والتحويل');await refresh();
+ }catch(err){notify(err.message)}finally{setSaving(false)}
 }
 async function cycleExcludeEmployee(row){
  const batch=cycleBatchFor(row);
@@ -276,6 +294,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   {visibleCycleBatches.map(b=>{const employees=cyclePayroll.filter(r=>r.data.batch_id===b.id);const eligible=employees.filter(r=>!r.data.excluded);const confirmed=eligible.filter(r=>r.data.split_confirmed).length;return <div className="payroll-stage-row" key={b.id}>
    <span><b>{b.company}</b> · {cycleStatus[b.status]||b.status} · تمت مراجعة {confirmed} من {eligible.length}</span>
    <div className="row-actions">
+    <button type="button" disabled={saving} onClick={()=>{setPayrollManageBatchId(b.id);setPayrollAddEmployeeId('')}}>فتح إدارة المسير</button>
     {b.status==='draft'&&['admin','hr'].includes(user?.role)&&<button disabled={saving||confirmed!==eligible.length||!eligible.length} onClick={()=>cycleTransition(b,'submit')}>إرسال للاعتماد</button>}
     {b.status==='admin_review'&&['admin','administrative_manager'].includes(user?.role)&&<><button disabled={saving} onClick={()=>cycleTransition(b,'admin_approve')}>اعتماد وإرسال للمالية</button><button disabled={saving} onClick={()=>cycleTransition(b,'return')}>إعادة للتعديل</button></>}
     {b.status==='finance_review'&&['admin','finance'].includes(user?.role)&&<><button disabled={saving} onClick={()=>cycleTransition(b,'finance_approve')}>اعتماد المالية</button><button disabled={saving} onClick={()=>cycleTransition(b,'return')}>إعادة للتعديل</button></>}
@@ -290,6 +309,28 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {b?.status==='paid'&&!d.excluded&&<button onClick={()=>cycleReceipt(row)}><FileText size={15}/>سند استلام</button>}
  </div></td></tr>})}</tbody></table></div>}
  </section>}
+ {payrollManagedBatch&&module==='payroll'&&<div className="modal-backdrop" role="presentation">
+ <section className="modal payroll-management-modal" dir="rtl" role="dialog" aria-modal="true" aria-label="إدارة مسير الرواتب" style={{width:'95vw',maxWidth:1100,maxHeight:'93vh',overflowY:'auto',padding:24}}>
+  <div className="panel-head"><h2>إدارة مسير الرواتب — {payrollManagedBatch.company}</h2><button type="button" onClick={()=>setPayrollManageBatchId(null)} disabled={saving}>إغلاق</button></div>
+  <p>شهر المسير: <b>{payrollManagedBatch.data.month}</b> · المرحلة: <b>{cycleStatus[payrollManagedBatch.status]}</b> · تمت مراجعة <b>{payrollManagedReviewed}</b> من <b>{payrollManagedIncluded.length}</b> موظف مدرج</p>
+  <div className="payroll-approval-flow">{['إعداد شؤون الموظفين','المدير الإداري','مراجعة المالية','مدير إدارة المشاريع','توثيق الصرف'].map((v,i)=><span className="payroll-flow-step" key={i}>{i+1}. {v}</span>)}</div>
+  {payrollManagedBatch.status==='draft'&&['admin','hr'].includes(user?.role)&&<div className="payroll-management-add">
+   <label>إضافة موظف إلى المسير بعد مراجعة ملفه الوظيفي
+    <select value={payrollAddEmployeeId} onChange={e=>setPayrollAddEmployeeId(e.target.value)}><option value="">اختر موظفًا نشطًا غير مدرج</option>{payrollAvailableEmployees.map(emp=><option key={emp.id} value={emp.id}>{emp.data.name||emp.data.employee_name} · {emp.data.code||emp.data.employee_number||emp.code}</option>)}</select>
+   </label>
+   <button type="button" disabled={saving||!payrollAddEmployeeId} onClick={cycleAddEmployee}>إضافة الموظف</button>
+  </div>}
+  <div className="table-wrap payroll-management-list"><table><thead><tr><th>الموظف</th><th>الرقم</th><th>الصافي</th><th>الكاش</th><th>التحويل</th><th>المراجعة</th><th>الإجراءات</th></tr></thead>
+   <tbody>{payrollManagedRows.map(row=><tr key={row.id}><td>{row.data.employee_name}</td><td>{row.data.employee_number}</td><td>{money(row.data.net)}</td><td>{money(row.data.cash_amount)}</td><td>{money(row.data.bank_amount)}</td><td>{row.data.excluded?'مستبعد':row.data.split_confirmed?'تمت المراجعة':'بانتظار المراجعة'}</td><td><div className="row-actions">
+     {payrollManagedBatch.status==='draft'&&['admin','hr'].includes(user?.role)&&<>{row.data.excluded?<button type="button" disabled={saving} onClick={()=>cycleRestoreEmployee(row)}>إعادة الموظف</button>:<><button type="button" disabled={saving} onClick={()=>cycleEditEmployee(row)}>تعديل ومراجعة</button><button type="button" disabled={saving} onClick={()=>cycleExcludeEmployee(row)}>حذف من المسير (استبعاد)</button></>}</>}
+     {payrollManagedBatch.status==='paid'&&!row.data.excluded&&<button type="button" onClick={()=>cycleReceipt(row)}>سند استلام</button>}
+   </div></td></tr>)}</tbody></table></div>
+  <div className="member-account-actions">
+   {payrollManagedBatch.status==='draft'&&['admin','hr'].includes(user?.role)&&<button type="button" className="primary" disabled={saving||payrollManagedIncluded.length===0||payrollManagedReviewed!==payrollManagedIncluded.length} onClick={async()=>{await cycleTransition(payrollManagedBatch,'submit');setPayrollManageBatchId(null)}}>إرسال المسير للاعتماد بعد المراجعة</button>}
+   <button type="button" onClick={()=>setPayrollManageBatchId(null)} disabled={saving}>إغلاق النافذة</button>
+  </div>
+  <small>الحذف هنا استبعاد قابل للإرجاع قبل إرسال المسير، ولا يحذف ملف الموظف. بعد الإرسال تتوقف الإضافة والتعديل والاستبعاد لحين إعادة المسير إلى التجهيز من صاحب صلاحية الاعتماد.</small>
+ </section></div>}
  {cycleEdit&&<div className="modal-backdrop" role="presentation"><section className="modal" role="dialog" aria-modal="true" aria-label="مراجعة بيانات الموظف داخل المسير" style={{width:'95vw',maxWidth:780,padding:22,maxHeight:'90vh',overflowY:'auto'}}>
  <h2>تعديل بيانات الموظف داخل مسير الشهر: {cycleEdit.name}</h2>{cycleEdit.data.needs_review&&<p className="review-warning" role="alert">تنبيه للمراجعة: {cycleEdit.data.review_reason||'هناك بيانات تحتاج للتحقق قبل الاعتماد'}</p>}<p>{cycleEdit.company} · {cycleEdit.employee_number} · التعديلات خاصة بالمسير الحالي ولا تغيّر سجل الموظف الأساسي</p>
  <form onSubmit={cycleSave}><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(175px,1fr))',gap:10}}>
