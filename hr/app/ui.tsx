@@ -203,7 +203,7 @@ async function cycleAddEmployee(){
 }
 async function cycleExcludeEmployee(row){
  const batch=cycleBatchFor(row);
- if(!batch||batch.status!=='draft'||!['admin','hr'].includes(user?.role))return;
+ if(!batch||batch.status!=='draft'||!['admin','administrative_assistant'].includes(user?.role))return;
  const reason=window.prompt('سبب استبعاد الموظف من مسير '+batch.data.month+' (لن تُحذف بياناته الأساسية من شؤون الموظفين):');
  if(!reason?.trim())return;
  if(!window.confirm('تأكيد استبعاد '+row.data.employee_name+' من مسير '+batch.company+' للشهر الحالي؟ ستظل بيانات الموظف الأصلية محفوظة، ويمكن إعادته قبل الاعتماد.'))return;
@@ -213,7 +213,7 @@ async function cycleExcludeEmployee(row){
 }
 async function cycleRestoreEmployee(row){
  const batch=cycleBatchFor(row);
- if(!batch||batch.status!=='draft'||!['admin','hr'].includes(user?.role))return;
+ if(!batch||batch.status!=='draft'||!['admin','administrative_assistant'].includes(user?.role))return;
  setSaving(true);
  try{await cyclePost({action:'restore',batch_id:batch.id,row_id:row.id,revision:row.revision});notify('أعيد الموظف إلى مسير الشهر؛ راجع مبالغ الصرف قبل الإرسال');await refresh();}
  catch(e){notify(e.message)}finally{setSaving(false)}
@@ -330,7 +330,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   <label>شهر المسير <input type="month" value={payrollMonth} max={ksaMonth} onChange={e=>setPayrollMonth(e.target.value)} style={{marginInlineStart:8}}/></label>
   <label>الشركة <select value={payrollCompany} onChange={e=>setPayrollCompany(e.target.value)} style={{marginInlineStart:8}}><option value="__all__">جميع الشركات</option>{payrollCompanies.map(co=><option key={co} value={co}>{co}</option>)}</select></label>
   <label>حالة المسير <select value={payrollStage} onChange={e=>setPayrollStage(e.target.value)} style={{marginInlineStart:8}}><option value="__all__">جميع الحالات</option>{Object.entries(cycleStatus).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
-  {['admin','hr'].includes(user?.role)&&payrollMonth===ksaMonth&&(payrollCompany==='__all__'?payrollCompanies.every(co=>!cycleBatches.some(b=>b.company===co)):!cycleBatches.length)&&<button className="primary" disabled={saving} onClick={cycleGenerate}><Plus size={16}/>توليد مسير الشهر مرة واحدة</button>}
+  {['admin','administrative_assistant'].includes(user?.role)&&payrollMonth===ksaMonth&&(payrollCompany==='__all__'?payrollCompanies.every(co=>!cycleBatches.some(b=>b.company===co)):!cycleBatches.length)&&<button className="primary" disabled={saving} onClick={cycleGenerate}><Plus size={16}/>توليد مسير الشهر مرة واحدة</button>}
   <button type="button" className="payroll-all-open" onClick={()=>{setPayrollCompany('__all__');setPayrollStage('__all__');setPayrollAllOpen(true)}} disabled={!cycleBatches.length}>مراجعة مسيرات جميع الشركات في نافذة واحدة</button>
   <button onClick={cycleExport} disabled={!cyclePayroll.length}><Download size={16}/>تصدير المسير Excel</button>
   <button onClick={cyclePrint} disabled={!cyclePayroll.length}><FileText size={16}/>طباعة المسير / حفظ PDF</button>
@@ -352,10 +352,17 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   </div>})}
  </div>
  {!cycleBatches.length?<div className="empty"><h3>لم يتم توليد مسير لهذا الشهر</h3><p>{payrollMonth===ksaMonth?'اختر الشركة أو جميع الشركات واضغط توليد مسير الشهر مرة واحدة.':'لا يمكن إنشاء مسير جديد لشهر سابق؛ المتاح عرض المسيرات المسجلة فقط.'}</p></div>:<div className="table-wrap"><table><thead><tr>{['الشركة','الموظف','الرقم الوظيفي','الأساسي','السكن','النقل','الصافي','صرف كاش','تحويل بنكي','حالة المراجعة','الإجراء'].map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{visibleCyclePayroll.map(row=>{const d=row.data,b=cycleBatchFor(row);return <tr key={row.id}><td>{row.company}</td><td>{d.employee_name}</td><td>{d.employee_number}</td><td>{money(d.basic)}</td><td>{money(d.housing)}</td><td>{money(d.transport)}</td><td>{money(d.net)}</td><td>{money(d.cash_amount)}</td><td>{money(d.bank_amount)}</td><td>{d.excluded?'مستبعد من المسير':d.split_confirmed?'مراجع':'بانتظار المراجعة'}</td><td><div className="row-actions">
- {((b?.status==='draft'&&['admin','administrative_assistant'].includes(user?.role))||(b?.status==='manager_review'&&['admin','project_manager'].includes(user?.role)))&&<>{!d.excluded?<><button disabled={saving} onClick={()=>cycleEditEmployee(row)}>تعديل بيانات المسير</button><button disabled={saving} onClick={()=>cycleExcludeEmployee(row)}>استبعاد الموظف</button></>:<button disabled={saving} onClick={()=>cycleRestoreEmployee(row)}>إعادة الموظف</button>}</>}
+ {((b?.status==='draft'&&['admin','administrative_assistant'].includes(user?.role))||(b?.status==='manager_review'&&['admin','project_manager'].includes(user?.role)))&&<>{!d.excluded?<><button disabled={saving} onClick={()=>cycleEditEmployee(row)}>تعديل ومراجعة</button>{b.status==='draft'&&<button disabled={saving} onClick={()=>cycleExcludeEmployee(row)}>استبعاد الموظف</button>}</>:b.status==='draft'&&<button disabled={saving} onClick={()=>cycleRestoreEmployee(row)}>إعادة الموظف</button>}</>}
  {b?.status==='paid'&&!d.excluded&&<button onClick={()=>cycleReceipt(row)}><FileText size={15}/>سند استلام</button>}
  </div></td></tr>})}</tbody></table></div>}
  </section>}
+ {payrollAllOpen&&module==='payroll'&&<div className="modal-backdrop" role="presentation"><section className="modal payroll-all-modal" role="dialog" aria-modal="true" aria-label="مراجعة مسيرات جميع الشركات" dir="rtl">
+  <div className="payroll-all-header"><div><h2>المراجعة الموحّدة لجميع الشركات</h2><p>شهر المسير: <strong className="payroll-month-pill">{new Date(payrollMonth+'-01T00:00:00').toLocaleDateString('ar-SA',{year:'numeric',month:'long'})}</strong></p></div><button type="button" onClick={()=>setPayrollAllOpen(false)}>إغلاق</button></div>
+  <p>يمكن فتح مسير أي شركة للمراجعة، أو تحديد المسيرات المكتملة ثم إرسالها معًا إلى مدراء المشاريع بإجراء واحد.</p>
+  <div className="payroll-all-list">{cycleBatches.map(batch=>{const items=cyclePayroll.filter(x=>x.data.batch_id===batch.id&&!x.data.excluded),reviewed=items.filter(x=>x.data.split_confirmed).length,ready=payrollBatchReady(batch);
+   return <div className="payroll-all-company" key={batch.id}><label><input type="checkbox" disabled={saving||batch.status!=='draft'||!ready||!['admin','administrative_assistant'].includes(user?.role)} checked={payrollBulkSelected.includes(batch.id)} onChange={e=>setPayrollBulkSelected(p=>e.target.checked?[...p,batch.id]:p.filter(id=>id!==batch.id))}/><span><strong>{batch.company}</strong><small>{cycleStatus[batch.status]||batch.status} · {reviewed} / {items.length} تمت مراجعتهم</small></span></label><span className={'payroll-status-chip '+(ready?'complete':'pending')}>{ready?'مكتمل للمراجعة':'يحتاج مراجعة'}</span><button type="button" onClick={()=>{setPayrollAllOpen(false);setPayrollManageBatchId(batch.id)}}>فتح إدارة المسير</button></div>})}</div>
+  <div className="payroll-all-footer"><small>{payrollBulkSelected.filter(id=>cycleBatches.some(b=>b.id===id)).length} مسير محدد للإرسال</small><button type="button" className="primary" disabled={saving||!payrollBulkSelected.some(id=>cycleBatches.some(b=>b.id===id))} onClick={cycleBulkSubmit}>إرسال المسيرات المحددة دفعة واحدة</button><button type="button" onClick={()=>setPayrollAllOpen(false)}>إغلاق</button></div>
+ </section></div>}
  {payrollManagedBatch&&module==='payroll'&&<div className="modal-backdrop" role="presentation">
  <section className="modal payroll-management-modal" dir="rtl" role="dialog" aria-modal="true" aria-label="إدارة مسير الرواتب" style={{width:'95vw',maxWidth:1100,maxHeight:'93vh',overflowY:'auto',padding:24}}>
   <div className="panel-head"><h2>إدارة مسير الرواتب — {payrollManagedBatch.company}</h2><button type="button" onClick={()=>setPayrollManageBatchId(null)} disabled={saving}>إغلاق</button></div>
@@ -383,6 +390,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <form onSubmit={cycleSave}><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(175px,1fr))',gap:10}}>
  { [['basic','الراتب الأساسي'],['housing','بدل السكن'],['transport','بدل النقل'],['bonus','مكافآت'],['extra_allowance','بدلات أخرى'],['overtime_hours','ساعات إضافية'],['absence_days','أيام الغياب'],['absence_deduction','خصم الغياب'],['advance_deduction','خصم السلف'],['deductions','خصومات أخرى'],['cash_amount','صرف كاش'],['bank_amount','تحويل بنكي']].map(([key,label])=><label key={key}>{label}<input type="number" min="0" step="0.01" required value={cycleEdit.data[key]??0} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,[key]:e.target.value}}))}/></label>)}
  </div>
+ {cycleBatches.find(b=>b.id===cycleEdit.batch_id)?.status==='manager_review'&&<label style={{display:'block',marginTop:10}}>ملاحظات مدير المشروع على بيانات الموظف<textarea value={cycleEdit.data.manager_notes||''} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,manager_notes:e.target.value}}))} placeholder="أدخل ملاحظات المراجعة والتعديل قبل الإرسال لإدارة المشاريع"/></label>}
  {cycleEdit.data.needs_review&&<label style={{display:'block',marginTop:10}}>مبرر استثناء الموظف (حالة التوظيف أو اختلاف الأجر)<textarea required value={cycleEdit.data.exception_note||''} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,exception_note:e.target.value}}))}/></label>}
  <label style={{display:'block',marginTop:10}}>ملاحظات التعديل<textarea value={cycleEdit.data.notes||''} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,notes:e.target.value}}))}/></label>
  <p>صافي الاستحقاق المحسوب: <b>{money(cyclePreviewNet(cycleEdit.data))} ر.س</b> · مجموع الكاش والتحويل: <b>{money(Number(cycleEdit.data.cash_amount||0)+Number(cycleEdit.data.bank_amount||0))} ر.س</b></p>
