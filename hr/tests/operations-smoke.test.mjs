@@ -344,3 +344,16 @@ test('employee payroll net recalculates live from all entered monetary amounts a
  assert.match(ui,/أيام الغياب وحدها لا تُخصم ماليًا/);
  assert.match(css,/\.payroll-net-summary\{position:sticky/);
 });
+
+
+test('company transfer is editable with an auditable reason and historical records retained',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ assert.match(ui,/transfer_reason:reason\.trim\(\)/);
+ assert.match(ui,/سبب نقل أو تصحيح شركة الموظف/);
+ assert.match(ui,/employee-company-transfer-note/);
+ assert.match(ui,/company_transferred/);
+ assert.match(ui,/linked_account_review_required/);
+ assert.match(ui,/module==='employees'\?\(employeeReadOnly\|\|!permittedWrite/);
+ assert.match(css,/\.employee-company-transfer-note/);
+});
