@@ -357,3 +357,12 @@ test('company transfer is editable with an auditable reason and historical recor
  assert.match(ui,/module==='employees'\?\(employeeReadOnly\|\|!permittedWrite/);
  assert.match(css,/\.employee-company-transfer-note/);
 });
+
+
+test('new employee creation cannot inherit existing employee id or company transfer',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/if\(row\)\{setEdit\(\{\.\.\.row,data:\{\.\.\.row.data\}\}\);return\}/);
+ assert.match(ui,/setEdit\(\{company,data:defaultData\}\)/);
+ assert.match(ui,/const payload=edit.id\?\{\.\.\.edit\}:\{company:edit.company,data:\{\.\.\.edit.data\}\}/);
+ assert.match(ui,/إضافة موظف جديد/);
+});
