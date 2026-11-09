@@ -512,3 +512,16 @@ test('employee registration does not request manually entered job number',()=>{
  assert.match(ui,/result\.employee_code/);
  assert.doesNotMatch(ui,/أدخل رقمًا وظيفيًا جديدًا ومستقلًا/);
 });
+
+test('employee register has independent per-column filters and reset control',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/employeeFilterOpen,setEmployeeFilterOpen/);
+ assert.match(ui,/employeeFieldFilters,setEmployeeFieldFilters/);
+ assert.match(ui,/const employeeFilterMatch=\(r\)=>/);
+ assert.match(ui,/module==='employees'&&!employeeFilterMatch\(r\)/);
+ assert.match(ui,/فلاتر سجل الموظفين لكل حقل/);
+ assert.match(ui,/activeEmployeeFilters.length/);
+ assert.match(ui,/setEmployeeFieldFilters\(\{\}\)/);
+ assert.match(ui,/availableEmployeeFields.map\(f=><label/);
+ assert.match(ui,/تُطبَّق الفلاتر على الجدول والطباعة وتصدير Excel/);
+});
