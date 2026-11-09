@@ -585,3 +585,22 @@ test('request workflow requires an assigned active manager before routing and ch
  assert.match(ui,/module==='projects'&&f\.key==='manager_email'/);
  assert.match(ui,/members\.filter\(m=>m\.role==='project_manager'&&m\.is_active!==false\)/);
 });
+
+test('the deployed shared visibility rule restricts managers to their assigned projects',async()=>{
+ const {visible}=await import('../lib/modules.mjs');
+ const p1={id:'p1',module:'projects',company:'مسكن الكيان',data:{manager_email:'pm1@example.test'}};
+ const p2={id:'p2',module:'projects',company:'مسكن الكيان',data:{manager_email:'pm2@example.test'}};
+ const e1={id:'e1',module:'employees',company:'مسكن الكيان',data:{project_id:'p1'}};
+ const e2={id:'e2',module:'employees',company:'مسكن الكيان',data:{project_id:'p2'}};
+ const r1={id:'l1',module:'leave',company:'مسكن الكيان',data:{employee_id:'e1'}};
+ const r2={id:'l2',module:'leave',company:'مسكن الكيان',data:{employee_id:'e2'}};
+ const rows=[p1,p2,e1,e2,r1,r2];
+ const u={role:'project_manager',email:'PM1@EXAMPLE.TEST',projects:'*',companies:'*'};
+ assert.equal(visible(u,r1,rows),true);
+ assert.equal(visible(u,r2,rows),false);
+ assert.equal(visible(u,p1,rows),true);
+ assert.equal(visible(u,p2,rows),false);
+ assert.equal(visible({...u,email:'unknown@example.test'},r1,rows),false);
+ assert.equal(visible({...u,projects:'[]'},r1,rows),true);
+ assert.equal(visible({...u,companies:'["شركة البلد المتحدة"]'},r1,rows),false);
+});
