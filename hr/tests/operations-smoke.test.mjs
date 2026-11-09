@@ -462,7 +462,7 @@ test('employee second-company registration preserves original company and requir
  assert.match(ui,/code:'',project_id:''/);
  assert.match(ui,/company===edit\.dual_source_company/);
  assert.match(ui,/dual_source_code:employeeCode/);
- assert.match(ui,/if\(module==='employees'&&!edit\.id&&f\.key==='code'/);
+ assert.match(ui,/module==='employees'&&!edit\.id&&f\.key==='code'/);
  assert.match(ui,/يوجد سجل موظف بنفس الهوية في الشركة المختارة/);
  assert.match(ui,/اختر شركة ثانية مختلفة عن الشركة الأصلية/);
  assert.match(ui,/لن يتغير سجل الشركة الأولى/);
