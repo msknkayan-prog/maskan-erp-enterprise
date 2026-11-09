@@ -246,7 +246,7 @@ const code=mod==='warnings'&&data.warning_type!=='notice'?data.employee_id+':'+d
 const employeeInsertSql=[
  "INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation)",
  "SELECT ?, 'employees', ?, next_code.code,",
- "jsonb_set(?::jsonb, '{code}', to_jsonb(next_code.code))::text,",
+ "replace(?::text, '\"code\":\"AUTO\"', '\"code\":\"' || next_code.code || '\"')::jsonb::text,",
  "'draft', 1, ?, ?, ?, ?",
  "FROM (SELECT (COALESCE(MAX(CASE WHEN code ~ '^[0-9]{1,12}$'",
  "THEN code::bigint END),70000)+1)::text AS code",
