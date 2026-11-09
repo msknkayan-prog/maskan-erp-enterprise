@@ -604,3 +604,11 @@ test('the deployed shared visibility rule restricts managers to their assigned p
  assert.equal(visible({...u,projects:'[]'},r1,rows),true);
  assert.equal(visible({...u,companies:'["شركة البلد المتحدة"]'},r1,rows),false);
 });
+
+test('manager account company permissions are checked at project linking and request dispatch',()=>{
+ const source=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(source,/SELECT role,is_active,companies FROM members WHERE email=\?/);
+ assert.match(source,/manager\.companies/);
+ assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة المحددة/);
+ assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة التابعة للطلب/);
+});
