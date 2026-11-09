@@ -52,7 +52,20 @@ export const relationModules={employee:'employees',project:'projects',leave:'lea
 export const canWrite=(role,module)=>role==='admin'||(['administrative_assistant','project_manager'].includes(role)&&['payroll','payroll_batches'].includes(module))||role==='hr'&&['employees','appointments','leave','advances','warnings','resignations','returns','terminations','leave_dues','settlements'].includes(module)||role==='finance'&&['payroll','leave_dues','settlements','repayments'].includes(module)||role==='project_manager'&&['leave','advances','resignations','returns'].includes(module);
 export const canRead=(role,module)=>role==='admin'||(role==='administrative_assistant'&&['employees','projects','payroll','payroll_batches'].includes(module))||(['project_manager'].includes(role)&&['payroll','payroll_batches'].includes(module))||(['hr','finance','project_manager','projects_director'].includes(role)&&module==='company_profiles')||role==='hr'||role==='administrative_manager'&&['employees','projects','payroll','payroll_batches'].includes(module)||role==='finance'&&['employees','projects','leave','advances','resignations','payroll','payroll_batches','settlements','repayments','leave_dues','returns','terminations'].includes(module)||['project_manager','projects_director'].includes(role)&&['employees','projects','leave','advances','resignations','returns','terminations',...(role==='projects_director'?['payroll','payroll_batches']:[])].includes(module);
 export function distanceMeters(a,b,c,d){const rad=v=>v*Math.PI/180;const q=Math.sin(rad(c-a)/2)**2+Math.cos(rad(a))*Math.cos(rad(c))*Math.sin(rad(d-b)/2)**2;return 6371000*2*Math.atan2(Math.sqrt(q),Math.sqrt(Math.max(0,1-q)));}
-export function visible(user,row,all=[]){if(user.role==='admin')return true;if(user.role==='employee')return row.module==='employees'&&row.id===user.employee_id||row.data?.employee_id===user.employee_id;if(user.companies&&user.companies!=='*'&&!JSON.parse(user.companies).includes(row.company))return false;const project=['payroll','payroll_batches'].includes(row.module)?null:row.module==='projects'?row.id:row.data?.project_id||all.find(r=>r.id===row.data?.employee_id)?.data?.project_id;if(user.projects&&user.projects!=='*'&&!['payroll','payroll_batches'].includes(row.module)&&(!project||!JSON.parse(user.projects).includes(project)))return false;return true;}
+export function visible(user,row,all=[]){
+ if(user.role==='admin')return true;
+ if(user.role==='employee')return row.module==='employees'&&row.id===user.employee_id||row.data?.employee_id===user.employee_id;
+ if(user.companies&&user.companies!=='*'&&!JSON.parse(user.companies).includes(row.company))return false;
+ const isPayroll=['payroll','payroll_batches'].includes(row.module);
+ const project=isPayroll?null:row.module==='projects'?row.id:row.data?.project_id||all.find(r=>r.id===row.data?.employee_id)?.data?.project_id;
+ if(user.role==='project_manager'){
+  if(!project)return false;
+  const assigned=all.find(r=>r.module==='projects'&&r.id===project);
+  return Boolean(assigned&&String(assigned.data?.manager_email||'').trim().toLowerCase()===String(user.email||'').trim().toLowerCase());
+ }
+ if(user.projects&&user.projects!=='*'&&!isPayroll&&(!project||!JSON.parse(user.projects).includes(project)))return false;
+ return true;
+}
 export function permissionChoices(raw){try{const p=typeof raw==='string'?JSON.parse(raw||'{}'):raw||{};return p&&typeof p==='object'&&!Array.isArray(p)?p:{}}catch{return {}}}
 export function permissionDefault(role,module,action){if(action==='edit')return canWrite(role,module);if(action==='view')return canRead(role,module);return canRead(role,module)}
 export function permissionChoice(role,raw,module,action){const p=permissionChoices(raw);const v=p[module+':'+action];return typeof v==='boolean'?v:permissionDefault(role,module,action)}
