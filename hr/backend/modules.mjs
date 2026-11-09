@@ -31,5 +31,18 @@ export const relationModules={employee:'employees',project:'projects',leave:'lea
 export const canWrite=(role,module)=>role==='admin'||role==='hr'&&['employees','appointments','leave','advances','warnings','resignations','returns','terminations','leave_dues','settlements'].includes(module)||role==='finance'&&['payroll','leave_dues','settlements','repayments'].includes(module)||role==='project_manager'&&['leave','advances','resignations','returns'].includes(module);
 export const canRead=(role,module)=>role==='admin'||(['hr','finance','project_manager','projects_director'].includes(role)&&module==='company_profiles')||role==='hr'||role==='finance'&&['employees','projects','leave','advances','resignations','payroll','settlements','repayments','leave_dues','returns','terminations'].includes(module)||['project_manager','projects_director'].includes(role)&&['employees','projects','leave','advances','resignations','returns','terminations'].includes(module);
 export function distanceMeters(a,b,c,d){const rad=v=>v*Math.PI/180;const q=Math.sin(rad(c-a)/2)**2+Math.cos(rad(a))*Math.cos(rad(c))*Math.sin(rad(d-b)/2)**2;return 6371000*2*Math.atan2(Math.sqrt(q),Math.sqrt(Math.max(0,1-q)));}
-export function visible(user,row,all=[]){if(user.role==='admin')return true;if(user.role==='employee')return row.module==='employees'&&row.id===user.employee_id||row.data?.employee_id===user.employee_id;if(user.companies&&user.companies!=='*'&&!JSON.parse(user.companies).includes(row.company))return false;const project=row.module==='projects'?row.id:row.data?.project_id||all.find(r=>r.id===row.data?.employee_id)?.data?.project_id;if(user.projects&&user.projects!=='*'&&(!project||!JSON.parse(user.projects).includes(project)))return false;return true;}
+export function visible(user,row,all=[]){
+ if(user.role==='admin')return true;
+ if(user.role==='employee')return row.module==='employees'&&row.id===user.employee_id||row.data?.employee_id===user.employee_id;
+ if(user.companies&&user.companies!=='*'&&!JSON.parse(user.companies).includes(row.company))return false;
+ const project=row.module==='projects'?row.id:row.data?.project_id||all.find(r=>r.id===row.data?.employee_id)?.data?.project_id;
+ // Manager access is based on the project's assigned manager account, not a broad '*' project scope.
+ if(user.role==='project_manager'){
+  if(!project)return false;
+  const assigned=all.find(r=>r.module==='projects'&&r.id===project);
+  if(!assigned||String(assigned.data?.manager_email||'').trim().toLowerCase()!==String(user.email||'').trim().toLowerCase())return false;
+ }
+ if(user.role!=='project_manager'&&user.projects&&user.projects!=='*'&&(!project||!JSON.parse(user.projects).includes(project)))return false;
+ return true;
+}
 export function permission(user,module,action){if(user.role==='admin')return true;let p={};try{p=typeof user.permissions==='string'?JSON.parse(user.permissions):user.permissions||{}}catch{return false}return p[module+':view']!==false&&p[module+':'+action]!==false;}
