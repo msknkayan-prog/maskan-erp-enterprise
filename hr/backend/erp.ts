@@ -145,8 +145,13 @@ if(current==='draft'&&decision==='approve'&&next==='project_manager'){
  if(project.company!==old.company&&!(pd._shared_companies||[]).includes(old.company))throw Error('المشروع لا يتبع شركة الموظف');
  const managerEmail=String(pd.manager_email||'').trim().toLowerCase();
  if(!managerEmail)throw Error('يجب تعيين مدير المشروع في ملف المشروع قبل إرسال الطلب');
- const manager=await db.prepare('SELECT role,is_active FROM members WHERE email=?').bind(managerEmail).first<any>();
+ const manager=await db.prepare('SELECT role,is_active,companies FROM members WHERE email=?').bind(managerEmail).first<any>();
  if(!manager||manager.role!=='project_manager'||manager.is_active===false)throw Error('مدير المشروع المعيّن ليس لديه حساب نشط بدور مدير مشروع');
+ if(manager.companies&&manager.companies!=='*'){
+  let authorized=false;
+  try{authorized=JSON.parse(manager.companies).includes(old.company)}catch{}
+  if(!authorized)throw Error('مدير المشروع لا يمتلك صلاحية الشركة التابعة للطلب');
+ }
 }
 if(current==='project_manager'&&u.role!=='admin'){
  const employeeRecord=details.employee_id?await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(details.employee_id,old.company).first<any>():null;
@@ -194,8 +199,13 @@ if(mod==='employees'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 const data={...(previous||{}),...normalize(mod,body)};
 if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previous.salary??previous.total_monthly_salary)===Number(data.salary))for(const key of ['basic','housing','transport'])if(previous[key]!==undefined)data[key]=previous[key];if(mod==='employees'){data._review_flags=[...(!data.hire_date?['تاريخ التعيين يحتاج استكمال']:[]),...(data.company==='غير محددة'?['الشركة تحتاج مراجعة']:[])];}if(mod==='warnings'&&data.warning_type!=='notice'&&!Number(data.sequence)){data.sequence=({first:1,second:2,final:3} as any)[data.warning_type];}if(!visible(u,{module:mod,company:body.company,data},(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(mod==='projects'&&String(data.manager_email||'').trim()){
  const managerEmail=String(data.manager_email).trim().toLowerCase();
- const manager=await db.prepare('SELECT role,is_active FROM members WHERE email=?').bind(managerEmail).first<any>();
+ const manager=await db.prepare('SELECT role,is_active,companies FROM members WHERE email=?').bind(managerEmail).first<any>();
  if(!manager||manager.role!=='project_manager'||manager.is_active===false)throw Error('اختر مدير مشروع يمتلك حساب دخول نشط بصلاحية مدير مشروع');
+ if(manager.companies&&manager.companies!=='*'){
+  let authorized=false;
+  try{authorized=JSON.parse(manager.companies).includes(body.company)}catch{}
+  if(!authorized)throw Error('مدير المشروع لا يمتلك صلاحية الشركة المحددة؛ عدّل نطاق حسابه أولًا');
+ }
  data.manager_email=managerEmail;
 }
 const transferringEmployee=mod==='employees'&&Boolean(old)&&old.company!==body.company;
