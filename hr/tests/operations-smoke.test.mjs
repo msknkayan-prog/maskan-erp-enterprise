@@ -536,3 +536,16 @@ test('employee identifier is inserted as valid JSON text with no jsonb_set root 
  assert.match(backend,/pg_advisory|next_code\.code/);
  assert.match(backend,/RETURNING code/);
 });
+
+test('employee form supports searchable department, project and direct manager within selected company',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/module==='employees'&&f\.key==='department'/);
+ assert.match(ui,/employee-department-choices/);
+ assert.match(ui,/r\.module==='employees'&&r\.company===edit\.company/);
+ assert.match(ui,/module==='employees'&&f\.key==='manager'/);
+ assert.match(ui,/employee-manager-choices/);
+ assert.match(ui,/module==='employees'&&f\.key==='project_id'/);
+ assert.match(ui,/aria-label="فلتر المشاريع"/);
+ assert.match(ui,/r\.module==='projects'&&\(r\.company===edit\.company/);
+ assert.match(ui,/setEmployeeProjectSearch\(''\)/);
+});
