@@ -135,6 +135,24 @@ if(body.action==='remove_member'){if(u.role!=='admin')throw Error('403');const t
 const mod=body.module;if(!(modules as any)[mod])throw Error('نافذة غير معروفة');const old=body.id?await db.prepare('SELECT * FROM records WHERE id=? AND module=?').bind(body.id,mod).first<any>():null;if(body.id&&!old)throw Error('السجل غير موجود');if(old&&!visible(u,parse(old),(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(old&&old.revision!==body.revision)throw Error('تغير السجل؛ حدّث الصفحة');
 if(body.action==='disburse'){if(mod!=='advances'||!old||old.status!=='approved'||!['admin','finance'].includes(u.role))throw Error('403');const reference=String(body.reference||'').trim();if(!reference||reference.length>200)throw Error('مرجع الصرف مطلوب');const data={...JSON.parse(old.data),payment_reference:reference,paid_at:now};const result=await db.batch([db.prepare("UPDATE records SET data=?,status='paid',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=?").bind(JSON.stringify(data),now,mutation,old.id,old.revision),db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,old.id,'record_disbursement',now,JSON.stringify({reference}),old.id,mutation)]);if(!result[0].meta.changes)throw Error('تغير السجل؛ حدّث الصفحة');return json({ok:true});}
 if(body.action==='transition'){if(['payroll','payroll_batches'].includes(mod))throw Error('اعتماد المسيرات الشهرية يتم حصريًا من نافذة المسير الشهري');if(!permission(u,mod,'approve'))throw Error('403');if(!old)throw Error('السجل غير موجود');if(operationalModules.includes(mod)||['repayments'].includes(mod))throw Error('هذا السجل لا يتطلب مسار اعتماد');const current=old.status;let next=mod==='payroll'?(current==='draft'?'hr':current==='hr'?'finance':current==='finance'?'approved':null):(current==='draft'?workflow[1]:workflow[workflow.indexOf(current)+1]);const decision=body.decision||'approve';if(decision==='return')next='draft';if(decision==='reject')next='rejected';if(!['approve','return','reject'].includes(decision))throw Error('قرار غير صالح');if(decision!=='approve'&&!String(body.note||'').trim())throw Error('سبب الإعادة أو الرفض مطلوب');if(!next)throw Error('السجل مغلق');if(current==='draft'&&decision!=='approve')throw Error('القرار غير متاح للمسودة');if(current==='draft'){if(!permittedWrite(u,mod))throw Error('403');}else if(u.role!=='admin'&&u.role!==current)throw Error('403');const details=JSON.parse(old.data);
+if(current==='draft'&&decision==='approve'&&next==='project_manager'){
+ const projectId=String(details.project_id||'').trim()||String((details.employee_id?(await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(details.employee_id,old.company).first<any>())?.data:null)?JSON.parse((await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(details.employee_id,old.company).first<any>()).data).project_id||'':'');
+ if(!projectId)throw Error('يجب ربط الموظف بمشروع قبل إرسال الطلب إلى مدير المشروع');
+ const project=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(projectId).first<any>();
+ if(!project)throw Error('المشروع غير مسجل في وحدة المشاريع والتكليفات');
+ const pd=JSON.parse(project.data||'{}');
+ if(project.company!==old.company&&!(pd._shared_companies||[]).includes(old.company))throw Error('المشروع لا يتبع شركة الموظف');
+ const managerEmail=String(pd.manager_email||'').trim().toLowerCase();
+ if(!managerEmail)throw Error('يجب تعيين مدير المشروع في ملف المشروع قبل إرسال الطلب');
+ const manager=await db.prepare('SELECT role,is_active FROM members WHERE email=?').bind(managerEmail).first<any>();
+ if(!manager||manager.role!=='project_manager'||manager.is_active===false)throw Error('مدير المشروع المعيّن ليس لديه حساب نشط بدور مدير مشروع');
+}
+if(current==='project_manager'&&u.role!=='admin'){
+ const projectId=String(details.project_id||'').trim();
+ if(!projectId)throw Error('الطلب غير مرتبط بمشروع محدد');
+ const project=await db.prepare("SELECT data FROM records WHERE id=? AND module='projects'").bind(projectId).first<any>();
+ if(!project||String(JSON.parse(project.data).manager_email||'').trim().toLowerCase()!==String(u.email||'').trim().toLowerCase())throw Error('الطلب يخص مدير مشروع آخر');
+}
 if(mod==='payroll'&&decision==='approve'){
  const rounded=n=>Math.round(Number(n||0)*100);
  if(!Number.isFinite(Number(details.net))||rounded(details.cash_amount)+rounded(details.bank_amount)!==rounded(details.net))throw Error('لا يمكن اعتماد مسير غير موزع بالكامل بين الكاش والتحويل البنكي');
@@ -172,7 +190,13 @@ if(['payroll','payroll_batches'].includes(mod))throw Error('إنشاء وتعد�
 if(!permittedWrite(u,mod)||!permission(u,mod,'edit'))throw Error('403');if(old&&old.status!=='draft'&&mod!=='employees')throw Error('التعديل متاح للمسودات فقط');if(mod==='employees'&&old&&JSON.parse(old.data)._archived)throw Error('يجب استعادة الموظف من الأرشيف قبل تعديل بياناته');const previous=old?JSON.parse(old.data):null;
 if(mod==='employees'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 const data={...(previous||{}),...normalize(mod,body)};
-if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previous.salary??previous.total_monthly_salary)===Number(data.salary))for(const key of ['basic','housing','transport'])if(previous[key]!==undefined)data[key]=previous[key];if(mod==='employees'){data._review_flags=[...(!data.hire_date?['تاريخ التعيين يحتاج استكمال']:[]),...(data.company==='غير محددة'?['الشركة تحتاج مراجعة']:[])];}if(mod==='warnings'&&data.warning_type!=='notice'&&!Number(data.sequence)){data.sequence=({first:1,second:2,final:3} as any)[data.warning_type];}if(!visible(u,{module:mod,company:body.company,data},(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');const transferringEmployee=mod==='employees'&&Boolean(old)&&old.company!==body.company;
+if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previous.salary??previous.total_monthly_salary)===Number(data.salary))for(const key of ['basic','housing','transport'])if(previous[key]!==undefined)data[key]=previous[key];if(mod==='employees'){data._review_flags=[...(!data.hire_date?['تاريخ التعيين يحتاج استكمال']:[]),...(data.company==='غير محددة'?['الشركة تحتاج مراجعة']:[])];}if(mod==='warnings'&&data.warning_type!=='notice'&&!Number(data.sequence)){data.sequence=({first:1,second:2,final:3} as any)[data.warning_type];}if(!visible(u,{module:mod,company:body.company,data},(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(mod==='projects'&&String(data.manager_email||'').trim()){
+ const managerEmail=String(data.manager_email).trim().toLowerCase();
+ const manager=await db.prepare('SELECT role,is_active FROM members WHERE email=?').bind(managerEmail).first<any>();
+ if(!manager||manager.role!=='project_manager'||manager.is_active===false)throw Error('اختر مدير مشروع يمتلك حساب دخول نشط بصلاحية مدير مشروع');
+ data.manager_email=managerEmail;
+}
+const transferringEmployee=mod==='employees'&&Boolean(old)&&old.company!==body.company;
 let linkedAccount=false;
 if(old&&old.company!==body.company){
  if(mod!=='employees')throw Error('لا تغيّر شركة المعاملة بعد إنشائها');
