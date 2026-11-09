@@ -549,3 +549,39 @@ test('employee form supports searchable department, project and direct manager w
  assert.match(ui,/r\.module==='projects'&&\(r\.company===edit\.company/);
  assert.match(ui,/setEmployeeProjectSearch\(''\)/);
 });
+
+test('project managers only see the project assigned to their own login, even with broad scope',async()=>{
+ const {visible}=await import('../backend/modules.mjs');
+ const projects=[
+  {id:'p-one',module:'projects',company:'مسكن الكيان',data:{name:'مشروع أ',manager_email:'pm-one@example.test'}},
+  {id:'p-two',module:'projects',company:'مسكن الكيان',data:{name:'مشروع ب',manager_email:'pm-two@example.test'}}
+ ];
+ const employees=[
+  {id:'e-one',module:'employees',company:'مسكن الكيان',data:{name:'موظف أ',project_id:'p-one'}},
+  {id:'e-two',module:'employees',company:'مسكن الكيان',data:{name:'موظف ب',project_id:'p-two'}}
+ ];
+ const requests=[
+  {id:'r-one',module:'leave',company:'مسكن الكيان',data:{employee_id:'e-one'}},
+  {id:'r-two',module:'leave',company:'مسكن الكيان',data:{employee_id:'e-two'}}
+ ];
+ const all=[...projects,...employees,...requests];
+ const pm={role:'project_manager',email:'PM-One@Example.Test',companies:'*',projects:'*'};
+ assert.equal(visible(pm,projects[0],all),true);
+ assert.equal(visible(pm,requests[0],all),true);
+ assert.equal(visible(pm,requests[1],all),false);
+ assert.equal(visible(pm,projects[1],all),false);
+ assert.equal(visible({...pm,email:'unassigned@example.test'},requests[0],all),false);
+ assert.equal(visible({...pm,projects:'[]'},requests[0],all),true);
+});
+test('request workflow requires an assigned active manager before routing and checks ownership at review',()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(backend,/current==='draft'&&decision==='approve'&&next==='project_manager'/);
+ assert.match(backend,/يجب ربط الموظف بمشروع قبل إرسال الطلب/);
+ assert.match(backend,/يجب تعيين مدير المشروع في ملف المشروع/);
+ assert.match(backend,/manager\.role!=='project_manager'/);
+ assert.match(backend,/current==='project_manager'&&u\.role!=='admin'/);
+ assert.match(backend,/الطلب يخص مدير مشروع آخر/);
+ assert.match(ui,/module==='projects'&&f\.key==='manager_email'/);
+ assert.match(ui,/members\.filter\(m=>m\.role==='project_manager'&&m\.is_active!==false\)/);
+});
