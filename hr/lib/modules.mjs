@@ -59,6 +59,7 @@ export function visible(user,row,all=[]){
  const isPayroll=['payroll','payroll_batches'].includes(row.module);
  const project=isPayroll?null:row.module==='projects'?row.id:row.data?.project_id||all.find(r=>r.id===row.data?.employee_id)?.data?.project_id;
  if(user.role==='project_manager'){
+  if(isPayroll)return true; // Monthly payroll has a separate approval and permission service.
   if(!project)return false;
   const assigned=all.find(r=>r.module==='projects'&&r.id===project);
   return Boolean(assigned&&String(assigned.data?.manager_email||'').trim().toLowerCase()===String(user.email||'').trim().toLowerCase());
