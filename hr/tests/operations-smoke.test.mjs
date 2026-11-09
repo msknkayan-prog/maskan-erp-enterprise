@@ -501,7 +501,9 @@ test('new employees receive an automatic globally unique code from the server',(
  assert.match(backend,/if\(mod==='employees'&&!old\)body\.data=\{\.\.\.\(body\.data\|\|\{\}\),code:'AUTO'\}/);
  assert.match(backend,/COALESCE\(MAX\(CASE WHEN code ~/);
  assert.match(backend,/WHERE module='employees'/);
- assert.match(backend,/jsonb_set\(\?::jsonb, '\{code\}'/);
+ assert.ok(!backend.includes('jsonb_set(?::jsonb'));
+ assert.ok(backend.includes('replace(?::text'));
+ assert.ok(backend.includes('next_code.code'));
  assert.match(backend,/RETURNING code/);
  assert.match(backend,/employee_code:result\[0\]/);
 });
@@ -524,4 +526,13 @@ test('employee register has independent per-column filters and reset control',()
  assert.match(ui,/setEmployeeFieldFilters\(\{\}\)/);
  assert.match(ui,/availableEmployeeFields.map\(f=><label/);
  assert.match(ui,/تُطبَّق الفلاتر على الجدول والطباعة وتصدير Excel/);
+});
+
+test('employee identifier is inserted as valid JSON text with no jsonb_set root scalar mutation',()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(backend,/code:'AUTO'/);
+ assert.ok(backend.includes('replace(?::text'));
+ assert.match(backend,/::jsonb::text/);
+ assert.match(backend,/pg_advisory|next_code\.code/);
+ assert.match(backend,/RETURNING code/);
 });
