@@ -461,7 +461,8 @@ test('employee second-company registration preserves original company and requir
  assert.match(ui,/dual_source_id:row\.id/);
  assert.match(ui,/code:'',project_id:''/);
  assert.match(ui,/company===edit\.dual_source_company/);
- assert.match(ui,/code===edit\.dual_source_code/);
+ assert.match(ui,/dual_source_code:employeeCode/);
+ assert.match(ui,/module==='employees'&&!edit\.id&&f\.key==='code'/);
  assert.match(ui,/يوجد سجل موظف بنفس الهوية في الشركة المختارة/);
  assert.match(ui,/اختر شركة ثانية مختلفة عن الشركة الأصلية/);
  assert.match(ui,/لن يتغير سجل الشركة الأولى/);
@@ -493,4 +494,21 @@ test('monthly generation uses batch scoped codes and guards against duplicate ac
  assert.match(cycle,/e\.id\+':'\+month\+':'\+id/);
  assert.match(cycle,/p\.data\.employee_id===e\.id&&p\.data\.month===month&&!p\.data\.excluded/);
  assert.match(cycle,/existing\.some\(b=>b\.company===co&&b\.data\.month===month\)/);
+});
+
+test('new employees receive an automatic globally unique code from the server',()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(backend,/if\(mod==='employees'&&!old\)body\.data=\{\.\.\.\(body\.data\|\|\{\}\),code:'AUTO'\}/);
+ assert.match(backend,/COALESCE\(MAX\(CASE WHEN code ~/);
+ assert.match(backend,/WHERE module='employees'/);
+ assert.match(backend,/jsonb_set\(\?::jsonb, '\{code\}'/);
+ assert.match(backend,/RETURNING code/);
+ assert.match(backend,/employee_code:result\[0\]/);
+});
+test('employee registration does not request manually entered job number',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/يُولّد تلقائيًا عند الحفظ/);
+ assert.match(ui,/module==='employees'&&!edit\.id&&f\.key==='code'/);
+ assert.match(ui,/result\.employee_code/);
+ assert.doesNotMatch(ui,/أدخل رقمًا وظيفيًا جديدًا ومستقلًا/);
 });
