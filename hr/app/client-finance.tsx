@@ -34,6 +34,7 @@ export default function ClientFinance({user,company,profiles,companyList,project
  const [documentLink,setDocumentLink]=useState({document_type:'contract',adjustment_id:'',claim_id:'',receipt_id:''}),[initialContractFile,setInitialContractFile]=useState(null);
  const [importPreview,setImportPreview]=useState(null),[importOpen,setImportOpen]=useState(false);
  const [aiPreview,setAiPreview]=useState(null),[aiBusy,setAiBusy]=useState(false);
+ const [aiDocumentId,setAiDocumentId]=useState(''),[aiContractFile,setAiContractFile]=useState(null);
  const privileges=(()=>{try{return typeof user?.permissions==='string'?JSON.parse(user.permissions||'{}'):user?.permissions||{}}catch{return {}}})();
  const canEdit=user?.role==='admin'||(user?.role==='finance'&&privileges['client_finance:edit']!==false)||privileges['client_finance:edit']===true;
  const canArchive=user?.role==='admin'||user?.role==='finance'||privileges['client_finance:delete']===true;
@@ -43,6 +44,7 @@ export default function ClientFinance({user,company,profiles,companyList,project
  const userCompanies=(()=>{try{return user?.companies==='*'||!user?.companies?companyList:JSON.parse(user.companies)}catch{return []}})();
  const contracts=data.contracts.filter(c=>(showArchived||c.contract_status!=='archived')&&(!company||c.company===company)&&[c.customer,c.project_name,c.contract_no,c.project_manager].join(' ').toLowerCase().includes(search.trim().toLowerCase()));
  const current=data.contracts.find(c=>c.id===selected&&(!company||c.company===company));
+ const contractFiles=data.documents.filter(d=>d.contract_id===selected&&['contract','contract_appendix'].includes(d.document_type));
  const overdue=data.installments.filter(i=>i.status==='scheduled'&&i.due_date<today()&&data.contracts.some(c=>c.id===i.contract_id&&(!company||c.company===company))&&!data.claims.some(cl=>cl.installment_id===i.id&&cl.status==='issued'));
  const pendingClaims=data.claims.filter(cl=>cl.status==='ready'&&data.contracts.some(c=>c.id===cl.contract_id&&(!company||c.company===company)));
  const items=(key)=>data[key].filter(x=>x.contract_id===selected);
@@ -74,12 +76,25 @@ const analyzeContractAI=async(documentId,contractId)=>{
  setAiBusy(true);setError('');setAiPreview(null);
  try{const r=await fetch('/api/client-contract-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contract_id:contractId,document_id:documentId})});const j=await r.json();if(!r.ok)throw Error(j.error||'فشل تحليل العقد');setAiPreview({...j,installments:j.installments.map(p=>({...p,amount_ex_vat:p.payment_percent!==''&&p.payment_percent!==null&&p.payment_percent!==undefined?Math.round((data.contracts.find(c=>c.id===contractId)?summary(data.contracts.find(c=>c.id===contractId)).ex:n(j.contract_base_ex_vat))*Number(p.payment_percent))/100:p.amount_ex_vat}))});setTab('installments');setNotice('تم استخراج البنود مبدئيًا بواسطة AI؛ راجع التواريخ والمبالغ ثم اعتمدها للحفظ.');}catch(err){setError(err.message);}finally{setAiBusy(false)}
 };
-const approveAISchedule=async()=>{
+const extractFromContract=async()=>{
+  if(!current||!canEdit)return;
+  setError('');setNotice('');
+  if(!aiContractFile&&!aiDocumentId){setError('اختر عقدًا مرفقًا أو ارفع ملف العقد أولًا');return;}
+  if(aiContractFile){
+    setAiBusy(true);
+    try{
+      const saved=await uploadDocument(aiContractFile,current.id,{document_type:'contract'});
+      setAiContractFile(null);setAiDocumentId(saved.id);await reload();
+      await analyzeContractAI(saved.id,current.id);
+    }catch(err){setError('لم يكتمل رفع وتحليل العقد: '+err.message);setAiBusy(false)}
+  }else await analyzeContractAI(aiDocumentId,current.id);
+ };
+ const approveAISchedule=async()=>{
  if(!aiPreview||!current)return;
  const problems=validateAISchedule(aiPreview.installments,{remaining:summary(current).unscheduled});
  if(problems.length){setError(problems.join(' | '));return;}
  const result=await execute({action:'approve_ai_schedule',contract_id:current.id,document_id:aiPreview.document_id,installments:aiPreview.installments},'تم حفظ الدفعات المستخرجة وربطها بالعقد، وستُنشأ المطالبات عند تاريخ استحقاقها');
- if(result)setAiPreview(null);
+ if(result){setAiPreview(null);setAiContractFile(null);setAiDocumentId('');setTab('installments');}
 };
 const updateAISchedule=(i,key,value)=>setAiPreview(prev=>({...prev,installments:prev.installments.map((p,index)=>index===i?{...p,[key]:value,...(key==='payment_percent'?{amount_ex_vat:value===''?'':Math.round(summary(current).ex*Number(value))/100}:{})}:p)}));
 const updateAIItem=(i,j,key,value)=>setAiPreview(prev=>({...prev,installments:prev.installments.map((p,index)=>index!==i?p:{...p,items:p.items.map((item,x)=>x===j?{...item,[key]:value}:item)})}));
@@ -248,11 +263,22 @@ const register=async e=>{e.preventDefault();const result=await execute({action:'
   <div className="cf-brief"><div><small>إجمالي المستحق من العملاء</small><strong>{money(totalReceivable)} ر.س</strong></div><div><small>مطالبات جاهزة للإصدار</small><strong>{pendingClaims.length}</strong></div><div><small>دفعات متأخرة دون إصدار</small><strong>{overdue.length}</strong></div><div><small>مستخدم إصدار المطالبات</small><strong>{user?.email||'—'}</strong></div></div>
   <div className="cf-controls"><label className="cf-show-archived"><input type="checkbox" checked={showArchived} onChange={e=>setShowArchived(e.target.checked)}/> إظهار العقود المؤرشفة</label><label>البحث في العقود<input type="search" placeholder="اسم العميل أو المشروع أو رقم العقد" value={search} onChange={e=>setSearch(e.target.value)}/></label><button onClick={reload} disabled={loading}>تحديث المستحقات</button><span>{contracts.length} عقد</span></div>
   {loading&&<p>جارٍ تحميل بيانات العملاء والعقود…</p>}
-  <div className="cf-layout"><div className="cf-contracts">{contracts.map(c=>{const b=summary(c);return <button key={c.id} className={'cf-contract '+(selected===c.id?'selected':'')} onClick={()=>{setSelected(c.id);setTab('installments');setAiPreview(null)}}><strong>{c.project_name}{c.contract_status==='archived'?' (مؤرشف)':''}</strong><small>{c.company} · {c.customer}</small><small><b>رقم العقد: {c.contract_no}</b> · {c.project_manager}</small><span>المتبقي: <b>{money(b.remaining)} ر.س</b></span></button>})}{!loading&&!contracts.length&&<div className="cf-empty">لا توجد عقود ضمن نطاق الشركة المحددة. يمكنك إضافة عقد جديد.</div>}</div>
+  <div className="cf-layout"><div className="cf-contracts">{contracts.map(c=>{const b=summary(c);return <button key={c.id} className={'cf-contract '+(selected===c.id?'selected':'')} onClick={()=>{setSelected(c.id);setTab('installments');setAiPreview(null);setAiDocumentId('');setAiContractFile(null)}}><strong>{c.project_name}{c.contract_status==='archived'?' (مؤرشف)':''}</strong><small>{c.company} · {c.customer}</small><small><b>رقم العقد: {c.contract_no}</b> · {c.project_manager}</small><span>المتبقي: <b>{money(b.remaining)} ر.س</b></span></button>})}{!loading&&!contracts.length&&<div className="cf-empty">لا توجد عقود ضمن نطاق الشركة المحددة. يمكنك إضافة عقد جديد.</div>}</div>
   <div className="cf-detail">{current?<><div className="cf-head"><div><h3>{current.project_name}</h3><p>{current.customer} | <strong>رقم العقد: {current.contract_no}</strong> | {current.contract_type}</p><p>مدير المشروع: <b>{current.project_manager}</b> · تاريخ التوقيع {dateOnly(current.signed_date)} · من {dateOnly(current.start_date)} إلى {dateOnly(current.end_date)} · <b>مدة التنفيذ: {durationLabel(current.start_date,current.end_date)}</b></p><p>الموقع: {current.site_location||'غير محدد'} · هاتف العميل: {current.customer_phone||'—'}</p><p>بريد العميل: {current.customer_email||'—'} · الرقم الضريبي: {current.customer_vat_no||'—'}</p></div><div className="cf-actions">{canEdit&&<button onClick={()=>{setEditContract({...current,signed_date:dateOnly(current.signed_date),start_date:dateOnly(current.start_date),end_date:dateOnly(current.end_date),vat_rate:String(n(current.vat_rate)*100)});setContractEditOpen(true)}}>تعديل بيانات العقد</button>}{canArchive&&(current.contract_status==='archived'?<button onClick={restoreContract}>استعادة العقد</button>:<button onClick={archiveContract} style={{color:'#9d341c',borderColor:'#a94a35'}}>حذف العقد</button>)}<button onClick={()=>printFinanceRegister('contract')}>طباعة بيانات العقد</button>{canEdit&&<button onClick={()=>{setDocumentLink({document_type:'contract',adjustment_id:'',claim_id:'',receipt_id:''});setTab('documents')}}>إرفاق العقد</button>}</div></div>
   <div className="cf-stat-grid">{[['قيمة العقد قبل الضريبة',summary(current).ex],['ضريبة القيمة المضافة',summary(current).vat],['العقد شامل الضريبة',summary(current).all],['المدفوع من العملاء',summary(current).paid],['المتبقي شامل الضريبة',summary(current).remaining],['نسبة حجز الضمان',n(current.retention_percent)]].map(([label,value])=><div key={label}><small>{label}</small><strong>{money(value)}</strong><small>ريال سعودي</small></div>)}</div>
   <div className="cf-tabs">{[['installments','بنود الدفعات'],['claims','المطالبات والمستخلصات'],['receipts','الدفعات المستلمة'],['adjustments','الأعمال الإضافية والخصومات'],['documents','العقد والمرفقات']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>setTab(k)}>{t}</button>)}</div>
-  {tab==='installments'&&<>{aiBusy&&<div className="cf-preview"><strong>يجري تحليل بنود العقد بواسطة الذكاء الاصطناعي…</strong><p>لا تُنشأ دفعات أو مطالبات حتى تنتهي المراجعة والاعتماد.</p></div>}
+  {tab==='installments'&&<>
+  {canEdit&&current.contract_status==='active'&&<div className="cf-ai-import">
+   <div className="cf-head"><div><h3>استخراج بنود الدفعات من العقد بالذكاء الاصطناعي</h3><p>ابدأ من هنا بدل إدخال الدفعات يدويًا: اختر العقد المرفق أو ارفع PDF أو صورة، ثم راجع الدفعات المستخرجة واعتمدها مرة واحدة.</p></div><span className="cf-ai-tag">AI · استخراج ومراجعة</span></div>
+   <div className="cf-ai-import-grid">
+    <label>ملف العقد المسجل<select value={aiDocumentId} onChange={e=>{setAiDocumentId(e.target.value);setAiContractFile(null)}}><option value="">اختر من مرفقات العقد</option>{contractFiles.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
+    <label>أو ارفع عقدًا جديدًا<input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e=>{setAiContractFile(e.target.files?.[0]||null);setAiDocumentId('')}}/></label>
+    <button type="button" className="cf-primary" disabled={aiBusy||busy||(!aiDocumentId&&!aiContractFile)} onClick={extractFromContract}>{aiBusy?'تحليل العقد جارٍ…':'استخراج الدفعات بواسطة AI'}</button>
+   </div>
+   <div className="cf-ai-steps"><span>1. تحديد العقد</span><span>2. استخراج النسب والبنود</span><span>3. مراجعة وتصحيح</span><span>4. تأكيد وحفظ</span><span>5. إنشاء المستخلص عند الاستحقاق</span></div>
+   <p className="cf-ai-help">لا تُحفظ الدفعات ولا تُنشأ المطالبات أثناء التحليل. أي موعد غير محدد في العقد سيُعرض لاستكماله قبل الحفظ.</p>
+  </div>}
+  {aiBusy&&<div className="cf-preview"><strong>يجري تحليل بنود العقد بواسطة الذكاء الاصطناعي…</strong><p>لا تُنشأ دفعات أو مطالبات حتى تنتهي المراجعة والاعتماد.</p></div>}
   {aiPreview&&aiPreview.contract_id===selected&&<div className="cf-ai-review">
    <h3>مراجعة بنود الدفعات المستخرجة من العقد – AI</h3>
    <p>تم استخلاص {aiPreview.installments.length} دفعة من المرفق. هذه مقترحات غير معتمدة؛ راجع المبلغ والموعد لكل دفعة قبل حفظها.</p>
@@ -277,7 +303,7 @@ const register=async e=>{e.preventDefault();const result=await execute({action:'
    </div>)}
    <p>إجمالي الدفعات المقترحة: <b>{money(aiPreview.installments.reduce((sum,p)=>sum+n(p.amount_ex_vat),0))} ر.س</b> قبل الضريبة · المتبقي غير المجدول: <b>{money(summary(current).unscheduled)} ر.س</b></p>
    {validateAISchedule(aiPreview.installments,{remaining:summary(current).unscheduled}).length>0&&<div className="cf-alert">{validateAISchedule(aiPreview.installments,{remaining:summary(current).unscheduled}).join(' | ')}</div>}
-   <button type="button" className="cf-primary" disabled={busy||aiBusy||validateAISchedule(aiPreview.installments,{remaining:summary(current).unscheduled}).length>0} onClick={approveAISchedule}>اعتماد وحفظ الدفعات المستخرجة في العقد</button>
+   <button type="button" className="cf-primary" disabled={busy||aiBusy||validateAISchedule(aiPreview.installments,{remaining:summary(current).unscheduled}).length>0} onClick={approveAISchedule}>تأكيد وحفظ بنود الدفعات المعتمدة</button>
    <button type="button" onClick={()=>setAiPreview(null)}>إلغاء التحليل</button>
   </div>}
   <p>جدول الاستحقاقات — المتبقي لتوزيع الدفعات قبل الضريبة: <b>{money(summary(current).unscheduled)} ر.س</b> <button type="button" onClick={()=>printFinanceRegister('installments')}>طباعة جدول الدفعات</button></p><div className="cf-table"><table><thead><tr><th>رقم الدفعة</th><th>الدفعة والبنود</th><th>تاريخ الاستحقاق</th><th>نسبة الدفعة من العقد</th><th>نسبة الإنجاز</th><th>قبل الضريبة</th><th>شامل الضريبة</th><th>توزيع البنود</th><th>الطباعة</th></tr></thead><tbody>{items('installments').map(x=><tr key={x.id}><td><b>{x.installment_no||'—'}</b></td><td><strong>{x.title}</strong><small>{x.description}</small>{data.installment_items.filter(i=>i.installment_id===x.id).map(i=><small key={i.id}>• {i.item_code}: {i.description} · {i.quantity} {i.unit} × {money(i.unit_price_ex_vat)} = {money(i.amount_ex_vat)} ر.س</small>)}</td><td>{dateOnly(x.due_date)}</td><td>{x.payment_percent==null?'—':n(x.payment_percent).toFixed(2)+'%'}</td><td>{n(x.progress_percent).toFixed(2)}%</td><td>{money(x.amount_ex_vat)}</td><td>{money(n(x.amount_ex_vat)*(1+n(current.vat_rate)))}</td><td>{money(n(x.amount_ex_vat)-sum(data.installment_items.filter(i=>i.installment_id===x.id).map(i=>i.amount_ex_vat)))} ر.س غير موزعة</td><td><button type="button" onClick={()=>printFinanceRegister('installments',x)}>طباعة الدفعة</button></td></tr>)}</tbody></table></div>{canEdit&&<form className="cf-form" onSubmit={addPay}><h4>إضافة دفعة تعاقدية</h4><label>اسم الدفعة<input required value={installment.title} onChange={e=>setInstallment({...installment,title:e.target.value})}/></label><label>تاريخ الاستحقاق<input required type="date" value={installment.due_date} onChange={e=>setInstallment({...installment,due_date:e.target.value})}/></label><label>نسبة الدفعة من العقد %<input type="number" min=".01" max="100" step=".01" placeholder="25" value={installment.payment_percent} onChange={e=>{const percent=e.target.value;setInstallment({...installment,payment_percent:percent,amount_ex_vat:percent===''?'':String(Math.round(summary(current).ex*Number(percent))/100)})}}/></label>
