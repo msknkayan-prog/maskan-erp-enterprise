@@ -200,12 +200,26 @@ export async function POST(req){
   await db.prepare('SELECT auto_generate_client_claims()').first();
   return json({ok:true,imported:plans.length,total_ex_vat:Math.round(requested*100)/100});
  }
- if(action==='archive_contract'){
- if(u.role!=='admin'&&u.role!=='finance'&&!(typeof u.permissions==='string'?JSON.parse(u.permissions||'{}'):u.permissions||{})['client_finance:delete'])throw Error('ليس لديك صلاحية إلغاء العقود');
+ if(['archive_contract','delete_contract','restore_contract'].includes(action)){
+ if(u.role!=='admin'&&u.role!=='finance'&&!(typeof u.permissions==='string'?JSON.parse(u.permissions||'{}'):u.permissions||{})['client_finance:delete'])throw Error('ليس لديك صلاحية حذف أو استعادة العقود');
+ if(action==='restore_contract'){
+  if(c.contract_status!=='archived')throw Error('العقد غير مؤرشف');
+  await db.prepare("UPDATE client_contracts SET contract_status='active',updated_at=now() WHERE id=?").bind(c.id).run();
+  await addAudit(db,u,c.id,'client_contract_restored',{contract_no:c.contract_no});
+  return json({ok:true,restored:true});
+ }
+ const entities=['client_installments','client_adjustments','client_receipts','client_claims','client_documents','client_ai_imports'];
+ const counts=await Promise.all(entities.map(t=>db.prepare('SELECT count(*) AS n FROM '+t+' WHERE contract_id=?').bind(c.id).first()));
+ const linked=counts.reduce((n,x)=>n+Number(x?.n||0),0);
+ if(action==='delete_contract'&&linked===0){
+   await db.prepare('DELETE FROM client_contracts WHERE id=?').bind(c.id).run();
+   await addAudit(db,u,c.id,'client_contract_deleted',{contract_no:c.contract_no,company:c.company});
+   return json({ok:true,deleted:true});
+ }
  if(c.contract_status==='archived')throw Error('العقد مؤرشف بالفعل');
  await db.prepare("UPDATE client_contracts SET contract_status='archived',updated_at=now() WHERE id=?").bind(c.id).run();
- await addAudit(db,u,c.id,'client_contract_archived',{contract_no:c.contract_no});
- return json({ok:true,archived:true});
+ await addAudit(db,u,c.id,'client_contract_archived',{contract_no:c.contract_no,linked_records:linked});
+ return json({ok:true,archived:true,linked_records:linked});
  }
  if(c.contract_status==='archived')throw Error('العقد مؤرشف ولا يمكن تسجيل دفعات أو إصدار مطالبة');
  if(action==='add_installment'){
