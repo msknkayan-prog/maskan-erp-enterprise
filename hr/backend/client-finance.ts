@@ -41,9 +41,9 @@ export async function GET(req){
  }catch(e){return fail(e)}
 }
 export async function POST(req){
- try{const u=await identity();if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية تحرير العقود المالية');
+ try{const u=await identity();
  const db=env.DB,p=new URL(req.url).searchParams;
- if(p.get('action')==='upload'){const c=await row(db,p.get('contract_id'),u);const name=str(p.get('name'),180);const mime=str(req.headers.get('content-type')||'application/pdf',100);
+ if(p.get('action')==='upload'){if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية رفع مستندات العقود');const c=await row(db,p.get('contract_id'),u);const name=str(p.get('name'),180);const mime=str(req.headers.get('content-type')||'application/pdf',100);
  if(!name||!(/\.pdf$|\.png$|\.jpe?g$/i.test(name))||!['application/pdf','image/png','image/jpeg'].includes(mime))throw Error('يسمح بإرفاق PDF أو صورة JPG/PNG فقط');
  const bytes=await req.arrayBuffer();if(bytes.byteLength<1||bytes.byteLength>8388608)throw Error('الحد الأقصى للمرفق 8 ميجابايت');
  const key='client-finance/'+c.id+'/'+crypto.randomUUID();await env.BUCKET.put(key,bytes);
@@ -53,6 +53,11 @@ export async function POST(req){
  await addAudit(db,u,c.id,'client_contract_file',{id,name});return json({ok:true,id});
  }
  const b=await input(req),action=str(b.action,40);
+ const perms=typeof u.permissions==='string'?JSON.parse(u.permissions||'{}'):u.permissions||{};
+ const isApproving=action==='approve_adjustment';
+ if(isApproving){
+   if(!(u.role==='admin'||u.role==='projects_director'||perms['client_finance:approve']===true))throw Error('ليس لديك صلاحية اعتماد ملاحق العقود');
+ }else if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية تحرير العقود المالية');
  if(action==='create_contract'){
  const company=str(b.company),customer=str(b.customer),project=str(b.project_name),manager=str(b.project_manager),
  number=str(b.contract_no,90),type=str(b.contract_type);
@@ -134,7 +139,7 @@ export async function POST(req){
  await addAudit(db,u,c.id,'client_adjustment_added',{kind,amount,id,approved});return json({ok:true,id});
  }
  if(action==='approve_adjustment'){
- if(!['admin','projects_director'].includes(u.role)&&!(typeof u.permissions==='string'?JSON.parse(u.permissions||'{}'):u.permissions||{})['client_finance:approve'])throw Error('ليس لديك صلاحية اعتماد ملاحق العقود');
+ // Approval permission was checked before loading the contract.
  const a=await db.prepare('SELECT * FROM client_adjustments WHERE id=? AND contract_id=?').bind(str(b.adjustment_id),c.id).first();
  if(!a||a.approved_at)throw Error('الملحق معتمد مسبقًا أو غير موجود');
  const amount=Number(a.amount_ex_vat),delta=a.kind==='extra'?amount:-amount;
