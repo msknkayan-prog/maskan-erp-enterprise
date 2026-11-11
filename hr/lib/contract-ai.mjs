@@ -7,7 +7,7 @@ export function normalizeContractAIResult(raw){
  const result=typeof raw==='string'?JSON.parse(raw):raw;
  if(!result||typeof result!=='object'||!Array.isArray(result.installments))throw Error('لم يُرجع التحليل جدول دفعات صالحًا');
  const warnings=Array.isArray(result.warnings)?result.warnings.slice(0,25).map(x=>text(x,250)):[];
- const cleaned=result.installments.slice(0,30).map((p,i)=>{
+ const cleaned=result.installments.slice(0,10).map((p,i)=>{
   const title=text(p.title||'دفعة رقم '+(i+1),160);
   const percent=p.payment_percent===undefined||p.payment_percent===null||p.payment_percent===''?null:amount(p.payment_percent);
   if(percent!==null&&(percent<=0||percent>100))warnings.push('نسبة الدفعة '+(i+1)+' غير صالحة');
@@ -32,7 +32,7 @@ export function normalizeContractAIResult(raw){
 }
 export function validateAISchedule(schedule,{remaining=Infinity}={}){
  const problems=[],seen=new Set();let total=0,totalPercent=0;
- if(!Array.isArray(schedule)||!schedule.length||schedule.length>30)return ['عدد الدفعات يجب أن يكون بين 1 و30'];
+ if(!Array.isArray(schedule)||!schedule.length||schedule.length>10)return ['عدد الدفعات يجب أن يكون بين 1 و10'];
  schedule.forEach((p,i)=>{
   const label='الدفعة '+(i+1);
   if(!text(p.title))problems.push(label+': الاسم مطلوب');
