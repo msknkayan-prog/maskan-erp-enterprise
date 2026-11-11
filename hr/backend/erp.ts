@@ -152,6 +152,10 @@ if(current==='draft'&&decision==='approve'&&next==='project_manager'){
   try{authorized=JSON.parse(manager.companies).includes(old.company)}catch{}
   if(!authorized)throw Error('مدير المشروع لا يمتلك صلاحية الشركة التابعة للطلب');
  }
+ const dir=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(old.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
+ if(!dir)throw Error('بيانات مدير المشروع غير مسجلة في دليل مدراء المشاريع');
+ details.project_id=projectId;
+ details.project_manager={name:dir.name,email:managerEmail,phone:dir.phone||'',project_name:pd.name||''};
 }
 if(current==='project_manager'&&u.role!=='admin'){
  const employeeRecord=details.employee_id?await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(details.employee_id,old.company).first<any>():null;
@@ -277,6 +281,18 @@ if(mod!=='employees'&&['leave','advances','warnings','resignations','returns','t
  const employee=JSON.parse(employeeRecord.data);
  const snapshot={employee_id:employeeRecord.id,company:body.company,name:String(employee.name||''),code:String(employee.code||''),job:String(employee.job||''),department:String(employee.department||''),project_id:String(employee.project_id||''),manager:String(employee.manager||''),identity:String(employee.identity||''),nationality:String(employee.nationality||''),hire_date:String(employee.hire_date||''),salary:Number(employee.salary||0),basic:Number(employee.basic||0),housing:Number(employee.housing||0),transport:Number(employee.transport||0),bank_amount:Number(employee.bank_amount||0),cash_amount:Number(employee.cash_amount||0),bank:String(employee.bank||''),iban:String(employee.iban||'')};
  if(!old||previous?.employee_id!==data.employee_id||!previous?.employee_snapshot)data.employee_snapshot=snapshot;
+ if(employee.project_id){
+  const project=await db.prepare("SELECT company,data FROM records WHERE module='projects' AND id=?").bind(employee.project_id).first<any>();
+  if(project){
+   const projectDetails=JSON.parse(project.data);
+   const managerEmail=String(projectDetails.manager_email||'').trim().toLowerCase();
+   const manager=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
+   if(managerEmail){
+    data.project_id=employee.project_id;
+    data.project_manager={name:manager?.name||projectDetails.manager_name||'',email:managerEmail,phone:manager?.phone||'',project_name:projectDetails.name||''};
+   }
+  }
+ }
  if(mod==='leave_dues'){
   if(!Number(data.salary_basis))data.salary_basis=snapshot.salary;
   data.net=Math.round((Number(data.salary_basis)/30*Number(data.days)+Number(data.travel_amount||0)+Number(data.other_amount||0)-Number(data.deductions||0))*100)/100;
