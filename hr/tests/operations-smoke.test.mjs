@@ -545,7 +545,7 @@ test('employee form supports searchable department, project and direct manager w
  assert.match(ui,/module==='employees'&&f\.key==='manager'/);
  assert.match(ui,/employee-manager-choices/);
  assert.match(ui,/module==='employees'&&f\.key==='project_id'/);
- assert.match(ui,/aria-label="فلتر المشاريع"/);
+ assert.match(ui,/aria-label="فلتر المشاريع حسب الاسم"/);
  assert.match(ui,/r\.module==='projects'&&\(r\.company===edit\.company/);
  assert.match(ui,/setEmployeeProjectSearch\(''\)/);
 });
