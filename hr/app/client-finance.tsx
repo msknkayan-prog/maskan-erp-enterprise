@@ -69,7 +69,7 @@ export default function ClientFinance({user,company,profiles,companyList,project
  };
  const totalReceivable=contracts.reduce((x,c)=>x+summary(c).remaining,0);
  const execute=async(obj,success)=>{
-  if(!canEdit)return;setBusy(true);setNotice('');setError('');
+  if(!canEdit&&!(canArchive&&['delete_contract','archive_contract','restore_contract'].includes(obj.action))){setError('ليس لديك صلاحية تنفيذ هذه العملية');return null;}setBusy(true);setNotice('');setError('');
   try{const r=await fetch('/api/client-finance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});const x=await r.json();if(!r.ok)throw Error(x.error||'تعذر حفظ البيانات');setNotice(success);await reload();return x;}
   catch(e){setError(e.message);return null}finally{setBusy(false)}
  };
@@ -113,12 +113,26 @@ const register=async e=>{e.preventDefault();const result=await execute({action:'
  setSelected(result.id);setContract(blank);setNewOpen(false);
  if(initialContractFile){try{const document=await uploadDocument(initialContractFile,result.id,{document_type:'contract'});setNotice('تم تسجيل العقد وإرفاق ملف العقد الأصلي');await reload();if(document?.id)await analyzeContractAI(document.id,result.id);}catch(err){setError('العقد محفوظ لكن فشل رفع ملفه: '+err.message);}finally{setInitialContractFile(null)}}
 }};
- const saveContract=async e=>{e.preventDefault();if(await execute({action:'update_contract',contract_id:selected,...editContract,vat_rate:Number(editContract.vat_rate)},'تم تحديث معلومات العقد'))setContractEditOpen(false)};
- const archiveContract=async()=>{
-  if(!current||!canArchive)return;
-  if(!window.confirm('تأكيد حذف العقد رقم '+current.contract_no+'؟ العقود التي تحتوي سجلات مالية ستُؤرشف بدل الحذف، حفاظًا على المستخلصات والمطالبات السابقة.'))return;
-  const res=await execute({action:'delete_contract',contract_id:current.id},'تم حذف العقد الخالي من السجلات، أو أرشفته إذا كان مرتبطًا بحركات مالية');
-  if(res){setSelected('');setContractEditOpen(false);}
+ const openEditContract=(c)=>{
+ if(!canEdit||!c)return;
+ setSelected(c.id);
+ setEditContract({...c,signed_date:dateOnly(c.signed_date),start_date:dateOnly(c.start_date),end_date:dateOnly(c.end_date),vat_rate:String(n(c.vat_rate)*100)});
+ setContractEditOpen(true);
+};
+ const saveContract=async e=>{e.preventDefault();const currentRecord=data.contracts.find(x=>x.id===editContract.id);if(!currentRecord)return setError('العقد المطلوب تعديله غير موجود');
+ const saved=await execute({action:'update_contract',contract_id:currentRecord.id,...editContract,vat_rate:Number(editContract.vat_rate)},'تم حفظ تعديلات العقد رقم '+currentRecord.contract_no);
+ if(saved)setContractEditOpen(false);
+ };
+ const archiveContract=async(target=current)=>{
+  if(!target||!canArchive||busy)return;
+  const linkedCount=['installments','claims','receipts','adjustments','documents'].reduce((sum,key)=>sum+data[key].filter(x=>x.contract_id===target.id).length,0);
+  const message=linkedCount>0?'العقد مرتبط بسجلات مالية أو مرفقات، ولذلك سيُؤرشف مع حفظ البيانات والتوقيعات والسجلات.':'العقد لا يحتوي على سجلات ظاهرة، وسيُحذف نهائيًا إذا لم توجد سجلات مرتبطة به على الخادم.';
+  if(!window.confirm('هل تؤكد حذف العقد رقم '+target.contract_no+'؟\n'+message))return;
+  const res=await execute({action:'delete_contract',contract_id:target.id},'تم تنفيذ حذف العقد رقم '+target.contract_no);
+  if(res){
+   setNotice(res.deleted?'تم حذف العقد نهائيًا لأنه لا يحتوي على سجلات مرتبطة.':'تمت أرشفة العقد حفاظًا على السجلات المالية والمرفقات.');
+   if(selected===target.id){setSelected('');setContractEditOpen(false);}
+  }
  };
  const restoreContract=async()=>{
   if(!current||!canArchive)return;
@@ -300,8 +314,11 @@ const deleteAttachedContract=async(doc)=>{
   <div className="cf-brief"><div><small>إجمالي المستحق من العملاء</small><strong>{money(totalReceivable)} ر.س</strong></div><div><small>مطالبات جاهزة للإصدار</small><strong>{pendingClaims.length}</strong></div><div><small>دفعات متأخرة دون إصدار</small><strong>{overdue.length}</strong></div><div><small>مستخدم إصدار المطالبات</small><strong>{user?.email||'—'}</strong></div></div>
   <div className="cf-controls"><label className="cf-show-archived"><input type="checkbox" checked={showArchived} onChange={e=>setShowArchived(e.target.checked)}/> إظهار العقود المؤرشفة</label><label>البحث في العقود<input type="search" placeholder="اسم العميل أو المشروع أو رقم العقد" value={search} onChange={e=>setSearch(e.target.value)}/></label><button onClick={reload} disabled={loading}>تحديث المستحقات</button><span>{contracts.length} عقد</span></div>
   {loading&&<p>جارٍ تحميل بيانات العملاء والعقود…</p>}
-  <div className="cf-layout"><div className="cf-contracts">{contracts.map(c=>{const b=summary(c);return <button key={c.id} className={'cf-contract '+(selected===c.id?'selected':'')} onClick={()=>{setSelected(c.id);setTab('installments');setAiPreview(null);setAiDocumentId('');setAiContractFile(null)}}><strong>{c.project_name}{c.contract_status==='archived'?' (مؤرشف)':''}</strong><small>{c.company} · {c.customer}</small><small><b>رقم العقد: {c.contract_no}</b> · {c.project_manager}</small><span>المتبقي: <b>{money(b.remaining)} ر.س</b></span></button>})}{!loading&&!contracts.length&&<div className="cf-empty">لا توجد عقود ضمن نطاق الشركة المحددة. يمكنك إضافة عقد جديد.</div>}</div>
-  <div className="cf-detail">{current?<><div className="cf-head"><div><h3>{current.project_name}</h3><p>{current.customer} | <strong>رقم العقد: {current.contract_no}</strong> | {current.contract_type}</p><p>مدير المشروع: <b>{current.project_manager}</b> · تاريخ التوقيع {dateOnly(current.signed_date)} · من {dateOnly(current.start_date)} إلى {dateOnly(current.end_date)} · <b>مدة التنفيذ: {durationLabel(current.start_date,current.end_date)}</b></p><p>الموقع: {current.site_location||'غير محدد'} · هاتف العميل: {current.customer_phone||'—'}</p><p>بريد العميل: {current.customer_email||'—'} · الرقم الضريبي: {current.customer_vat_no||'—'}</p></div><div className="cf-actions">{canEdit&&<button onClick={()=>{setEditContract({...current,signed_date:dateOnly(current.signed_date),start_date:dateOnly(current.start_date),end_date:dateOnly(current.end_date),vat_rate:String(n(current.vat_rate)*100)});setContractEditOpen(true)}}>تعديل بيانات العقد</button>}{canArchive&&(current.contract_status==='archived'?<button onClick={restoreContract}>استعادة العقد</button>:<button onClick={archiveContract} style={{color:'#9d341c',borderColor:'#a94a35'}}>حذف العقد</button>)}<button onClick={()=>printFinanceRegister('contract')}>طباعة بيانات العقد</button>{canEdit&&<button onClick={()=>{setDocumentLink({document_type:'contract',adjustment_id:'',claim_id:'',receipt_id:''});setTab('documents')}}>إرفاق العقد</button>}</div></div>
+  <div className="cf-layout"><div className="cf-contracts">{contracts.map(c=>{const b=summary(c);return <div key={c.id} className="cf-contract-record">
+ <button type="button" className={'cf-contract '+(selected===c.id?'selected':'')} onClick={()=>{setSelected(c.id);setTab('installments');setAiPreview(null);setAiDocumentId('');setAiContractFile(null)}}><strong>{c.project_name}{c.contract_status==='archived'?' (مؤرشف)':''}</strong><small>{c.company} · {c.customer}</small><small><b>رقم العقد: {c.contract_no}</b> · {c.project_manager}</small><span>المتبقي: <b>{money(b.remaining)} ر.س</b></span></button>
+ <div className="cf-contract-record-actions">{canEdit&&c.contract_status!=='archived'&&<button type="button" disabled={busy} onClick={()=>openEditContract(c)}>تعديل العقد</button>}{canArchive&&c.contract_status!=='archived'&&<button type="button" className="cf-delete-action" disabled={busy} onClick={()=>archiveContract(c)}>حذف العقد</button>}{canArchive&&c.contract_status==='archived'&&<button type="button" disabled={busy} onClick={()=>{setSelected(c.id);execute({action:'restore_contract',contract_id:c.id},'تمت استعادة العقد')}}>استعادة</button>}</div>
+ </div>})}{!loading&&!contracts.length&&<div className="cf-empty">لا توجد عقود ضمن نطاق الشركة المحددة. يمكنك إضافة عقد جديد.</div>}</div>
+  <div className="cf-detail">{current?<><div className="cf-head"><div><h3>{current.project_name}</h3><p>{current.customer} | <strong>رقم العقد: {current.contract_no}</strong> | {current.contract_type}</p><p>مدير المشروع: <b>{current.project_manager}</b> · تاريخ التوقيع {dateOnly(current.signed_date)} · من {dateOnly(current.start_date)} إلى {dateOnly(current.end_date)} · <b>مدة التنفيذ: {durationLabel(current.start_date,current.end_date)}</b></p><p>الموقع: {current.site_location||'غير محدد'} · هاتف العميل: {current.customer_phone||'—'}</p><p>بريد العميل: {current.customer_email||'—'} · الرقم الضريبي: {current.customer_vat_no||'—'}</p></div><div className="cf-actions">{canEdit&&<button onClick={()=>openEditContract(current)}>تعديل بيانات العقد</button>}{canArchive&&(current.contract_status==='archived'?<button onClick={restoreContract}>استعادة العقد</button>:<button onClick={()=>archiveContract(current)} disabled={busy} style={{color:'#9d341c',borderColor:'#a94a35'}}>حذف العقد</button>)}<button onClick={()=>printFinanceRegister('contract')}>طباعة بيانات العقد</button>{canEdit&&<button onClick={()=>{setDocumentLink({document_type:'contract',adjustment_id:'',claim_id:'',receipt_id:''});setTab('documents')}}>إرفاق العقد</button>}</div></div>
   <div className="cf-stat-grid">{[['قيمة العقد قبل الضريبة',summary(current).ex],['ضريبة القيمة المضافة',summary(current).vat],['العقد شامل الضريبة',summary(current).all],['المدفوع من العملاء',summary(current).paid],['المتبقي شامل الضريبة',summary(current).remaining],['نسبة حجز الضمان',n(current.retention_percent)]].map(([label,value])=><div key={label}><small>{label}</small><strong>{money(value)}</strong><small>ريال سعودي</small></div>)}</div>
   <div className="cf-tabs">{[['installments','بنود الدفعات'],['claims','المطالبات والمستخلصات'],['receipts','الدفعات المستلمة'],['adjustments','الأعمال الإضافية والخصومات'],['documents','العقد والمرفقات']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>setTab(k)}>{t}</button>)}</div>
   {tab==='installments'&&<>
