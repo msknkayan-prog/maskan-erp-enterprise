@@ -918,3 +918,19 @@ test('edge backend imports exactly available module exports to prevent boot-time
   assert.equal(typeof edge[name]==='function'?edge[name].toString():JSON.stringify(edge[name]),typeof frontend[name]==='function'?frontend[name].toString():JSON.stringify(frontend[name]), 'Edge/frontend module mismatch: '+name);
  }
 });
+
+test('client finance contracts cover customer, project dates, installments and taxes',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const main=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ const proxy=readFileSync(new URL('../app/api/[service]/route.ts',import.meta.url),'utf8');
+ for(const label of ['المطالبات المالية واستحقاقات العملاء','مدير المشروع','بداية المشروع','نهاية المشروع','الأعمال الإضافية والخصومات','المطالبات والمستخلصات','استلام دفعة','قيمة العقد شامل الضريبة'])assert.ok(ui.includes(label),label);
+ assert.match(ui,/companyLogoPath\(current\.company,profiles\)/);
+ assert.match(main,/clientFinanceAuthorized/);
+ assert.match(proxy,/'client-finance'/);
+ assert.match(api,/checkCompany\(u,/);
+ assert.match(api,/amount_inc_vat/);
+ assert.match(api,/auto_generate_client_claims/);
+ assert.match(api,/INSERT INTO client_documents/);
+ assert.doesNotMatch(api,/localStorage/);
+});
