@@ -686,3 +686,15 @@ test('pending requests center lists active request types with filters and exclud
  assert.match(ui,/setModule\(r\.module\);setEdit\(\{\.\.\.r,data:\{\.\.\.r\.data\}\}\)/);
  assert.match(ui,/لا تشمل المعتمدة أو المصروفة أو المرفوضة/);
 });
+
+test('employee project selection filters names and references and clearly handles missing projects',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/فلتر المشاريع حسب الاسم/);
+ assert.match(ui,/اختيار المشروع بعد التصفية/);
+ assert.match(ui,/r\.module==='projects'&&\(r\.company===edit\.company/);
+ assert.match(ui,/normalizeSearch\(\[r\.data\.name,r\.data\.reference,r\.data\.code,r\.data\.address\]/);
+ assert.match(ui,/لا توجد مشاريع مسجلة لهذه الشركة/);
+ assert.match(ui,/لا توجد مشاريع مطابقة للبحث/);
+ assert.match(ui,/المشاريع المطابقة:/);
+ assert.match(ui,/مسح بحث المشاريع/);
+});
