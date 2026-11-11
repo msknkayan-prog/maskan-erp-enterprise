@@ -306,52 +306,25 @@ const deleteAttachedContract=async(doc)=>{
   <div className="cf-tabs">{[['installments','بنود الدفعات'],['claims','المطالبات والمستخلصات'],['receipts','الدفعات المستلمة'],['adjustments','الأعمال الإضافية والخصومات'],['documents','العقد والمرفقات']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>setTab(k)}>{t}</button>)}</div>
   {tab==='installments'&&<>
   <p className="cf-preview">عدد الدفعات المسجلة: <b>{items('installments').length} / 10</b> · المتاح إضافة <b>{Math.max(0,10-items('installments').length)}</b> دفعة. تُنشأ المطالبات بأرقام تلقائية عند استحقاقها.</p>
-  <div className="cf-ai-inline-action"><strong>استخراج الدفعات من العقد بالذكاء الاصطناعي</strong><button type="button" onClick={()=>document.getElementById('finance-ai-contract-upload')?.scrollIntoView({behavior:'smooth',block:'start'})}>فتح نافذة AI وحفظ الدفعات</button></div>
+  
   <p>جدول الاستحقاقات — المتبقي لتوزيع الدفعات قبل الضريبة: <b>{money(summary(current).unscheduled)} ر.س</b> <button type="button" onClick={()=>printFinanceRegister('installments')}>طباعة جدول الدفعات</button></p><div className="cf-table"><table><thead><tr><th>رقم الدفعة</th><th>الدفعة والبنود</th><th>تاريخ الاستحقاق</th><th>نسبة الدفعة من العقد</th><th>نسبة الإنجاز</th><th>قبل الضريبة</th><th>شامل الضريبة</th><th>توزيع البنود</th><th>الطباعة</th></tr></thead><tbody>{items('installments').map(x=><tr key={x.id}><td><b>{x.installment_no||'—'}</b></td><td><strong>{x.title}</strong><small>{x.description}</small>{data.installment_items.filter(i=>i.installment_id===x.id).map(i=><small key={i.id}>• {i.item_code}: {i.description} · {i.quantity} {i.unit} × {money(i.unit_price_ex_vat)} = {money(i.amount_ex_vat)} ر.س</small>)}</td><td>{dateOnly(x.due_date)}</td><td>{x.payment_percent==null?'—':n(x.payment_percent).toFixed(2)+'%'}</td><td>{n(x.progress_percent).toFixed(2)}%</td><td>{money(x.amount_ex_vat)}</td><td>{money(n(x.amount_ex_vat)*(1+n(current.vat_rate)))}</td><td>{money(n(x.amount_ex_vat)-sum(data.installment_items.filter(i=>i.installment_id===x.id).map(i=>i.amount_ex_vat)))} ر.س غير موزعة</td><td><button type="button" onClick={()=>printFinanceRegister('installments',x)}>طباعة الدفعة</button>{items('claims').some(cl=>cl.installment_id===x.id)&&<button type="button" onClick={()=>setTab('claims')}>المطالبة والمستخلص</button>}</td></tr>)}</tbody></table></div>
-    {canEdit&&current.contract_status==='active'&&<div className="cf-ai-import" id="finance-ai-contract-upload">
-   <div className="cf-head"><div><h3>استخراج بنود الدفعات من العقد بالذكاء الاصطناعي</h3><p>ارفع العقد أو اختر ملفًا محفوظًا، ثم اضغط استخراج. بعد المراجعة يظهر زر تأكيد وحفظ الدفعات هنا مباشرة.</p><p role="status" className={aiStatus.ready===false?'cf-alert':'cf-ai-help'}><b>حالة خدمة AI:</b> {aiStatus.message}</p></div><span className="cf-ai-tag">AI · استخراج ومراجعة</span></div>
-   <div className="cf-ai-import-grid">
-    <label>ملف العقد المسجل<select value={aiDocumentId} onChange={e=>{setAiDocumentId(e.target.value);setAiContractFile(null)}}><option value="">اختر من مرفقات العقد</option>{contractFiles.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
-    <label>أو ارفع عقدًا جديدًا<input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e=>{setAiContractFile(e.target.files?.[0]||null);setAiDocumentId('')}}/></label>
-    <button type="button" className="cf-primary" disabled={aiBusy||busy||aiStatus.ready===false||(!aiDocumentId&&!aiContractFile)} onClick={extractFromContract}>{aiBusy?'تحليل العقد جارٍ…':'استخراج الدفعات بواسطة AI'}</button>
-   </div>
-   <div className="cf-ai-steps"><span>1. تحديد العقد</span><span>2. استخراج النسب والبنود</span><span>3. مراجعة وتصحيح</span><span>4. تأكيد وحفظ</span><span>5. إنشاء المستخلص عند الاستحقاق</span></div>
-   <p className="cf-ai-help">لا تُحفظ الدفعات ولا تُنشأ المطالبات أثناء التحليل. أي موعد غير محدد في العقد سيُعرض لاستكماله قبل الحفظ.</p>
-  </div>}
-  <div className="cf-ai-save-panel">
-    <strong>حفظ الدفعات المستخرجة من العقد</strong>
-    <p>{aiPreview?'الجدول المستخرج جاهز للمراجعة، ثم الضغط على تأكيد وحفظ.':'بعد اختيار العقد وتشغيل التحليل تظهر هنا نافذة مراجعة البنود والنسب والتواريخ وزر الحفظ النهائي.'}</p>
-    {!aiPreview&&<button type="button" disabled aria-disabled="true">تأكيد وحفظ بنود الدفعات — بعد التحليل</button>}
-  </div>
-  {aiBusy&&<div className="cf-preview"><strong>يجري تحليل بنود العقد بواسطة الذكاء الاصطناعي…</strong><p>لا تُنشأ دفعات أو مطالبات حتى تنتهي المراجعة والاعتماد.</p></div>}
-  {aiPreview&&aiPreview.contract_id===selected&&<div className="cf-ai-review">
-   <h3>مراجعة بنود الدفعات المستخرجة من العقد – AI</h3>
-   <p>تم استخلاص {aiPreview.installments.length} دفعة من المرفق. هذه مقترحات غير معتمدة؛ راجع المبلغ والموعد لكل دفعة قبل حفظها.</p>
-   {aiPreview.document_summary&&<p>{aiPreview.document_summary}</p>}
-   {aiPreview.warnings?.length>0&&<div className="cf-alert"><b>ملاحظات التحليل:</b><ul>{aiPreview.warnings.map((w,i)=><li key={i}>{w}</li>)}</ul></div>}
-   {aiPreview.installments.map((p,i)=><div key={i} className="cf-ai-installment">
-    <div className="cf-form">
-     <label>وصف الدفعة<input value={p.title} onChange={e=>updateAISchedule(i,'title',e.target.value)}/></label>
-     <label>تاريخ الاستحقاق الفعلي<input type="date" value={p.due_date||''} onChange={e=>updateAISchedule(i,'due_date',e.target.value)}/></label>
-     <label>نسبة الدفعة من العقد %<input type="number" min="0" max="100" step=".01" value={p.payment_percent??''} onChange={e=>updateAISchedule(i,'payment_percent',e.target.value)} placeholder="مثال 25%"/></label>
-     <label>المبلغ قبل الضريبة<input type="number" min=".01" step=".01" value={p.amount_ex_vat} onChange={e=>updateAISchedule(i,'amount_ex_vat',e.target.value)}/></label>
-     <label className="cf-full">وصف الاستحقاق<input value={p.description||''} onChange={e=>updateAISchedule(i,'description',e.target.value)}/></label>
-    </div>
-    {p.source&&<p>مرجع الاستخراج: {p.source}</p>}
-    {p.items.map((it,j)=><div key={j} className="cf-form">
-      <label>رمز البند<input value={it.item_code} onChange={e=>updateAIItem(i,j,'item_code',e.target.value)}/></label>
-      <label>وصف البند<input value={it.description} onChange={e=>updateAIItem(i,j,'description',e.target.value)}/></label>
-      <label>الكمية<input type="number" min=".001" step=".001" value={it.quantity} onChange={e=>updateAIItem(i,j,'quantity',e.target.value)}/></label>
-      <label>الوحدة<input value={it.unit} onChange={e=>updateAIItem(i,j,'unit',e.target.value)}/></label>
-      <label>سعر الوحدة<input type="number" min="0" step=".01" value={it.unit_price_ex_vat} onChange={e=>updateAIItem(i,j,'unit_price_ex_vat',e.target.value)}/></label>
-    </div>)}
-   </div>)}
-   <p>إجمالي الدفعات المقترحة: <b>{money(aiPreview.installments.reduce((sum,p)=>sum+n(p.amount_ex_vat),0))} ر.س</b> قبل الضريبة · المتبقي غير المجدول: <b>{money(summary(current).unscheduled)} ر.س</b></p>
-   {validateAISchedule(aiPreview.installments,{remaining:summary(current).unscheduled}).length>0&&<div className="cf-alert">{validateAISchedule(aiPreview.installments,{remaining:summary(current).unscheduled}).join(' | ')}</div>}
-   <button type="button" className="cf-primary" disabled={busy||aiBusy||validateAISchedule(aiPreview.installments,{remaining:summary(current).unscheduled}).length>0} onClick={approveAISchedule}>تأكيد وحفظ بنود الدفعات المعتمدة</button>
-   <button type="button" onClick={()=>setAiPreview(null)}>إلغاء التحليل</button>
-  </div>}
-
+    {canEdit&&current.contract_status==='active'&&<div className="cf-ai-import cf-ai-compact" id="finance-ai-contract-upload">
+ <div className="cf-ai-compact-heading"><strong>استخراج الدفعات من العقد بالذكاء الاصطناعي</strong><span>حد أقصى 10 دفعات · مراجعة قبل الحفظ</span></div>
+ <div className="cf-ai-compact-controls">
+  <select aria-label="العقد المرفق" value={aiDocumentId} onChange={e=>{setAiDocumentId(e.target.value);setAiContractFile(null)}}><option value="">اختر عقدًا محفوظًا</option>{contractFiles.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select>
+  <label className="cf-ai-file">أو رفع عقد<input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e=>{setAiContractFile(e.target.files?.[0]||null);setAiDocumentId('')}}/></label>
+  <button type="button" className="cf-primary" disabled={aiBusy||busy||(!aiDocumentId&&!aiContractFile)} onClick={extractFromContract}>{aiBusy?'جارٍ الاستخراج…':'استخراج الدفعات AI'}</button>
+ </div>
+ <p role="status" className={aiStatus.ready===false?'cf-ai-unavailable':'cf-ai-compact-status'}>{aiStatus.ready===false?'الاتصال غير مفعّل: ':''}{aiStatus.message}</p>
+ {aiPreview&&aiPreview.contract_id===selected&&<div className="cf-ai-review cf-ai-review-compact">
+  <div className="cf-ai-compact-heading"><strong>مراجعة الدفعات المستخرجة من 1 إلى 10</strong><span>تم استخراج {aiPreview.installments.length} دفعة · {Math.max(0,10-aiPreview.installments.length)} خانات غير مستخدمة</span></div>
+  {aiPreview.warnings?.length>0&&<div className="cf-alert">{aiPreview.warnings.map((w,i)=><p key={i}>{w}</p>)}</div>}
+  <div className="cf-table"><table className="cf-ai-payment-table"><thead><tr><th>رقم البند</th><th>اسم الدفعة</th><th>النسبة %</th><th>قبل الضريبة</th><th>الاستحقاق</th><th>التفاصيل</th></tr></thead><tbody>{Array.from({length:10},(_,i)=>{const p=aiPreview.installments[i];return <tr key={i}><td><b>{i+1}</b></td>{p?<><td><input aria-label={'اسم الدفعة '+(i+1)} value={p.title} onChange={e=>updateAISchedule(i,'title',e.target.value)}/></td><td><input aria-label={'نسبة الدفعة '+(i+1)} type="number" min="0" max="100" step=".01" value={p.payment_percent??''} onChange={e=>updateAISchedule(i,'payment_percent',e.target.value)}/></td><td><input aria-label={'قيمة الدفعة '+(i+1)} type="number" min=".01" step=".01" value={p.amount_ex_vat} onChange={e=>updateAISchedule(i,'amount_ex_vat',e.target.value)}/></td><td><input aria-label={'استحقاق الدفعة '+(i+1)} type="date" value={p.due_date||''} onChange={e=>updateAISchedule(i,'due_date',e.target.value)}/></td><td><details><summary>{p.items.length} بنود</summary><input aria-label={'وصف الاستحقاق '+(i+1)} value={p.description||''} onChange={e=>updateAISchedule(i,'description',e.target.value)} placeholder="وصف الاستحقاق"/>{p.source&&<small>المصدر: {p.source}</small>}{p.items.map((it,j)=><div className="cf-ai-mini-item" key={j}><input aria-label="رمز البند" value={it.item_code} onChange={e=>updateAIItem(i,j,'item_code',e.target.value)}/><input aria-label="وصف البند" value={it.description} onChange={e=>updateAIItem(i,j,'description',e.target.value)}/><input aria-label="الكمية" type="number" min=".001" step=".001" value={it.quantity} onChange={e=>updateAIItem(i,j,'quantity',e.target.value)}/><input aria-label="الوحدة" value={it.unit} onChange={e=>updateAIItem(i,j,'unit',e.target.value)}/><input aria-label="سعر الوحدة" type="number" min="0" step=".01" value={it.unit_price_ex_vat} onChange={e=>updateAIItem(i,j,'unit_price_ex_vat',e.target.value)}/></div>)}</details></td></>:<td colSpan={5} className="cf-ai-empty-slot">— لم تُستخرج دفعة لهذا الرقم —</td>}</tr>})}</tbody></table></div>
+  <div className="cf-ai-save-panel"><span>المجموع قبل الضريبة: <b>{money(aiPreview.installments.reduce((total,p)=>total+n(p.amount_ex_vat),0))} ر.س</b></span><button type="button" className="cf-primary" disabled={busy||aiBusy||validateAISchedule(aiPreview.installments,{remaining:summary(current).unscheduled}).length>0||items('installments').length+aiPreview.installments.length>10} onClick={approveAISchedule}>تأكيد وحفظ بنود الدفعات المعتمدة</button><button type="button" onClick={()=>setAiPreview(null)}>إلغاء</button></div>
+  {validateAISchedule(aiPreview.installments,{remaining:summary(current).unscheduled}).length>0&&<p className="cf-alert">{validateAISchedule(aiPreview.installments,{remaining:summary(current).unscheduled}).join(' | ')}</p>}
+ </div>}
+ {!aiPreview&&<div className="cf-ai-save-panel cf-ai-save-placeholder">ترقيم البنود من <b>1 إلى 10</b> يظهر تلقائيًا بعد الاستخراج، ثم يظهر زر <b>تأكيد وحفظ</b>.</div>}
+ </div>}
   {canEdit&&items('installments').length<10&&<form className="cf-form" onSubmit={addPay}><h4>إضافة دفعة تعاقدية (الحد الأعلى 10)</h4><label>اسم الدفعة<input required value={installment.title} onChange={e=>setInstallment({...installment,title:e.target.value})}/></label><label>تاريخ الاستحقاق<input required type="date" value={installment.due_date} onChange={e=>setInstallment({...installment,due_date:e.target.value})}/></label><label>نسبة الدفعة من العقد %<input type="number" min=".01" max="100" step=".01" placeholder="25" value={installment.payment_percent} onChange={e=>{const percent=e.target.value;setInstallment({...installment,payment_percent:percent,amount_ex_vat:percent===''?'':String(Math.round(summary(current).ex*Number(percent))/100)})}}/></label>
  <label>المبلغ قبل الضريبة (يُحسب من النسبة)<input required min="0.01" step=".01" type="number" readOnly={installment.payment_percent!==''} value={installment.amount_ex_vat} onChange={e=>setInstallment({...installment,amount_ex_vat:e.target.value})}/></label><label>نسبة إنجاز الدفعة %<input type="number" min="0" max="100" step=".01" value={installment.progress_percent} onChange={e=>setInstallment({...installment,progress_percent:e.target.value})}/></label><label className="cf-full">وصف الاستحقاق<input value={installment.description} onChange={e=>setInstallment({...installment,description:e.target.value})}/></label><button className="cf-primary" disabled={busy}>حفظ الدفعة</button></form>}
   {canEdit&&items('installments').length>0&&<form className="cf-form" onSubmit={addItem}><h4>تفاصيل بنود الدفعة / BOQ</h4>
