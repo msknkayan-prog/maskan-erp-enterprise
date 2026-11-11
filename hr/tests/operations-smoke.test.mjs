@@ -1154,3 +1154,12 @@ test('Compact AI review displays ten numbered placeholders filled by extracted i
  assert.ok(css.includes('.cf-ai-compact-controls'));
  assert.ok(css.includes('.cf-ai-payment-table'));
 });
+
+test('Each contract card has working edit and safe delete controls with explicit confirmations',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ for(const token of ['cf-contract-record-actions','تعديل العقد','حذف العقد','openEditContract(c)','archiveContract(c)','confirm(','res.deleted','contract_id:target.id'])assert.ok(ui.includes(token),token);
+ assert.match(css,/\.cf-contract-record-actions/);
+ assert.match(ui,/canArchive&&\['delete_contract','archive_contract','restore_contract'\]/);
+ assert.match(ui,/contract_id:currentRecord\.id/);
+});
