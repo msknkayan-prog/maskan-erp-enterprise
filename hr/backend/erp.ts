@@ -247,9 +247,14 @@ if(mod==='employees'&&data.project_id){
   const managerEmail=String(details.manager_email||'').trim().toLowerCase();
   if(managerEmail){
    const manager=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
-   data.manager=manager?.name||details.manager_name||'';
+   data.manager=manager?.name||details.manager_name||data.manager||'';
    data.manager_email=managerEmail;
-  }else{data.manager='';data.manager_email='';}
+  }else{
+   // The original employee roster is the authority for managers until an
+   // actual login is assigned. Never erase imported manager names on edit.
+   data.manager=details.manager_name||data.manager||'';
+   data.manager_email='';
+  }
  }
 }
 const transferringEmployee=mod==='employees'&&Boolean(old)&&old.company!==body.company;

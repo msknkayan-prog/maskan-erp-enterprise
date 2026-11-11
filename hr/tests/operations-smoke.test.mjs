@@ -776,3 +776,27 @@ test('HR directory choices expose only active project manager identities without
  assert.match(erp,/\['admin','hr','projects_director'\]\.includes\(u\.role\)/);
  assert.match(ui,/user\?\.role==='admin'\?'members':'project_manager_choices'/);
 });
+
+test('employee editing preserves project manager names even before a project login is provisioned',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(erp,/data\.manager=details\.manager_name\|\|data\.manager\|\|''/);
+ assert.match(erp,/data\.manager_email='';/);
+ assert.match(ui,/manager\?\.data\.name\|\|project\.data\.manager_name\|\|employee\?\.data\.manager/);
+});
+test('automatic refresh coalesces focus/visibility triggers and rejects out-of-order responses',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/refreshGeneration=useRef\(0\),lastBackgroundRefresh=useRef\(0\)/);
+ assert.match(ui,/const generation=\+\+refreshGeneration\.current/);
+ assert.match(ui,/if\(generation!==refreshGeneration\.current\)return/);
+ assert.match(ui,/now-lastBackgroundRefresh\.current<2500/);
+ assert.match(ui,/refreshGeneration\.current\+\+/);
+});
+test('request search uses indexed records and appointment fields offer searchable historic options',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/pendingRecordIndex=new Map\(rows\.map/);
+ assert.match(ui,/pendingRecordIndex\.get\(r\.data\?\.leave_id\)/);
+ assert.match(ui,/module==='appointments'&&\['direct_manager','work_location','work_hours','form_status','contract_type','probation'\]/);
+ assert.match(ui,/list=\{'appointment-options-'\+f\.key\}/);
+ assert.match(ui,/changes\.direct_manager=project\?\.data\.manager_name\|\|d\.manager/);
+});
