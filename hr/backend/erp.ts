@@ -21,6 +21,23 @@ export async function POST(req:Request){try{// Same-origin CSRF checks occur at 
 // Supabase edge routing rewrites req.url, so its origin is not the browser origin.
 // JWT, active session, and module/role permission checks remain mandatory.
 const u=await identity();const db=env.DB!;const raw=await req.text();if(raw.length>1000000)throw Error('الطلب كبير');const body=JSON.parse(raw);const now=new Date().toISOString();const mutation=crypto.randomUUID();
+if(body.action==='set_company_logo'){
+ if(u.role!=='admin')throw Error('403');
+ const recordId=String(body.record_id||'');
+ const fileId=String(body.file_id||'');
+ const record=await db.prepare("SELECT id,module,company,data,revision FROM records WHERE id=?").bind(recordId).first<any>();
+ if(!record||record.module!=='company_profiles')throw Error('هوية الشركة غير موجودة');
+ if(record.revision!==Number(body.revision))throw Error('تغير سجل هوية الشركة؛ أعد فتحه');
+ const file=await db.prepare('SELECT id,record_id,mime,size FROM files WHERE id=?').bind(fileId).first<any>();
+ if(!file||file.record_id!==recordId||!['image/png','image/jpeg','image/webp'].includes(file.mime)||file.size>1024*1024)throw Error('شعار غير صالح، ارفع PNG أو JPG أو WebP بحجم لا يزيد على 1 ميجابايت');
+ const details={...JSON.parse(record.data),logo_file_id:fileId};
+ const result=await db.batch([
+  db.prepare('UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=?').bind(JSON.stringify(details),now,mutation,recordId,record.revision),
+  db.prepare('INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),u.email,recordId,'company_logo_updated',now,JSON.stringify({company:record.company,file_id:fileId}))
+ ]);
+ if(!result[0].meta.changes)throw Error('تغير السجل؛ أعد المحاولة');
+ return json({ok:true});
+}
 if(body.action==='generate_temporary_password'){
  if(u.role!=='admin')throw Error('403');
  const email=String(body.email||'').trim().toLowerCase();
