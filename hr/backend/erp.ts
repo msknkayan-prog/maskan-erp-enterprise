@@ -196,7 +196,10 @@ if(mod==='employees'&&['archive_employee','restore_employee'].includes(body.acti
 if(['payroll','payroll_batches'].includes(mod))throw Error('إنشاء وتعديل مسيرات الرواتب الشهرية يتم حصريًا من نافذة المسير الشهري');
 if(!permittedWrite(u,mod)||!permission(u,mod,'edit'))throw Error('403');if(old&&old.status!=='draft'&&mod!=='employees')throw Error('التعديل متاح للمسودات فقط');if(mod==='employees'&&old&&JSON.parse(old.data)._archived)throw Error('يجب استعادة الموظف من الأرشيف قبل تعديل بياناته');const previous=old?JSON.parse(old.data):null;
 if(mod==='employees'&&!old)body.data={...(body.data||{}),code:'AUTO'};
+if(mod==='projects'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 const data={...(previous||{}),...normalize(mod,body)};
+if(mod==='projects'&&old)data.code=String(previous.code||old.code||'');
+
 if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previous.salary??previous.total_monthly_salary)===Number(data.salary))for(const key of ['basic','housing','transport'])if(previous[key]!==undefined)data[key]=previous[key];if(mod==='employees'){data._review_flags=[...(!data.hire_date?['تاريخ التعيين يحتاج استكمال']:[]),...(data.company==='غير محددة'?['الشركة تحتاج مراجعة']:[])];}if(mod==='warnings'&&data.warning_type!=='notice'&&!Number(data.sequence)){data.sequence=({first:1,second:2,final:3} as any)[data.warning_type];}if(!visible(u,{module:mod,company:body.company,data},(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(mod==='projects'&&String(data.manager_email||'').trim()){
  const managerEmail=String(data.manager_email).trim().toLowerCase();
  const manager=await db.prepare('SELECT role,is_active,companies FROM members WHERE email=?').bind(managerEmail).first<any>();
@@ -298,6 +301,11 @@ if(salaryFieldsChanged){
   synchronizedMonths.push(d.month||JSON.parse(batch.data||'{}').month||'');
  }
  data._last_salary_change={at:now,by:u.email,from_basic:previous?.basic,to_basic:data.basic,from_salary:previous?.salary,to_salary:data.salary,synchronized_payroll_months:synchronizedMonths};
+}
+if(mod==='projects'&&!old){
+ const serial=await db.prepare("SELECT nextval('hr.project_code_seq')::text AS code").first<any>();
+ if(!serial?.code||!/^\\d{4,8}$/.test(String(serial.code)))throw Error('تعذر توليد رمز تسلسلي للمشروع');
+ data.code=String(serial.code);
 }
 const code=mod==='warnings'&&data.warning_type!=='notice'?data.employee_id+':'+data.sequence:['returns','leave_dues'].includes(mod)?data.leave_id:mod==='company_profiles'?body.company:mod==='payroll'?`${data.employee_id}:${data.month}`:data.code||null;
 const employeeInsertSql=[
