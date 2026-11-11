@@ -2,6 +2,7 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
 import {companyLogoPath,companyOfficialName} from '../lib/company-brand.mjs';
+import {buildContractsXlsx,parseContractsXlsx,exportContractRows} from '../lib/client-contracts-xlsx.mjs';
 const kinds=['سباكة وكهرباء','تشطيبات عامة','أعمال عظم','أعمال تكييف','أعمال دفاع مدني'];
 const n=x=>Number(x||0);
 const money=x=>n(x).toLocaleString('ar-SA',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -19,6 +20,7 @@ export default function ClientFinance({user,company,profiles,companyList,project
  const [tab,setTab]=useState('installments'),[installment,setInstallment]=useState(p0),[item,setItem]=useState(item0),[adjustment,setAdjustment]=useState(a0),[receipt,setReceipt]=useState(r0);
  const [contractEditOpen,setContractEditOpen]=useState(false),[editContract,setEditContract]=useState(blank),[approvalEdit,setApprovalEdit]=useState(null);
  const [search,setSearch]=useState('');
+ const [importPreview,setImportPreview]=useState(null),[importOpen,setImportOpen]=useState(false);
  const privileges=(()=>{try{return typeof user?.permissions==='string'?JSON.parse(user.permissions||'{}'):user?.permissions||{}}catch{return {}}})();
  const canEdit=user?.role==='admin'||(user?.role==='finance'&&privileges['client_finance:edit']!==false)||privileges['client_finance:edit']===true;
  const canApprove=user?.role==='admin'||user?.role==='projects_director'||privileges['client_finance:approve']===true;
@@ -59,6 +61,33 @@ export default function ClientFinance({user,company,profiles,companyList,project
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':file.type},body:file});
   const j=await r.json();if(!r.ok)throw Error(j.error||'تعذر الإرفاق');setNotice('تم رفع المستند وربطه بالعقد');await reload();}
   catch(err){setError(err.message)}finally{setBusy(false);e.target.value=''}
+ };
+ const downloadExcel=(filename,values)=>{
+  const xlsx=buildContractsXlsx(values);
+  const url=URL.createObjectURL(new Blob([xlsx],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  const a=document.createElement('a');a.href=url;a.download=filename;a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ };
+ const exportAllContracts=()=>downloadExcel('عقود_العملاء_'+today()+'.xlsx',exportContractRows(contracts,summary));
+ const downloadTemplate=()=>downloadExcel('قالب_استيراد_عقود_العملاء.xlsx',[]);
+ const handleImportFile=async(e)=>{
+  const file=e.target.files?.[0];if(!file)return;
+  setError('');setNotice('');
+  try{
+   if(!/\\.xlsx$/i.test(file.name))throw Error('يُقبل ملف XLSX فقط');
+   const parsed=parseContractsXlsx(new Uint8Array(await file.arrayBuffer()));
+   const scopeSet=new Set(userCompanies);
+   for(const row of parsed.rows)if(!scopeSet.has(row.company))parsed.errors.push('السطر '+row.line+': الشركة خارج صلاحيات المستخدم');
+   const already=new Set(data.contracts.map(c=>c.company+'::'+c.contract_no));
+   for(const row of parsed.rows)if(already.has(row.company+'::'+row.contract_no))parsed.errors.push('السطر '+row.line+': رقم العقد مسجل مسبقًا');
+   setImportPreview({...parsed,filename:file.name});
+  }catch(err){setImportPreview(null);setError(err.message);}
+  e.target.value='';
+ };
+ const saveBulk=async()=>{
+  if(!importPreview?.rows.length||importPreview.errors.length)return;
+  const r=await execute({action:'bulk_import_contracts',contracts:importPreview.rows},'اكتمل استيراد '+importPreview.rows.length+' عقد بنجاح');
+  if(r){setImportPreview(null);setImportOpen(false);}
  };
  const printDoc=(kind,cl)=>{
   if(!current)return;
@@ -103,13 +132,18 @@ export default function ClientFinance({user,company,profiles,companyList,project
   const w=window.open('','_blank');if(!w){setError('اسمح بالنوافذ المنبثقة للطباعة');return;}w.document.write(html);w.document.close();
  };
  return <section className="client-finance" dir="rtl">
-  <div className="cf-title"><div><span className="cf-kicker">إدارة العقود والذمم المدينة</span><h2>المطالبات المالية واستحقاقات العملاء</h2><p>سجل مستقل لكل شركة، مع احتساب ضريبة القيمة المضافة والمستحقات تلقائيًا</p></div>{canEdit&&<button className="cf-primary" onClick={()=>{setContract({...blank,company:company||userCompanies?.[0]||''});setNewOpen(true)}}>+ عقد عميل جديد</button>}</div>
+  <div className="cf-title"><div><span className="cf-kicker">إدارة العقود والذمم المدينة</span><h2>المطالبات المالية واستحقاقات العملاء</h2><p>سجل مستقل لكل شركة، مع احتساب ضريبة القيمة المضافة والمستحقات تلقائيًا</p></div><div className="cf-actions" style={{display:'flex',flexWrap:'wrap',gap:8}}>
+  <button type="button" onClick={downloadTemplate}>تنزيل قالب Excel</button>
+  <button type="button" onClick={exportAllContracts}>Export Excel — تصدير العقود</button>
+  {canEdit&&<button type="button" onClick={()=>setImportOpen(true)}>Load Excel — استيراد العقود</button>}
+  {canEdit&&<button className="cf-primary" onClick={()=>{setContract({...blank,company:company||userCompanies?.[0]||''});setNewOpen(true)}}>+ عقد عميل جديد</button>}
+ </div></div>
   {error&&<div className="cf-alert">{error}<button onClick={()=>setError('')}>إغلاق</button></div>}{notice&&<div className="cf-ok">{notice}</div>}
   <div className="cf-brief"><div><small>إجمالي المستحق من العملاء</small><strong>{money(totalReceivable)} ر.س</strong></div><div><small>مطالبات جاهزة للإصدار</small><strong>{pendingClaims.length}</strong></div><div><small>دفعات متأخرة دون إصدار</small><strong>{overdue.length}</strong></div><div><small>مستخدم إصدار المطالبات</small><strong>{user?.email||'—'}</strong></div></div>
   <div className="cf-controls"><label>البحث في العقود<input type="search" placeholder="اسم العميل أو المشروع أو رقم العقد" value={search} onChange={e=>setSearch(e.target.value)}/></label><button onClick={reload} disabled={loading}>تحديث المستحقات</button><span>{contracts.length} عقد</span></div>
   {loading&&<p>جارٍ تحميل بيانات العملاء والعقود…</p>}
-  <div className="cf-layout"><div className="cf-contracts">{contracts.map(c=>{const b=summary(c);return <button key={c.id} className={'cf-contract '+(selected===c.id?'selected':'')} onClick={()=>{setSelected(c.id);setTab('installments')}}><strong>{c.project_name}</strong><small>{c.company} · {c.customer}</small><small>العقد {c.contract_no} · {c.project_manager}</small><span>المتبقي: <b>{money(b.remaining)} ر.س</b></span></button>})}{!loading&&!contracts.length&&<div className="cf-empty">لا توجد عقود ضمن نطاق الشركة المحددة. يمكنك إضافة عقد جديد.</div>}</div>
-  <div className="cf-detail">{current?<><div className="cf-head"><div><h3>{current.project_name}</h3><p>{current.customer} | {current.contract_no} | {current.contract_type}</p><p>مدير المشروع: <b>{current.project_manager}</b> · من {current.start_date} إلى {current.end_date}</p><p>الموقع: {current.site_location||'غير محدد'} · هاتف العميل: {current.customer_phone||'—'}</p><p>بريد العميل: {current.customer_email||'—'} · الرقم الضريبي: {current.customer_vat_no||'—'}</p></div><div className="cf-actions">{canEdit&&<button onClick={()=>{setEditContract({...current,vat_rate:String(n(current.vat_rate)*100)});setContractEditOpen(true)}}>تعديل بيانات العقد</button>}<button onClick={()=>printDoc('certificate',null)}>طباعة ملخص العقد</button></div></div>
+  <div className="cf-layout"><div className="cf-contracts">{contracts.map(c=>{const b=summary(c);return <button key={c.id} className={'cf-contract '+(selected===c.id?'selected':'')} onClick={()=>{setSelected(c.id);setTab('installments')}}><strong>{c.project_name}</strong><small>{c.company} · {c.customer}</small><small><b>رقم العقد: {c.contract_no}</b> · {c.project_manager}</small><span>المتبقي: <b>{money(b.remaining)} ر.س</b></span></button>})}{!loading&&!contracts.length&&<div className="cf-empty">لا توجد عقود ضمن نطاق الشركة المحددة. يمكنك إضافة عقد جديد.</div>}</div>
+  <div className="cf-detail">{current?<><div className="cf-head"><div><h3>{current.project_name}</h3><p>{current.customer} | <strong>رقم العقد: {current.contract_no}</strong> | {current.contract_type}</p><p>مدير المشروع: <b>{current.project_manager}</b> · من {current.start_date} إلى {current.end_date}</p><p>الموقع: {current.site_location||'غير محدد'} · هاتف العميل: {current.customer_phone||'—'}</p><p>بريد العميل: {current.customer_email||'—'} · الرقم الضريبي: {current.customer_vat_no||'—'}</p></div><div className="cf-actions">{canEdit&&<button onClick={()=>{setEditContract({...current,vat_rate:String(n(current.vat_rate)*100)});setContractEditOpen(true)}}>تعديل بيانات العقد</button>}<button onClick={()=>printDoc('certificate',null)}>طباعة ملخص العقد</button></div></div>
   <div className="cf-stat-grid">{[['قيمة العقد قبل الضريبة',summary(current).ex],['ضريبة القيمة المضافة',summary(current).vat],['العقد شامل الضريبة',summary(current).all],['المدفوع من العملاء',summary(current).paid],['المتبقي شامل الضريبة',summary(current).remaining],['نسبة حجز الضمان',n(current.retention_percent)]].map(([label,value])=><div key={label}><small>{label}</small><strong>{money(value)}</strong><small>ريال سعودي</small></div>)}</div>
   <div className="cf-tabs">{[['installments','بنود الدفعات'],['claims','المطالبات والمستخلصات'],['receipts','الدفعات المستلمة'],['adjustments','الأعمال الإضافية والخصومات'],['documents','العقد والمرفقات']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>setTab(k)}>{t}</button>)}</div>
   {tab==='installments'&&<><p>جدول الاستحقاقات — المتبقي لتوزيع الدفعات قبل الضريبة: <b>{money(summary(current).unscheduled)} ر.س</b></p><div className="cf-table"><table><thead><tr><th>الدفعة والبنود</th><th>تاريخ الاستحقاق</th><th>نسبة الإنجاز</th><th>قبل الضريبة</th><th>شامل الضريبة</th><th>توزيع البنود</th></tr></thead><tbody>{items('installments').map(x=><tr key={x.id}><td><strong>{x.title}</strong><small>{x.description}</small>{data.installment_items.filter(i=>i.installment_id===x.id).map(i=><small key={i.id}>• {i.item_code}: {i.description} · {i.quantity} {i.unit} × {money(i.unit_price_ex_vat)} = {money(i.amount_ex_vat)} ر.س</small>)}</td><td>{x.due_date}</td><td>{n(x.progress_percent).toFixed(2)}%</td><td>{money(x.amount_ex_vat)}</td><td>{money(n(x.amount_ex_vat)*(1+n(current.vat_rate)))}</td><td>{money(n(x.amount_ex_vat)-sum(data.installment_items.filter(i=>i.installment_id===x.id).map(i=>i.amount_ex_vat)))} ر.س غير موزعة</td></tr>)}</tbody></table></div>{canEdit&&<form className="cf-form" onSubmit={addPay}><h4>إضافة دفعة تعاقدية</h4><label>اسم الدفعة<input required value={installment.title} onChange={e=>setInstallment({...installment,title:e.target.value})}/></label><label>تاريخ الاستحقاق<input required type="date" value={installment.due_date} onChange={e=>setInstallment({...installment,due_date:e.target.value})}/></label><label>المبلغ قبل الضريبة<input required min="0.01" step=".01" type="number" value={installment.amount_ex_vat} onChange={e=>setInstallment({...installment,amount_ex_vat:e.target.value})}/></label><label>نسبة إنجاز الدفعة %<input type="number" min="0" max="100" step=".01" value={installment.progress_percent} onChange={e=>setInstallment({...installment,progress_percent:e.target.value})}/></label><label className="cf-full">وصف الاستحقاق<input value={installment.description} onChange={e=>setInstallment({...installment,description:e.target.value})}/></label><button className="cf-primary" disabled={busy}>حفظ الدفعة</button></form>}
@@ -128,6 +162,20 @@ export default function ClientFinance({user,company,profiles,companyList,project
   {tab==='adjustments'&&<><div className="cf-table"><table><thead><tr><th>البند</th><th>البيان</th><th>المبلغ قبل الضريبة</th><th>الاعتماد</th></tr></thead><tbody>{items('adjustments').map(x=><tr key={x.id}><td>{x.kind==='extra'?'أعمال إضافية':'خصم من العقد'}</td><td>{x.description}</td><td>{money(x.amount_ex_vat)}</td><td>{x.approved_at||'غير معتمد'}{!x.approved_at&&canApprove&&<button disabled={busy} onClick={()=>execute({action:'approve_adjustment',contract_id:selected,adjustment_id:x.id},'تم اعتماد ملحق العقد')}>اعتماد الملحق</button>}</td></tr>)}</tbody></table></div>{canEdit&&<form className="cf-form" onSubmit={addAdjust}><h4>إضافة ملحق العقد / خصم</h4><label>نوع الحركة<select value={adjustment.kind} onChange={e=>setAdjustment({...adjustment,kind:e.target.value})}><option value="extra">أعمال إضافية</option><option value="deduction">خصم من العقد</option></select></label><label>المبلغ قبل الضريبة<input required type="number" min=".01" step=".01" value={adjustment.amount_ex_vat} onChange={e=>setAdjustment({...adjustment,amount_ex_vat:e.target.value})}/></label><label>تاريخ اعتماد الملحق<input type="date" value={adjustment.approved_at} onChange={e=>setAdjustment({...adjustment,approved_at:e.target.value})}/></label><label className="cf-full">وصف الأعمال<input required value={adjustment.description} onChange={e=>setAdjustment({...adjustment,description:e.target.value})}/></label><button className="cf-primary" disabled={busy}>حفظ الملحق</button></form>}</>}
   {tab==='documents'&&<><p>يمكن إرفاق العقد الأصلي أو ملاحقه بصيغة PDF أو JPG/PNG (بحد أقصى 8 ميجابايت).</p>{canEdit&&<label className="cf-upload">رفع العقد أو الملحق<input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={upload} disabled={busy}/></label>}<div className="cf-table"><table><thead><tr><th>اسم الملف</th><th>تاريخ الرفع</th><th>بواسطة</th><th>المرفق</th></tr></thead><tbody>{items('documents').map(x=><tr key={x.id}><td>{x.name}</td><td>{String(x.created_at).slice(0,10)}</td><td>{x.uploaded_by}</td><td><a href={'/api/client-finance?download='+encodeURIComponent(x.id)} target="_blank">فتح / تنزيل</a></td></tr>)}</tbody></table></div></>}
  </>:<div className="cf-empty">اختر عقدًا لعرض الاستحقاقات والدفعات والمطالبات والمرفقات.</div>}</div></div>
+ {importOpen&&<div className="cf-overlay" role="presentation"><div className="cf-modal" role="dialog" aria-modal="true" aria-label="استيراد عقود العملاء من Excel">
+ <div className="cf-head"><h3>استيراد عقود العملاء دفعة واحدة — Load Excel</h3><button onClick={()=>{setImportOpen(false);setImportPreview(null)}}>إغلاق</button></div>
+ <p>حمّل القالب الرسمي، واملأ بيانات العقود ثم اختر الملف XLSX. الحد الأقصى <b>500 عقد</b> لكل عملية. سيتم فحص رقم العقد والشركة وجميع البيانات قبل الحفظ. لن تُستبدل العقود الموجودة أو تُحذف.</p>
+ <div className="cf-actions" style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:14}}>
+  <button type="button" onClick={downloadTemplate}>تحميل القالب الفارغ</button>
+  <label className="cf-upload">اختيار ملف Excel<input type="file" accept=".xlsx" onChange={handleImportFile}/></label>
+ </div>
+ {importPreview&&<><div className="cf-brief"><div><small>اسم الملف</small><strong>{importPreview.filename}</strong></div><div><small>عدد العقود</small><strong>{importPreview.rows.length}</strong></div><div><small>أخطاء الفحص</small><strong>{importPreview.errors.length}</strong></div></div>
+ {importPreview.errors.length>0&&<div className="cf-alert"><b>تعذر الاستيراد؛ يجب تصحيح الأخطاء أولًا:</b><ul>{importPreview.errors.slice(0,30).map((e,i)=><li key={i}>{e}</li>)}</ul>{importPreview.errors.length>30&&<p>يوجد أخطاء إضافية في الملف.</p>}</div>}
+ <div className="cf-table"><table><thead><tr><th>السطر</th><th>الشركة</th><th>رقم العقد</th><th>العميل</th><th>المشروع</th><th>قبل الضريبة</th></tr></thead><tbody>{importPreview.rows.slice(0,15).map((r,i)=><tr key={i}><td>{r.line}</td><td>{r.company}</td><td>{r.contract_no}</td><td>{r.customer}</td><td>{r.project_name}</td><td>{money(r.base_ex_vat)}</td></tr>)}</tbody></table></div>
+ <p>المعاينة تعرض أول 15 عقدًا فقط. الاستيراد يُنفذ كعملية واحدة؛ إذا فشل أي عقد فلن يتم إدخال أي من عقود الملف.</p>
+ <button className="cf-primary" type="button" disabled={busy||!importPreview.rows.length||importPreview.errors.length>0} onClick={saveBulk}>اعتماد استيراد {importPreview.rows.length} عقد دفعة واحدة</button>
+ </>}
+ </div></div>}
  {contractEditOpen&&current&&<div className="cf-overlay" role="presentation"><div className="cf-modal" role="dialog" aria-modal="true" aria-label="تعديل بيانات العقد">
   <div className="cf-head"><h3>تعديل بيانات العقد — {current.contract_no}</h3><button onClick={()=>setContractEditOpen(false)}>إغلاق</button></div>
   <p>يمكن تغيير بيانات العميل والمشروع. تُقفل القيمة الأساسية ونسبة الضريبة بعد إدخال الدفعات حفاظًا على سلامة المطالبات، وتُستخدم الملاحق لتعديل القيمة.</p>
