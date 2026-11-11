@@ -34,6 +34,14 @@ const allData=async(db,u)=>{
 export async function GET(req){
  try{const u=await identity();if(!allowed(u))throw Error('ليس لديك صلاحية عرض المطالبات');const db=env.DB;
  const p=new URL(req.url).searchParams;
+ if(p.get('ai_document')){
+  if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية استخراج الدفعات');
+  const doc=await db.prepare('SELECT id,contract_id,name,mime,size,document_type FROM client_documents WHERE id=?').bind(p.get('ai_document')).first();
+  if(!doc||doc.contract_id!==p.get('contract_id')||!['contract','contract_appendix'].includes(doc.document_type))throw Error('يجب تحديد عقد مرفق صحيح');
+  const c=await row(db,doc.contract_id,u);
+  const imported=await db.prepare('SELECT id FROM client_ai_imports WHERE document_id=?').bind(doc.id).first();
+  return json({document:doc,contract:{id:c.id,contract_no:c.contract_no,base_ex_vat:c.base_ex_vat,vat_rate:c.vat_rate,start_date:c.start_date,end_date:c.end_date},already_imported:!!imported});
+ }
  if(p.get('download')){const doc=await db.prepare('SELECT * FROM client_documents WHERE id=?').bind(p.get('download')).first();if(!doc)throw Error('المرفق غير موجود');await row(db,doc.contract_id,u);const blob=await env.BUCKET.get(doc.blob_key);if(!blob)throw Error('ملف المرفق غير موجود');return new Response(blob.body,{headers:{'Content-Type':doc.mime,'Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(doc.name),'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});}
  // Cron provides truly automatic generation; this call also reconciles any missed runs.
  await db.prepare('SELECT auto_generate_client_claims()').first();
