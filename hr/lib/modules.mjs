@@ -56,7 +56,7 @@ export const enumOptions={sponsorship:[['yes','على الكفالة'],['no','خ
 export const specialLeaveDays=Object.freeze({bereavement:5,wife_childbirth:60,marriage:5,newborn:3});
 export const fixedLeaveDays=type=>specialLeaveDays[type]||null;
 export function leaveEndDate(start,days){
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(start||''))||!Number.isInteger(Number(days))||Number(days)<1)return '';
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(String(start||''))||!Number.isInteger(Number(days))||Number(days)<1)return '';
  const date=new Date(start+'T00:00:00Z');if(Number.isNaN(date.getTime())||date.toISOString().slice(0,10)!==start)return '';
  date.setUTCDate(date.getUTCDate()+Number(days)-1);return date.toISOString().slice(0,10);
 }
