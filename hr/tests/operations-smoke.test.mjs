@@ -1019,3 +1019,13 @@ test('finance navigation header uses the approved gold background and revised Ar
  assert.match(css,/\.app aside \.nav-label\.nav-label-finance/);
  assert.match(css,/linear-gradient\(135deg,#a77f27,#d7bb62\)/);
 });
+
+test('contract duration, signed date, record printing and categorized attachments are linked',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ for(const term of ['projectDuration','durationLabel','تاريخ توقيع العقد','مدة تنفيذ المشروع','printFinanceRegister','طباعة جدول الدفعات','طباعة الملحق','طباعة سند الدفعة','طباعة سجل المرفقات','إرفاق العقد الأصلي','مرفق الخصم','documentLink.document_type'])assert.ok(ui.includes(term),term);
+ assert.match(api,/documentType/);
+ assert.match(api,/adjustment_id,claim_id,receipt_id/);
+ assert.match(api,/b\.signed_date\|\|c\.signed_date/);
+ assert.match(api,/client_documents\(id,contract_id,name,mime,size,blob_key,uploaded_by,document_type,adjustment_id,claim_id,receipt_id\)/);
+});
