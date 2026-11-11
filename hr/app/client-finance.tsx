@@ -107,6 +107,44 @@ const register=async e=>{e.preventDefault();const result=await execute({action:'
   const r=await execute({action:'bulk_import_contracts',contracts:importPreview.rows},'اكتمل استيراد '+importPreview.rows.length+' عقد بنجاح');
   if(r){setImportPreview(null);setImportOpen(false);}
  };
+ const printFinanceRegister=(kind,entry=null)=>{
+  if(!current)return;
+  const corporate=profiles.find(x=>x.module==='company_profiles'&&x.company===current.company)?.data||{};
+  const logo=companyLogoPath(current.company,profiles);
+  const labels={contract:'سجل العقد وبيانات المشروع',installments:'جدول الدفعات وبنودها',adjustments:'سجل الأعمال الإضافية والخصومات',receipts:'سجل الدفعات المستلمة',documents:'سجل مرفقات العقود',claims:'كشف المطالبات المالية'};
+  const rowsByType={
+   contract:[['رقم العقد',current.contract_no],['اسم العميل',current.customer],['اسم المشروع',current.project_name],['نوع العقد',current.contract_type],['مدير المشروع',current.project_manager],['تاريخ توقيع العقد',current.signed_date],['بداية المشروع',current.start_date],['نهاية المشروع',current.end_date],['مدة تنفيذ المشروع',durationLabel(current.start_date,current.end_date)],['قيمة العقد قبل الضريبة',money(summary(current).ex)+' ر.س'],['قيمة العقد شامل الضريبة',money(summary(current).all)+' ر.س'],['المدفوع شامل الضريبة',money(summary(current).paid)+' ر.س'],['المتبقي شامل الضريبة',money(summary(current).remaining)+' ر.س']],
+   installments:items('installments').map(x=>[x.title,x.due_date+' | إنجاز '+n(x.progress_percent)+'% | '+money(x.amount_ex_vat)+' ر.س قبل الضريبة']),
+   adjustments:items('adjustments').map(x=>[x.kind==='deduction'?'خصم: '+x.description:'أعمال إضافية: '+x.description,money(x.amount_ex_vat)+' ر.س | '+(x.approved_at?'اعتمد بتاريخ '+x.approved_at:'قيد الاعتماد')]),
+   receipts:items('receipts').map(x=>[x.paid_at+' | '+x.reference,money(x.amount_inc_vat)+' ر.س | '+x.method]),
+   documents:items('documents').map(x=>[documentLabels[x.document_type]||'مرفق عام',x.name+' | '+String(x.created_at||'').slice(0,10)]),
+   claims:items('claims').map(x=>[x.claim_no,x.submitted_at||x.raised_at||'—'+' | '+money(x.amount_inc_vat)+' ر.س'])
+  };
+  let rows=entry?
+   kind==='installments'?[['الدفعة',entry.title],['تاريخ الاستحقاق',entry.due_date],['نسبة الإنجاز',n(entry.progress_percent)+'%'],['القيمة قبل الضريبة',money(entry.amount_ex_vat)+' ر.س'],...data.installment_items.filter(x=>x.installment_id===entry.id).map(x=>['بند '+x.item_code,x.description+' | '+x.quantity+' '+x.unit+' × '+money(x.unit_price_ex_vat)])]:
+   kind==='adjustments'?[['نوع الملحق',entry.kind==='deduction'?'خصم من العقد':'أعمال إضافية'],['الوصف',entry.description],['القيمة قبل الضريبة',money(entry.amount_ex_vat)+' ر.س'],['تاريخ الاعتماد',entry.approved_at||'غير معتمد']]:
+   kind==='receipts'?[['تاريخ استلام الدفعة',entry.paid_at],['المبلغ شامل الضريبة',money(entry.amount_inc_vat)+' ر.س'],['طريقة الاستلام',entry.method],['مرجع العملية',entry.reference]]:
+   kind==='documents'?[['نوع المستند',documentLabels[entry.document_type]||'مرفق'],['اسم الملف',entry.name],['تاريخ الرفع',String(entry.created_at||'').slice(0,10)],['رفع بواسطة',entry.uploaded_by]]:(rowsByType[kind]||[]):(rowsByType[kind]||[]);
+  const name=labels[kind]||'سجل مالي';
+  const brand=companyOfficialName(current.company,profiles);
+  const image=logo?'<img alt="شعار الشركة" src="'+esc(new URL(logo,location.origin).href)+'"/>':'';
+  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(name)} - ${esc(current.contract_no)}</title><style>
+   @page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}body{font:12px Tahoma,Arial,sans-serif;color:#20231e}
+   header{display:grid;grid-template-columns:1.4fr 105px 1fr;gap:10px;align-items:center;padding:12px 0;border-top:1px solid #d7c99f}
+   header img{width:100px;height:80px;object-fit:contain}header .brand{text-align:center;border-bottom:2px solid #c4a558;padding:12px 0;font-weight:bold;font-size:16px}header .license{text-align:center;border-bottom:2px solid #c4a558;padding:12px 0}
+   h1{text-align:center;margin:15px 0;font-size:20px}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{border:1px solid #343434;padding:11px 9px;text-align:right;overflow-wrap:anywhere}thead th,.heading{background:#151515;color:#e0bb62;font-weight:bold;-webkit-print-color-adjust:exact;print-color-adjust:exact}tbody tr:nth-child(even){background:#f8f4e9}th:first-child{width:37%}
+   .meta{border:1px solid #c7ae72;padding:10px;margin:12px 0;display:flex;justify-content:space-between;gap:15px}
+   .sign{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid #444}.sign>div{padding:12px;border-left:1px solid #444;min-height:110px}.sign>div:last-child{border-left:0}.sign p{margin-top:25px;border-bottom:1px dotted #aaa}
+   footer{margin-top:15px;border-top:3px solid #b99b53;padding:10px;text-align:center;font-size:10px}
+   button{background:#b89449;padding:9px 15px;border:0;margin-top:15px;cursor:pointer}@media print{button{display:none}tr,.sign{break-inside:avoid}}
+   </style></head><body><header><div class="brand">${esc(brand)}</div>${image}<div class="license">السجل التجاري: ${esc(corporate.commercial_registration||'—')}</div></header>
+   <h1>${esc(name)}</h1><div class="meta"><span>العميل: ${esc(current.customer)}</span><span>المشروع: ${esc(current.project_name)}</span><span>رقم العقد: ${esc(current.contract_no)}</span></div>
+   <table><thead><tr><th>البيان / Description</th><th>القيمة / Details</th></tr></thead><tbody>${rows.length?rows.map(([label,value])=>'<tr><th>'+esc(label)+'</th><td>'+esc(value)+'</td></tr>').join(''):'<tr><td colspan="2">لا توجد سجلات مدخلة</td></tr>'}</tbody></table>
+   <h3 class="heading" style="text-align:center;padding:9px;margin:22px 0 0">الاعتماد والتوقيع / APPROVAL & SIGNATURE</h3>
+   <div class="sign"><div><b>الإعداد</b><p>الاسم:</p><p>التوقيع:</p></div><div><b>مدير المشروع</b><p>${esc(current.project_manager)}</p><p>التوقيع:</p></div><div><b>المراجعة المالية / العميل</b><p>الاسم:</p><p>التوقيع:</p></div></div>
+   <footer>${esc(brand)} | ${esc(corporate.phone||corporate.mobile||'')} | ${esc(corporate.email||'')} | طباعة ${esc(today())}</footer><button onclick="window.print()">طباعة / حفظ PDF</button></body></html>`;
+  const win=window.open('','_blank');if(!win){setError('يرجى السماح بفتح نافذة الطباعة');return;}win.document.write(html);win.document.close();
+ };
  const printDoc=(kind,cl)=>{
   if(!current)return;
   const amount=cl?n(cl.amount_ex_vat):summary(current).ex,vat=cl?n(cl.vat_amount):summary(current).vat,gross=amount+vat;
