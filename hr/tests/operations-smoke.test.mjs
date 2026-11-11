@@ -934,3 +934,22 @@ test('client finance contracts cover customer, project dates, installments and t
  assert.match(api,/INSERT INTO client_documents/);
  assert.doesNotMatch(api,/localStorage/);
 });
+
+test('financial receivables complete flow: customer details, BOQ, VAT, signatures, access controls',()=>{
+ const finance=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const edge=readFileSync(new URL('../backend/index.ts',import.meta.url),'utf8');
+ for(const label of ['رقم العميل الضريبي','هاتف العميل','موقع المشروع','نسبة حجز الضمان','مدير المشروع','بداية المشروع','نهاية المشروع','بنود الدفعة','تاريخ اعتماد العميل','تاريخ استلام الدفعة','تاريخ رفع المطالبة','المستخلص PDF','قيمة العقد شامل الضريبة'])assert.ok(finance.includes(label),label);
+ for(const field of ['customer_vat_no','customer_email','customer_phone','site_location','retention_percent','contract_status','client_reference','contract_subject'])assert.ok(backend.includes(field),field);
+ for(const action of ['create_contract','update_contract','add_installment','add_installment_item','add_adjustment','approve_adjustment','issue_claim','record_claim_client_approval','add_receipt'])assert.ok(backend.includes("action==='"+action+"'"),action);
+ assert.match(finance,/companyLogoPath\(current\.company,profiles\)/);
+ assert.match(finance,/itemized/);
+ assert.match(ui,/financeModules\.map\(k=>/);
+ assert.match(ui,/financePermissions/);
+ assert.match(edge,/'client-finance':clientFinance/);
+ assert.match(backend,/checkCompany\(u,c\.company\)/);
+ assert.match(backend,/client_finance:view/);
+ assert.match(backend,/client_finance:edit/);
+ assert.match(backend,/client_finance:approve/);
+});
