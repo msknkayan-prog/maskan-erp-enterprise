@@ -72,7 +72,7 @@ export default function ClientFinance({user,company,profiles,companyList,project
 };
 const analyzeContractAI=async(documentId,contractId)=>{
  setAiBusy(true);setError('');setAiPreview(null);
- try{const r=await fetch('/api/client-contract-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contract_id:contractId,document_id:documentId})});const j=await r.json();if(!r.ok)throw Error(j.error||'فشل تحليل العقد');setAiPreview({...j,installments:j.installments.map(p=>({...p,amount_ex_vat:p.payment_percent!==''&&p.payment_percent!==null&&p.payment_percent!==undefined?Math.round(summary(data.contracts.find(c=>c.id===contractId)||current).ex*Number(p.payment_percent))/100:p.amount_ex_vat}))});setTab('installments');setNotice('تم استخراج البنود مبدئيًا بواسطة AI؛ راجع التواريخ والمبالغ ثم اعتمدها للحفظ.');}catch(err){setError(err.message);}finally{setAiBusy(false)}
+ try{const r=await fetch('/api/client-contract-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contract_id:contractId,document_id:documentId})});const j=await r.json();if(!r.ok)throw Error(j.error||'فشل تحليل العقد');setAiPreview({...j,installments:j.installments.map(p=>({...p,amount_ex_vat:p.payment_percent!==''&&p.payment_percent!==null&&p.payment_percent!==undefined?Math.round((data.contracts.find(c=>c.id===contractId)?summary(data.contracts.find(c=>c.id===contractId)).ex:n(j.contract_base_ex_vat))*Number(p.payment_percent))/100:p.amount_ex_vat}))});setTab('installments');setNotice('تم استخراج البنود مبدئيًا بواسطة AI؛ راجع التواريخ والمبالغ ثم اعتمدها للحفظ.');}catch(err){setError(err.message);}finally{setAiBusy(false)}
 };
 const approveAISchedule=async()=>{
  if(!aiPreview||!current)return;
