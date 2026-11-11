@@ -708,3 +708,21 @@ test('project filter provides clickable immediate search results and retains cor
  assert.match(ui,/r\.data\.project_number/);
  assert.match(ui,/المشروع المحدد:/);
 });
+
+test('project editor supports searchable company, name and account-scoped manager choices',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/aria-label="بحث الشركة"/);
+ assert.match(ui,/aria-label="فلتر اسم المشروع"/);
+ assert.match(ui,/project-name-suggestions/);
+ assert.match(ui,/aria-label="فلتر مدير المشروع"/);
+ assert.match(ui,/members\.filter\(m=>m\.role==='project_manager'&&m\.is_active!==false/);
+ assert.match(ui,/module==='projects'&&f\.key==='code'/);
+ assert.match(ui,/يُولّد تلقائيًا عند الحفظ/);
+});
+test('project serial numbers are generated on server and kept immutable on edit',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(erp,/if\(mod==='projects'&&!old\)body\.data=/);
+ assert.match(erp,/SELECT nextval\('hr\.project_code_seq'\)::text AS code/);
+ assert.match(erp,/if\(mod==='projects'&&old\)data\.code=/);
+ assert.match(erp,/data\.code=String\(serial\.code\)/);
+});
