@@ -1062,3 +1062,15 @@ test('AI document route is session guarded, and schedules save only by explicit 
  for(const marker of ["approve_ai_schedule","client_ai_imports","await db.batch(statements)","document_id","auto_generate_client_claims()"])assert.ok(api.includes(marker),marker);
  for(const marker of ["analyzeContractAI","approveAISchedule","validateAISchedule","مراجعة بنود الدفعات المستخرجة","اعتماد وحفظ الدفعات المستخرجة"])assert.ok(ui.includes(marker),marker);
 });
+
+test('contract installment percent, sequential number and safe archive are integrated',()=>{
+ const backend=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const ai=readFileSync(new URL('../lib/contract-ai.mjs',import.meta.url),'utf8');
+ for(const s of ["action==='archive_contract'","contract_status='archived'","payment_percent","previousPercent","السابق / Previous","الحالي / Current","الإجمالي التراكمي / Cumulative","dateOnly","حذف / أرشفة العقد","installment_no"])assert.ok(backend.includes(s)||ui.includes(s),s);
+ assert.match(backend,/previousPercent|payment_percent/);
+ assert.match(backend,/previousPercent|payment_percent/);
+ assert.match(backend,/Math\.round\(basis\*percentage\)\/100/);
+ assert.match(backend,/Math\.round\(capacity\*percent\)\/100/);
+ assert.match(ai,/payment_percent/);
+});
