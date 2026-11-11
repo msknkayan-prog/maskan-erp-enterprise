@@ -909,7 +909,7 @@ test('edge backend imports exactly available module exports to prevent boot-time
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const edge=await import('../backend/modules.mjs');
  const frontend=await import('../lib/modules.mjs');
- const imports=[...backend.matchAll(/import\\s*\\{([^}]+)\\}\\s*from\\s*['"]\\.\\/modules\\.mjs['"]/g)]
+ const imports=[...backend.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]\.\/modules\.mjs['"]/g)]
   .flatMap(match=>match[1].split(',').map(v=>v.trim()).filter(Boolean));
  assert.ok(imports.includes('permittedRead'));
  assert.ok(imports.includes('permittedWrite'));
