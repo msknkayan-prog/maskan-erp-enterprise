@@ -68,7 +68,7 @@ export function parseContractsXlsx(bytes,{maxRows=500,maxBytes=5*1024*1024}={}){
  const imported=rows.slice(1).filter(row=>row.some(v=>v!=='')).map((values,i)=>({line:i+2,...Object.fromEntries(contractImportKeys.map((key,j)=>[key,values[j]]))}));
  // Excel may store dates as serial numbers after users edit a date-formatted cell.
  const excelSerialToDate=s=>{const n=Number(s);if(!Number.isInteger(n)||n<1||n>100000)return s;return new Date(Date.UTC(1899,11,30)+n*86400000).toISOString().slice(0,10)};
- for(const row of imported)for(const key of ['signed_date','start_date','end_date'])if(/^\\d{4,5}$/.test(row[key]))row[key]=excelSerialToDate(row[key]);
+ for(const row of imported)for(const key of ['signed_date','start_date','end_date'])if(/^\d{4,5}$/.test(row[key]))row[key]=excelSerialToDate(row[key]);
  const errors=[],seen=new Set();
  for(const row of imported){
   for(const key of required)if(!row[key])errors.push('السطر '+row.line+': '+contractColumns.find(c=>c[0]===key)[1]+' مطلوب');
