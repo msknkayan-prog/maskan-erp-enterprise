@@ -58,6 +58,43 @@ export async function POST(req){
  if(isApproving){
    if(!(u.role==='admin'||u.role==='projects_director'||perms['client_finance:approve']===true))throw Error('ليس لديك صلاحية اعتماد ملاحق العقود');
  }else if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية تحرير العقود المالية');
+ if(action==='bulk_import_contracts'){
+ const list=b.contracts;
+ if(!Array.isArray(list)||!list.length||list.length>500)throw Error('استيراد من 1 إلى 500 عقد في العملية');
+ const categories=['سباكة وكهرباء','تشطيبات عامة','أعمال عظم','أعمال تكييف','أعمال دفاع مدني'];
+ const keyset=new Set(),statements=[],result=[],errs=[];
+ for(let j=0;j<list.length;j++){
+  const x=list[j]||{},line=Number(x.line)||j+2;
+  const company=str(x.company),customer=str(x.customer),project=str(x.project_name),manager=str(x.project_manager),
+    number=str(x.contract_no,90),type=str(x.contract_type);
+  const prefix='صف '+line+': ';
+  if(!company||!customer||!project||!manager||!number){errs.push(prefix+'بيانات العقد الأساسية ناقصة');continue;}
+  try{checkCompany(u,company);}catch{errs.push(prefix+'الشركة خارج نطاق الصلاحيات');continue;}
+  if(!categories.includes(type)){errs.push(prefix+'نوع العقد غير صالح');continue;}
+  let start,end,signed,base,vat,retention;
+  try{
+    start=date(x.start_date);end=date(x.end_date);signed=date(x.signed_date);
+    base=amt(x.base_ex_vat);vat=Number(x.vat_rate===undefined||x.vat_rate===''?15:x.vat_rate)/100;retention=amt(x.retention_percent||0);
+    if(end<start||!Number.isFinite(vat)||vat<0||vat>1||retention>100)throw Error('تواريخ العقد أو النسب غير صحيحة');
+  }catch{errs.push(prefix+'التاريخ أو المبلغ أو النسبة غير صالحة');continue;}
+  const signature=company+'::'+number;
+  if(keyset.has(signature)){errs.push(prefix+'رقم العقد مكرر ضمن الملف');continue;}
+  keyset.add(signature);
+  const id=crypto.randomUUID();
+  result.push({id,company,number});
+  statements.push(db.prepare('INSERT INTO client_contracts(id,company,customer,project_name,project_manager,start_date,end_date,contract_no,contract_type,signed_date,base_ex_vat,vat_rate,notes,created_by,customer_phone,customer_email,customer_vat_no,site_location,contract_subject,client_reference,retention_percent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .bind(id,company,customer,project,manager,start,end,number,type,signed,base,vat,str(x.notes,3000),u.email,str(x.customer_phone,50),str(x.customer_email,200),str(x.customer_vat_no,40),str(x.site_location,400),str(x.contract_subject,1000),str(x.client_reference,120),retention));
+  statements.push(db.prepare('INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)')
+    .bind(crypto.randomUUID(),u.email,id,'client_contract_bulk_import',new Date().toISOString(),JSON.stringify({company,contract_no:number})));
+ }
+ if(errs.length)return json({error:'الاستيراد مرفوض بسبب أخطاء في البيانات؛ لم يُحفظ أي عقد',details:errs.slice(0,100)},422);
+ // One transaction: even unique contract numbers against existing records cause full rollback.
+ try{await db.batch(statements);}catch(e){
+   if(/unique|duplicate|constraint/i.test(String(e.message||'')))return json({error:'يوجد رقم عقد مسجل مسبقًا لنفس الشركة؛ لم يُحفظ أي عقد'},409);
+   throw e;
+ }
+ return json({ok:true,imported:result.length});
+ }
  if(action==='create_contract'){
  const company=str(b.company),customer=str(b.customer),project=str(b.project_name),manager=str(b.project_manager),
  number=str(b.contract_no,90),type=str(b.contract_type);
