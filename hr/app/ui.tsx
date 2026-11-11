@@ -1,6 +1,6 @@
 // @ts-nocheck
 'use client';
-import {useEffect,useState,Fragment} from 'react';
+import {useEffect,useState,useRef,Fragment} from 'react';
 import {employeeRegisterFields,employeeRegisterValue} from '../lib/employee-register.mjs';
 import {LayoutDashboard,Users,Building2,FileText,Wallet,ShoppingCart,CalendarDays,TriangleAlert,ChartNoAxesCombined,Search,Plus,ArrowUpLeft,Cloud,ChevronLeft,Download,Upload,X,Check,ShieldCheck,LogOut,RefreshCw,ArrowRight,MapPin} from 'lucide-react';
 import {companies,canonicalCompany,companyDisplayName,modules,states,annualLeave,canRead,canWrite,workflow,enumOptions,relationModules,operationalModules,saudiDate,fixedLeaveDays,leaveEndDate,permission,permissionChoice,permittedRead,permittedWrite} from '../lib/modules.mjs';
@@ -13,8 +13,27 @@ const csvEscape=v=>'"'+String(v??'').replaceAll('"','""')+'"';
 function csvParse(s){s=s.replace(/^\ufeff/,'');let rows=[],row=[],v='',quoted=false;for(let i=0;i<s.length;i++){let c=s[i];if(c==='"'){if(quoted&&s[i+1]==='"'){v+='"';i++}else quoted=!quoted}else if(c===','&&!quoted){row.push(v);v=''}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&s[i+1]==='\n')i++;row.push(v);if(row.some(Boolean))rows.push(row);row=[];v=''}else v+=c}if(quoted)throw Error('علامات اقتباس غير مكتملة');row.push(v);if(row.some(Boolean))rows.push(row);return rows}
 export default function ERP(){const [module,setModule]=useState('overview'),[pendingType,setPendingType]=useState(''),[pendingStage,setPendingStage]=useState(''),[pendingSearch,setPendingSearch]=useState(''),[payrollStage,setPayrollStage]=useState('__all__'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollEdit,setPayrollEdit]=useState(null),[cycleEdit,setCycleEdit]=useState(null),[payrollManageBatchId,setPayrollManageBatchId]=useState(null),[payrollAllOpen,setPayrollAllOpen]=useState(false),[payrollBulkSelected,setPayrollBulkSelected]=useState([]),[payrollAddEmployeeId,setPayrollAddEmployeeId]=useState(''),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[employeeProjectSearch,setEmployeeProjectSearch]=useState(''),[projectCompanySearch,setProjectCompanySearch]=useState(''),[projectManagerSearch,setProjectManagerSearch]=useState(''),[employeeFilterOpen,setEmployeeFilterOpen]=useState(false),[employeeFieldFilters,setEmployeeFieldFilters]=useState({}),[edit,setEdit]=useState(null),[employeeReadOnly,setEmployeeReadOnly]=useState(false),[showArchivedEmployees,setShowArchivedEmployees]=useState(false),[saving,setSaving]=useState(false),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberContactEmail,setMemberContactEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberPermissions,setMemberPermissions]=useState({}),[memberUsername,setMemberUsername]=useState(''),[memberEdit,setMemberEdit]=useState(null),[memberEditPermissions,setMemberEditPermissions]=useState({}),[memberBusy,setMemberBusy]=useState(false),[linkedEmployee,setLinkedEmployee]=useState(null),[memberSearch,setMemberSearch]=useState(''),[memberRoleFilter,setMemberRoleFilter]=useState(''),[memberUserFilter,setMemberUserFilter]=useState(''),[memberStatusFilter,setMemberStatusFilter]=useState(''),[memberFormOpen,setMemberFormOpen]=useState(false),[expandedPermissions,setExpandedPermissions]=useState(null),[passwordResetDialog,setPasswordResetDialog]=useState(null),[generatedPassword,setGeneratedPassword]=useState(null),[credentialPhone,setCredentialPhone]=useState(''),[newMemberCredential,setNewMemberCredential]=useState(null);
 const notify=t=>{setToast(t);setTimeout(()=>setToast(''),4500)};
-async function refresh(){setLoading(true);setError('');try{const res=await fetch('/api/erp',{cache:'no-store'});const d=await res.json();if(res.status===401){location.href='/login';return;}if(!res.ok)throw Error(d.error);setRows(d.rows);setUser(d.user)}catch(e){setError(e.message)}finally{setLoading(false)}}
-useEffect(()=>{refresh();const recheck=()=>{if(document.visibilityState==='visible')refresh()};window.addEventListener('focus',recheck);document.addEventListener('visibilitychange',recheck);return()=>{window.removeEventListener('focus',recheck);document.removeEventListener('visibilitychange',recheck)}},[]);
+const refreshGeneration=useRef(0),lastBackgroundRefresh=useRef(0);
+async function refresh(){
+ const generation=++refreshGeneration.current;
+ setLoading(true);setError('');
+ try{
+  const res=await fetch('/api/erp',{cache:'no-store'});
+  const d=await res.json();
+  if(generation!==refreshGeneration.current)return;
+  if(res.status===401){location.href='/login';return}
+  if(!res.ok)throw Error(d.error||'تعذر تحديث البيانات');
+  setRows(d.rows);setUser(d.user);
+ }catch(e){if(generation===refreshGeneration.current)setError(e.message)}
+ finally{if(generation===refreshGeneration.current)setLoading(false)}
+}
+useEffect(()=>{
+ refresh();
+ const recheck=()=>{if(document.visibilityState!=='visible')return;const now=Date.now();if(now-lastBackgroundRefresh.current<2500)return;lastBackgroundRefresh.current=now;refresh()};
+ window.addEventListener('focus',recheck);
+ document.addEventListener('visibilitychange',recheck);
+ return()=>{window.removeEventListener('focus',recheck);document.removeEventListener('visibilitychange',recheck);refreshGeneration.current++}
+},[]);
 useEffect(()=>{setSearch('');setImportRows(null);if(!['leave','advances','warnings','resignations','returns','terminations','leave_dues','settlements','payroll'].includes(module))setLinkedEmployee(null);if(['members','audit','projects','project_managers'].includes(module))fetch('/api/erp?module='+(['projects','project_managers'].includes(module)?(user?.role==='admin'?'members':'project_manager_choices'):module),{cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'تعذر قراءة صلاحيات المستخدمين');if(!Array.isArray(d.rows))throw Error('تعذر قراءة قائمة المستخدمين');return d}).then(d=>['members','projects','project_managers'].includes(module)?setMembers(d.rows):setAudit(d.rows)).catch(err=>{setError(err.message);notify(err.message)})},[module]);
 const permissionMap=raw=>{try{return typeof raw==='string'?JSON.parse(raw||'{}'):raw||{}}catch{return {}}};
 const startMemberEdit=m=>{let selectedCompanies=[];let selectedProjects=[];try{if(m.companies!=='*')selectedCompanies=JSON.parse(m.companies||'[]')}catch{}try{if(m.projects!=='*')selectedProjects=JSON.parse(m.projects||'[]')}catch{}setMemberEdit({...m,original_email:m.email,contact_email:m.contact_email||m.email,username:m.username||'',companyMode:m.companies==='*'?'all':'selected',selectedCompanies,projectMode:m.projects==='*'?'all':'selected',selectedProjects});setMemberEditPermissions(permissionMap(m.permissions));};
@@ -347,6 +366,11 @@ function applyEmployeeToForm(employeeId){
   Object.assign(changes,{monthly_salary:String(d.salary||0),beneficiary_name:d.name||'',beneficiary_identity:d.identity||'',bank_name:d.bank||'',iban:d.iban||''});
  }
  if(module==='leave'&&employee)changes.contact_phone=d.phone||'';
+ if(module==='appointments'&&employee){
+  const project=rows.find(r=>r.module==='projects'&&r.id===d.project_id&&r.company===edit.company);
+  changes.direct_manager=project?.data.manager_name||d.manager||'';
+  changes.work_location=project?.data.name||d.department||'';
+ }
  setEdit({...edit,data:{...edit.data,...changes,project_id:d.project_id||''}});
 }
 function applyLeaveToForm(leaveId){
@@ -376,7 +400,7 @@ const managerDirectoryForRequest=(record,companyName)=>{
  const project=rows.find(r=>r.id===projectId&&r.module==='projects'&&r.company===companyName);
  if(!project)return null;
  const manager=rows.find(r=>r.module==='project_managers'&&r.company===companyName&&r.data.email?.toLowerCase()===project.data.manager_email?.toLowerCase());
- return {project:project.data.name||'',name:manager?.data.name||'',email:project.data.manager_email||'',phone:manager?.data.phone||''};
+ return {project:project.data.name||'',name:manager?.data.name||project.data.manager_name||employee?.data.manager||'',email:project.data.manager_email||'',phone:manager?.data.phone||project.data.manager_phone||''};
 };
 function startEdit(row){
  if(module==='projects'){setProjectCompanySearch('');setProjectManagerSearch('')}
@@ -423,14 +447,15 @@ const allowed=Object.keys(modules).filter(k=>k!=='payroll_batches'&&user&&permit
 const pendingRequestTypes=['leave','advances','resignations','returns','terminations','leave_dues','settlements','warnings','appointments'];
 const accessiblePendingTypes=pendingRequestTypes.filter(k=>user&&permittedRead(user,k));
 const pendingStages=['draft','returned','project_manager','projects_director','hr','finance'];
+const pendingRecordIndex=new Map(rows.map(r=>[r.id,r]));
 const pendingRequestRows=rows.filter(r=>accessiblePendingTypes.includes(r.module)&&pendingStages.includes(r.status)&&(!company||r.company===company)&&(!pendingType||r.module===pendingType)&&(!pendingStage||r.status===pendingStage)).filter(r=>{
  if(!pendingSearch.trim())return true;
- const emp=rows.find(e=>e.module==='employees'&&e.id===(r.data?.employee_id||rows.find(l=>l.id===r.data?.leave_id)?.data?.employee_id));
+ const emp=pendingRecordIndex.get(r.data?.employee_id||pendingRecordIndex.get(r.data?.leave_id)?.data?.employee_id);
  return normalizeSearch([r.company,modules[r.module]?.label,r.code,states[r.status],emp?.data?.name,emp?.data?.code,r.data?.name,r.data?.notes].join(' ')).includes(normalizeSearch(pendingSearch));
 }).sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
 const pendingEmployeeName=r=>{
- const id=r.data?.employee_id||rows.find(l=>l.id===r.data?.leave_id)?.data?.employee_id;
- const employee=rows.find(e=>e.module==='employees'&&e.id===id&&e.company===r.company);
+ const id=r.data?.employee_id||pendingRecordIndex.get(r.data?.leave_id)?.data?.employee_id;
+ const employee=pendingRecordIndex.get(id);
  return employee?.data?.name||r.data?.employee_snapshot?.name||r.data?.name||'—';
 };
 
@@ -639,6 +664,17 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <input type="search" list="project-name-suggestions" aria-label="فلتر اسم المشروع" placeholder="اكتب اسم المشروع أو اختره من الاقتراحات" required value={edit.data.name||''} onChange={e=>setEdit({...edit,data:{...edit.data,name:e.target.value}})}/>
  <datalist id="project-name-suggestions">{[...new Set(rows.filter(r=>r.module==='projects'&&r.company===edit.company).map(r=>r.data.name).filter(Boolean))].filter(v=>!edit.data.name||normalizeSearch(v).includes(normalizeSearch(edit.data.name))).slice(0,100).map(v=><option key={v} value={v}/>)}</datalist>
  <small>يمكن البحث في أسماء مشاريع الشركة أو كتابة اسم مشروع جديد.</small>
+ </div>:module==='appointments'&&['direct_manager','work_location','work_hours','form_status','contract_type','probation'].includes(f.key)?<div style={{display:'grid',gap:6}}>
+ <input type="search" list={'appointment-options-'+f.key} aria-label={'فلتر '+f.label} placeholder={'ابحث أو اختر '+f.label} value={edit.data[f.key]||''} onChange={e=>setEdit({...edit,data:{...edit.data,[f.key]:e.target.value}})} autoComplete="off"/>
+ <datalist id={'appointment-options-'+f.key}>{[...new Set([
+ ...(f.key==='direct_manager'?rows.filter(r=>r.module==='projects'&&r.company===edit.company).map(r=>r.data.manager_name).concat(rows.filter(r=>r.module==='project_managers'&&r.company===edit.company).map(r=>r.data.name)):[]),
+ ...(f.key==='work_location'?rows.filter(r=>r.module==='projects'&&r.company===edit.company).map(r=>r.data.name):[]),
+ ...(f.key==='work_hours'?['8','6','7','9','10','12']:[]),
+ ...(f.key==='contract_type'?['عقد دوام ثابت','عقد محدد المدة','عقد غير محدد المدة','عقد دوام جزئي','عقد مؤقت']:[]),
+ ...(f.key==='probation'?['بدون فترة تجربة','30 يومًا','60 يومًا','90 يومًا','180 يومًا','3 شهور','6 شهور']:[]),
+ ...(f.key==='form_status'?['قيد التجهيز','جاهز للاعتماد','مكتمل','ملغي']:[]),
+ ...rows.filter(r=>r.module==='appointments'&&r.company===edit.company).map(r=>r.data[f.key])
+ ].map(v=>String(v||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar')).map(value=><option key={value} value={value}/>)}</datalist>
  </div>:module==='projects'&&f.key==='code'?<div style={{display:'grid',gap:6}}>
  <input type="text" aria-label="رمز المشروع التسلسلي" value={edit.id?(edit.data.code||''):'يُولّد تلقائيًا عند الحفظ'} readOnly disabled={!edit.id} style={{direction:'ltr',textAlign:'center'}}/>
  <small>رمز مختصر من 4 أرقام، فريد على مستوى المنصة، ولا يُغيّر يدويًا.</small>
