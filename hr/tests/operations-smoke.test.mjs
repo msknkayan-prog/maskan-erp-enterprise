@@ -726,3 +726,19 @@ test('project serial numbers are generated on server and kept immutable on edit'
  assert.match(erp,/if\(mod==='projects'&&old\)data\.code=/);
  assert.match(erp,/data\.code=String\(serial\.code\)/);
 });
+
+test('inactive employees do not appear in current payroll preview or draft roster',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/const payrollEmployees=rows\.filter\(r=>r\.module==='employees'.*\['active','نشط','على رأس العمل','علي راس العمل'\]/);
+ assert.match(ui,/const payrollEmployeeIsActive=id=>/);
+ assert.match(ui,/const visibleCyclePayroll=cyclePayroll\.filter\(r=>visibleCycleIds\.has\(r\.data\?\.batch_id\)&&cycleRowShouldShow\(r\)\)/);
+ assert.match(ui,/const payrollManagedRows=payrollManagedBatch\?cyclePayroll\.filter\(row=>row\.data\.batch_id===payrollManagedBatch\.id&&cycleRowShouldShow\(row\)\):\[\]/);
+ assert.match(ui,/batch\?\.status==='paid'\|\|payrollEmployeeIsActive/);
+});
+test('server blocks payroll approval and payment for inactive included employees',()=>{
+ const server=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ assert.match(server,/\['submit','managers_approve','projects_approve','finance_pay','admin_approve','finance_approve'\]\.includes\(action\)/);
+ assert.match(server,/SELECT id,company,data FROM records WHERE module='employees' AND company=\?/);
+ assert.match(server,/if\(invalid\)throw Error\('يوجد موظف غير نشط في المسير/);
+ assert.match(server,/if\(!\['active','نشط','على رأس العمل','علي راس العمل'\]\.includes\(status\)\)throw Error\('لا يمكن إدراج موظف غير نشط/);
+});
