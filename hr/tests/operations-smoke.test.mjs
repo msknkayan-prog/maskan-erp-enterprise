@@ -571,7 +571,7 @@ test('project managers only see the project assigned to their own login, even wi
  assert.equal(visible(pm,requests[1],all),false);
  assert.equal(visible(pm,projects[1],all),false);
  assert.equal(visible({...pm,email:'unassigned@example.test'},requests[0],all),false);
- assert.equal(visible({...pm,projects:'[]'},requests[0],all),true);
+ assert.equal(visible({...pm,projects:'[]'},requests[0],all),false);
 });
 test('request workflow requires an assigned active manager before routing and checks ownership at review',()=>{
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
@@ -844,11 +844,11 @@ test('printable form layout preserves RTL name width, readable body text and com
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
  const operations=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
- assert.match(ui,/grid-template-columns:minmax\(0,1fr\) 112px minmax\(0,1\.65fr\)/);
- assert.match(ui,/header \.brand strong\{display:block;font-size:20px;line-height:1\.6/);
- assert.match(ui,/body\{font:14px\/1\.65 Tahoma/);
+ assert.match(ui,/header\{display:grid;grid-template-columns:170px minmax\(0,1fr\)/);
+ assert.match(ui,/header \.brand strong\{display:block;font-size:20px;line-height:1\.55/);
+ assert.match(ui,/body\{font:13px\/1\.6 Tahoma/);
  assert.match(ui,/font-size:12px;line-height:1\.65/);
- assert.match(css,/grid-template-columns:minmax\(0,1fr\) 106px minmax\(0,1\.65fr\)!important/);
+ assert.match(css,/grid-template-columns:165px minmax\(0,1fr\)!important/);
  assert.match(css,/@page\{size:A4 portrait;margin:11mm\}/);
  assert.match(css,/\.paper-brand strong\{font-size:16px!important;line-height:1\.5!important\}/);
  assert.match(operations,/companyLogoPath\(row\.company,rows\)/);
@@ -862,4 +862,38 @@ test('all company registers keep correct official name in fallback footer',()=>{
  assert.match(register,/companyLogoPath\(company,rows\)/);
  assert.match(register,/safe\(companyName\)\+' \| إدارة شؤون الموظفين'/);
  assert.doesNotMatch(register,/contact\|\|'شركة مسكن الكيان للمقاولات/);
+});
+
+test('project managers choose authorized projects via searchable checkbox list on creation and editing',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/function ManagerProjectPicker\(/);
+ assert.match(ui,/aria-label="بحث مشاريع المدير"/);
+ assert.match(ui,/member-project-option/);
+ assert.match(ui,/role="group" aria-label="قائمة مشاريع مدير المشروع"/);
+ assert.match(ui,/memberRole==='project_manager'&&<ManagerProjectPicker/);
+ assert.match(ui,/memberEdit\.role==='project_manager'&&<ManagerProjectPicker/);
+ assert.match(backend,/حدد مشروعًا واحدًا على الأقل لمدير المشروع/);
+ assert.match(backend,/المشاريع المختارة لا تتبع الشركات المسموح بها/);
+ assert.match(backend,/ليس لديك صلاحية مراجعة طلبات هذا المشروع/);
+});
+test('project manager visibility requires both assigned manager and explicit selected project scope',async()=>{
+ const {visible}=await import('../lib/modules.mjs');
+ const projects=[{id:'a',module:'projects',company:'مسكن الكيان',data:{manager_email:'pm@example.com'}},{id:'b',module:'projects',company:'مسكن الكيان',data:{manager_email:'pm@example.com'}}];
+ const employees=[{id:'e',module:'employees',company:'مسكن الكيان',data:{project_id:'b'}}];
+ const requests=[{id:'r',module:'leave',company:'مسكن الكيان',data:{employee_id:'e'}}];
+ const u={role:'project_manager',email:'pm@example.com',companies:'*',projects:JSON.stringify(['a'])};
+ assert.equal(visible(u,projects[0],[...projects,...employees,...requests]),true);
+ assert.equal(visible(u,projects[1],[...projects,...employees,...requests]),false);
+ assert.equal(visible(u,requests[0],[...projects,...employees,...requests]),false);
+});
+test('unified letterheads use horizontally aligned full-width name next to company logo on paper',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ const paper=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
+ assert.match(paper,/className="paper-identity"/);
+ assert.match(css,/\.maskan-standard-paper \.paper-identity\{/);
+ assert.match(css,/grid-template-columns:138px minmax\(0,1fr\)!important/);
+ assert.match(ui,/class="brand-block"/);
+ assert.match(ui,/grid-template-columns:170px minmax\(0,1fr\)/);
 });
