@@ -915,6 +915,6 @@ test('edge backend imports exactly available module exports to prevent boot-time
  assert.ok(imports.includes('permittedWrite'));
  for(const item of imports){assert.ok(Object.hasOwn(edge,item),'Missing Edge backend export: '+item);}
  for(const name of ['companies','companyDisplayName','canonicalCompany','modules','canRead','canWrite','permission','permittedRead','permittedWrite']){
-  assert.deepEqual(edge[name],frontend[name], 'Edge/frontend module mismatch: '+name);
+  assert.equal(typeof edge[name]==='function'?edge[name].toString():JSON.stringify(edge[name]),typeof frontend[name]==='function'?frontend[name].toString():JSON.stringify(frontend[name]), 'Edge/frontend module mismatch: '+name);
  }
 });
