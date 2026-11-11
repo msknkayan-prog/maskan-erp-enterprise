@@ -612,3 +612,33 @@ test('manager account company permissions are checked at project linking and req
  assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة المحددة/);
  assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة التابعة للطلب/);
 });
+
+test('leave dues select employee then filter approved leave and populate salary and days',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/اختيار موظف مستحقات الإجازة/);
+ assert.match(ui,/function applyLeaveToForm\(leaveId\)/);
+ assert.match(ui,/next\.salary_basis=employee\?String\(employee\.data\.salary\|\|0\)/);
+ assert.match(ui,/next\.days=leave\?String\(leave\.data\.days\|\|0\)/);
+ assert.match(ui,/r\.data\.employee_id===edit\.data\.employee_id/);
+ assert.match(ui,/\['approved','paid'\]\.includes\(r\.status\)/);
+});
+test('related HR forms display the canonical employee details and server saves a trusted snapshot',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/function linkedEmployeeFor\(form\)/);
+ assert.match(ui,/بيانات الموظف المسحوبة من السجل/);
+ assert.match(ui,/function applyEmployeeToForm\(employeeId\)/);
+ assert.match(backend,/employee_snapshot=snapshot/);
+ assert.match(backend,/employeeRecord=await db\.prepare/);
+ assert.match(backend,/linked\.status!=='approved'\)throw Error\('لا يمكن إنشاء مستحقات/);
+ assert.match(backend,/data\.net=Math\.round\(\(Number\(data\.salary_basis\)\/30/);
+ assert.match(backend,/if\(mod==='settlements'\)/);
+});
+
+test('company switching clears old employee and leave links and manager views exclude financial snapshots',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/leave_id:'',project_id:'',contract_id:''/);
+ assert.match(erp,/const \{employee_snapshot,\.\.\.safeData\}=r\.data/);
+ assert.match(erp,/data:safeData/);
+});
