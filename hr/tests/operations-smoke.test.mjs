@@ -690,11 +690,21 @@ test('pending requests center lists active request types with filters and exclud
 test('employee project selection filters names and references and clearly handles missing projects',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/فلتر المشاريع حسب الاسم/);
- assert.match(ui,/اختيار المشروع بعد التصفية/);
+ assert.match(ui,/نتائج البحث عن المشاريع/);
  assert.match(ui,/r\.module==='projects'&&\(r\.company===edit\.company/);
- assert.match(ui,/normalizeSearch\(\[r\.data\.name,r\.data\.reference,r\.data\.code,r\.data\.address\]/);
- assert.match(ui,/لا توجد مشاريع مسجلة لهذه الشركة/);
- assert.match(ui,/لا توجد مشاريع مطابقة للبحث/);
+ assert.match(ui,/r.data.project_number,r.data.code,r.data.address/);
+ assert.match(ui,/لا توجد مشاريع لهذه الشركة/);
+ assert.match(ui,/لا توجد نتائج مطابقة/);
  assert.match(ui,/المشاريع المطابقة:/);
  assert.match(ui,/مسح بحث المشاريع/);
+});
+
+test('project filter provides clickable immediate search results and retains correct company scope',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/role="listbox" aria-label="نتائج البحث عن المشاريع"/);
+ assert.match(ui,/role="option" aria-selected=\{edit\.data\.project_id===r\.id\}/);
+ assert.match(ui,/onClick=\{\(\)=>\{setEdit\(\{\.\.\.edit,data:\{\.\.\.edit\.data,project_id:r\.id\}\}\);setEmployeeProjectSearch\(''\)\}\}/);
+ assert.match(ui,/r\.company===edit\.company/);
+ assert.match(ui,/r\.data\.project_number/);
+ assert.match(ui,/المشروع المحدد:/);
 });
