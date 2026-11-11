@@ -1163,3 +1163,31 @@ test('Each contract card has working edit and safe delete controls with explicit
  assert.match(ui,/canArchive&&\['delete_contract','archive_contract','restore_contract'\]/);
  assert.match(ui,/contract_id:currentRecord\.id/);
 });
+
+test('finance approvals and delete-only users are not blocked by edit permission gates',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ assert.match(ui,/canApprove&&obj.action==='approve_adjustment'/);
+ assert.match(ui,/canArchive&&\['delete_contract','archive_contract','restore_contract'\]/);
+ assert.match(api,/const isDeleting=\['archive_contract','delete_contract','restore_contract'\]/);
+ assert.match(api,/perms\['client_finance:delete'\]===true/);
+ assert.match(api,/perms\['client_finance:approve'\]===true/);
+});
+test('contract updates respect stored VAT percent, and archived contracts are read only',()=>{
+ const api=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ assert.match(api,/Number\(c.vat_rate\)\*100/);
+ assert.match(api,/استعد العقد من الأرشيف قبل تعديله/);
+ assert.match(api,/لا يمكن حذف مرفق من عقد مؤرشف/);
+});
+test('payment receipts cannot exceed issued individual claim values',()=>{
+ const api=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ assert.match(api,/SELECT amount_inc_vat FROM client_receipts WHERE contract_id=\? AND claim_id=\?/);
+ assert.match(api,/claimPaid\+amount/);
+ assert.match(api,/مبلغ التحصيل يتجاوز المتبقي من قيمة المطالبة المرتبطة/);
+});
+test('AI-approved contracts retain source document evidence',()=>{
+ const api=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ assert.match(api,/client_ai_imports WHERE document_id=\?/);
+ assert.match(api,/لا يمكن مسح مستند اعتمدت منه دفعات/);
+ assert.match(api,/لا يمكن استبدال ملف عقد اعتمدت منه دفعات/);
+});
