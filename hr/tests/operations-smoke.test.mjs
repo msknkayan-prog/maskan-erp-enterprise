@@ -1074,3 +1074,14 @@ test('contract installment percent, sequential number and safe archive are integ
  assert.match(backend,/Math\.round\(capacity\*percent\)\/100/);
  assert.match(ai,/payment_percent/);
 });
+
+test('delete contract only when empty, archive otherwise and allow restore',()=>{
+ const api=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ for(const term of ["delete_contract","restore_contract","archive_contract","linked===0","client_contract_deleted","client_contract_archived"])assert.ok(api.includes(term),term);
+ assert.match(api,/linked===0/);
+ assert.match(api,/DELETE FROM client_contracts WHERE id=/);
+ assert.match(ui,/إظهار العقود المؤرشفة/);
+ assert.match(ui,/استعادة العقد/);
+ assert.match(ui,/حذف العقد/);
+});
