@@ -7,15 +7,17 @@ const n=x=>Number(x||0);
 const money=x=>n(x).toLocaleString('ar-SA',{minimumFractionDigits:2,maximumFractionDigits:2});
 const today=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,10);
 const esc=x=>String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
-const blank={company:'',customer:'',project_name:'',project_manager:'',contract_no:'',contract_type:kinds[0],start_date:today(),end_date:today(),signed_date:today(),base_ex_vat:'',vat_rate:'15',notes:''};
-const p0={title:'',description:'',amount_ex_vat:'',due_date:today()};
+const blank={company:'',customer:'',project_name:'',project_manager:'',contract_no:'',contract_type:kinds[0],start_date:today(),end_date:today(),signed_date:today(),base_ex_vat:'',vat_rate:'15',customer_phone:'',customer_email:'',customer_vat_no:'',site_location:'',contract_subject:'',client_reference:'',retention_percent:'0',contract_status:'active',notes:''};
+const p0={title:'',description:'',amount_ex_vat:'',due_date:today(),progress_percent:'0',milestone_type:'contractual'};
+const item0={installment_id:'',item_code:'',description:'',quantity:'1',unit:'بند',unit_price_ex_vat:''};
 const a0={kind:'extra',description:'',amount_ex_vat:'',approved_at:today()};
 const r0={paid_at:today(),amount_inc_vat:'',method:'تحويل بنكي',reference:'',claim_id:''};
 export default function ClientFinance({user,company,profiles,companyList,projectManagers=[]}){
- const [data,setData]=useState({contracts:[],installments:[],adjustments:[],claims:[],receipts:[],documents:[]});
+ const [data,setData]=useState({contracts:[],installments:[],installment_items:[],adjustments:[],claims:[],receipts:[],documents:[]});
  const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [selected,setSelected]=useState(''),[newOpen,setNewOpen]=useState(false),[contract,setContract]=useState(blank);
- const [tab,setTab]=useState('installments'),[installment,setInstallment]=useState(p0),[adjustment,setAdjustment]=useState(a0),[receipt,setReceipt]=useState(r0);
+ const [tab,setTab]=useState('installments'),[installment,setInstallment]=useState(p0),[item,setItem]=useState(item0),[adjustment,setAdjustment]=useState(a0),[receipt,setReceipt]=useState(r0);
+ const [contractEditOpen,setContractEditOpen]=useState(false),[editContract,setEditContract]=useState(blank),[approvalEdit,setApprovalEdit]=useState(null);
  const [search,setSearch]=useState('');
  const privileges=(()=>{try{return typeof user?.permissions==='string'?JSON.parse(user.permissions||'{}'):user?.permissions||{}}catch{return {}}})();
  const canEdit=user?.role==='admin'||(user?.role==='finance'&&privileges['client_finance:edit']!==false)||privileges['client_finance:edit']===true;
@@ -23,7 +25,7 @@ export default function ClientFinance({user,company,profiles,companyList,project
  useEffect(()=>{reload()},[]);
  const userCompanies=(()=>{try{return user?.companies==='*'||!user?.companies?companyList:JSON.parse(user.companies)}catch{return []}})();
  const contracts=data.contracts.filter(c=>(!company||c.company===company)&&[c.customer,c.project_name,c.contract_no,c.project_manager].join(' ').toLowerCase().includes(search.trim().toLowerCase()));
- const current=data.contracts.find(c=>c.id===selected);
+ const current=data.contracts.find(c=>c.id===selected&&(!company||c.company===company));
  const overdue=data.installments.filter(i=>i.status==='scheduled'&&i.due_date<today()&&data.contracts.some(c=>c.id===i.contract_id&&(!company||c.company===company))&&!data.claims.some(cl=>cl.installment_id===i.id&&cl.status==='issued'));
  const pendingClaims=data.claims.filter(cl=>cl.status==='ready'&&data.contracts.some(c=>c.id===cl.contract_id&&(!company||c.company===company)));
  const items=(key)=>data[key].filter(x=>x.contract_id===selected);
@@ -43,8 +45,11 @@ export default function ClientFinance({user,company,profiles,companyList,project
   catch(e){setError(e.message);return null}finally{setBusy(false)}
  };
  const register=async e=>{e.preventDefault();const result=await execute({action:'create_contract',...contract},'تم تسجيل العقد وربطه بالشركة');if(result){setSelected(result.id);setContract(blank);setNewOpen(false)}};
+ const saveContract=async e=>{e.preventDefault();if(await execute({action:'update_contract',contract_id:selected,...editContract,vat_rate:Number(editContract.vat_rate)},'تم تحديث معلومات العقد'))setContractEditOpen(false)};
+ const addItem=async e=>{e.preventDefault();if(await execute({action:'add_installment_item',contract_id:selected,...item},'تم ربط بند الدفعة بالعقد'))setItem(item0)};
  const addPay=async e=>{e.preventDefault();if(await execute({action:'add_installment',contract_id:selected,...installment},'تم تسجيل دفعة العقد وتوليد المطالبة تلقائيًا إن حل موعدها')){setInstallment(p0)}};
  const addAdjust=async e=>{e.preventDefault();if(await execute({action:'add_adjustment',contract_id:selected,...adjustment},'تم تسجيل ملحق العقد')){setAdjustment(a0)}};
+ const recordClientApproval=async e=>{e.preventDefault();if(await execute({action:'record_claim_client_approval',contract_id:selected,...approvalEdit},'تم حفظ تاريخ اعتماد العميل'))setApprovalEdit(null)};
  const addReceipt=async e=>{e.preventDefault();if(await execute({action:'add_receipt',contract_id:selected,...receipt},'تم تسجيل استلام المبلغ وتحديث المستحق المتبقي')){setReceipt(r0)}};
  const upload=async e=>{
   const file=e.target.files?.[0];if(!file||!current||!canEdit)return;
@@ -58,21 +63,27 @@ export default function ClientFinance({user,company,profiles,companyList,project
   if(!current)return;
   const amount=cl?n(cl.amount_ex_vat):summary(current).ex,vat=cl?n(cl.vat_amount):summary(current).vat,gross=amount+vat;
   const related=cl?data.installments.find(i=>i.id===cl.installment_id):null;
+  const itemized=related?data.installment_items.filter(i=>i.installment_id===related.id):[];
   const received=cl?data.receipts.filter(x=>x.claim_id===cl.id):data.receipts.filter(x=>x.contract_id===current.id);
   const receivedTotal=sum(received.map(x=>x.amount_inc_vat));
   const logosrc=companyLogoPath(current.company,profiles)||'';
   const issuer=cl?.created_by||user?.email||'—';
+  const docDate=cl?.submitted_at||cl?.issued_at?.slice(0,10)||cl?.raised_at||today();
   const documentTitle=kind==='certificate'?'مستخلص أعمال':'مطالبة مالية';
   const documentEn=kind==='certificate'?'Payment Certificate':'Payment Claim';
-  const rows=related?[{code:'1',desc:related.title+' — '+(related.description||'حسب جدول الدفعات'),percent:summary(current).ex>0?100*amount/summary(current).ex:0,amount}]:[{code:'1',desc:current.contract_type+' — '+current.project_name,percent:100,amount}];
+  const baseLines=itemized.map(x=>({code:x.item_code,desc:x.description+' — '+x.quantity+' '+x.unit+' × '+money(x.unit_price_ex_vat),percent:amount>0?100*n(x.amount_ex_vat)/amount:0,amount:n(x.amount_ex_vat)}));
+  const assigned=baseLines.reduce((total,x)=>total+x.amount,0);
+  const remainder=Math.max(0,Math.round((amount-assigned)*100)/100);
+  const rows=related?(baseLines.length?[...baseLines,...(remainder>0?[{code:'—',desc:'باقي الدفعة — '+related.title,percent:amount>0?100*remainder/amount:0,amount:remainder}]:[])]:[{code:'1',desc:related.title+' — '+(related.description||'حسب جدول الدفعات'),percent:summary(current).ex>0?100*amount/summary(current).ex:0,amount}])
+    :[{code:'1',desc:current.contract_type+' — '+current.project_name,percent:100,amount}];
   const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(documentTitle)} - ${esc(current.contract_no)}</title><style>
  @page{size:A4 portrait;margin:11mm}*{box-sizing:border-box}body{font-family:Tahoma,Arial,sans-serif;color:#181818;background:white;font-size:11px;line-height:1.65}header{display:grid;grid-template-columns:1.5fr 105px 1fr;gap:12px;align-items:center;border-top:1px solid #ddd;padding:10px 0 12px;direction:rtl}header .brand{text-align:center;border-bottom:2px solid #b79b4c}header .brand strong{display:block;font-size:16px}header .brand small{font:700 10px Arial,sans-serif}header img{width:105px;height:90px;object-fit:contain}header .reg{text-align:center;border-bottom:2px solid #b79b4c;padding:10px 0}.party{display:flex;justify-content:space-between;margin:10px 0;font-weight:700}table{border-collapse:collapse;width:100%;table-layout:fixed;margin:8px 0}th,td{border:1px solid #222;padding:8px;text-align:center;word-break:break-word}th{font-size:10px}thead th,.dark{background:#101010;color:#d8b24d;font-weight:bold;-webkit-print-color-adjust:exact;print-color-adjust:exact}.document-name{background:#fff!important;color:#171717!important;font-size:18px}.document-name span{display:block;font-size:12px;color:#a88533;font-weight:700}.white{background:white!important;color:#222!important}.meta{font-size:10px}.meta th{width:21%}.summary{width:68%;margin-right:auto}.summary td:nth-child(1){font-weight:bold}.summary tr:last-child{background:#eee5d2;font-weight:bold}.approval-title{text-align:center;border:1px solid #222;background:#101010;color:#dbb959;padding:7px;font-weight:bold;margin-top:24px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.approvals{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid #222;border-top:0}.approvals>div{border-left:1px solid #222;padding:8px;min-height:120px}.approvals>div:last-child{border-left:0}.approvals b{display:block;border-bottom:1px solid #666;padding-bottom:7px;text-align:center}.approvals p{border-bottom:1px dotted #bbb;margin:14px 0}.footer{margin-top:18px;padding:10px;border:1px solid #aa8c40;border-top:3px solid #a88b3e;text-align:center}.notes{color:#555;font-size:10px}button{background:#b89449;border:0;padding:10px 18px;cursor:pointer}@media print{button{display:none}table tr,.approvals{break-inside:avoid}}
  </style></head><body>
- <header><div class="brand"><strong>${esc(companyOfficialName(current.company,profiles))}</strong><small>${current.company==='مسكن الكيان'?'MASKAN ALKAYAN CONTRACTING CO.':esc(current.company)}</small></div>${logosrc?'<img src="'+esc(new URL(logosrc,location.origin).href)+'" alt="الشعار">':'<div style="font-weight:bold;text-align:center;color:#a88b3e">هوية الشركة</div>'}<div class="reg">السجل التجاري حسب بيانات الشركة</div></header>
+ <header><div class="brand"><strong>${esc(companyOfficialName(current.company,profiles))}</strong><small>${current.company==='مسكن الكيان'?'MASKAN ALKAYAN CONTRACTING CO.':esc(current.company)}</small></div>${logosrc?'<img src="'+esc(new URL(logosrc,location.origin).href)+'" alt="الشعار">':'<div style="font-weight:bold;text-align:center;color:#a88b3e">'+esc(companyOfficialName(current.company,profiles))+'</div>'}<div class="reg">السجل التجاري: ${esc(profiles.find(r=>r.module==='company_profiles'&&r.company===current.company)?.data?.commercial_registration||'—')}</div></header>
  <div class="party"><span>السادة: ${esc(current.customer)} المحترمون</span><span>رقم العقد: ${esc(current.contract_no)}</span></div>
- <table><thead><tr><th>رقم المستند #</th><th>التاريخ Date</th><th>النوع Type</th><th rowspan="2" colspan="2" class="document-name">${documentTitle}<span>${documentEn}</span></th><th>القيمة شامل الضريبة</th></tr></thead><tbody><tr><td>${esc(cl?.claim_no||current.contract_no)}</td><td>${esc(cl?.raised_at||today())}</td><td>${esc(current.contract_type)}</td><td>${money(gross)} ر.س</td></tr></tbody></table>
+ <table><thead><tr><th>رقم المستند #</th><th>التاريخ Date</th><th>النوع Type</th><th rowspan="2" colspan="2" class="document-name">${documentTitle}<span>${documentEn}</span></th><th>القيمة شامل الضريبة</th></tr></thead><tbody><tr><td>${esc(cl?.claim_no||current.contract_no)}</td><td>${esc(docDate)}</td><td>${esc(current.contract_type)}</td><td>${money(gross)} ر.س</td></tr></tbody></table>
  <table><thead><tr><th>اسم العميل Customer</th><th colspan="2">اسم المشروع Project Name</th><th colspan="2">رقم العقد Project / Contract No.</th></tr></thead><tbody><tr><td>${esc(current.customer)}</td><td colspan="2">${esc(current.project_name)}</td><td colspan="2">${esc(current.contract_no)}</td></tr></tbody></table>
- <table class="meta"><tbody><tr><th>مدير المشروع</th><td>${esc(current.project_manager)}</td><th>بداية المشروع</th><td>${esc(current.start_date)}</td><th>نهاية المشروع</th><td>${esc(current.end_date)}</td></tr><tr><th>تاريخ رفع المطالبة</th><td>${esc(cl?.raised_at||'—')}</td><th>تاريخ الاستلام</th><td>${esc(received.map(x=>x.paid_at).join('، ')||'لم يتم')}</td><th>مُصدر المستند</th><td>${esc(issuer)}</td></tr></tbody></table>
+ <table class="meta"><tbody><tr><th>مدير المشروع</th><td>${esc(current.project_manager)}</td><th>بداية المشروع</th><td>${esc(current.start_date)}</td><th>نهاية المشروع</th><td>${esc(current.end_date)}</td></tr><tr><th>تاريخ رفع المطالبة</th><td>${esc(cl?.submitted_at||'لم تُرفع بعد')}</td><th>تاريخ استلام الدفعة</th><td>${esc(received.map(x=>x.paid_at).join('، ')||'لم يتم')}</td><th>مُصدر المستند</th><td>${esc(issuer)}</td></tr></tbody></table>
  <table><thead><tr><th>#</th><th>رقم البند Item Code</th><th>وصف البند / Claim Description</th><th>نسبة المطالبة Claim %</th><th>قبل الضريبة</th></tr></thead><tbody>${rows.map((r,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(r.code)+'</td><td>'+esc(r.desc)+'</td><td>'+r.percent.toFixed(2)+'%</td><td>'+money(r.amount)+'</td></tr>').join('')}</tbody></table>
  <table class="summary"><tbody><tr><td>قيمة المطالبة قبل الضريبة / Sub Total</td><td>${money(amount)} ر.س</td></tr><tr><td>ضريبة القيمة المضافة ${money(n(current.vat_rate)*100)}%</td><td>${money(vat)} ر.س</td></tr><tr><td>الإجمالي شامل الضريبة / Total</td><td>${money(gross)} ر.س</td></tr><tr><td>المدفوع لهذه المطالبة</td><td>${money(receivedTotal)} ر.س</td></tr><tr><td>المتبقي للمطالبة</td><td>${money(gross-receivedTotal)} ر.س</td></tr></tbody></table>
  <div class="approval-title">الاعتماد والتوقيع / APPROVAL & SIGNATURE</div><div class="approvals"><div><b>إعداد ومراجعة المطالبة</b><p>الاسم: ${esc(issuer)}</p><p>التوقيع:</p><p>التاريخ:</p></div><div><b>مدير المشروع</b><p>الاسم: ${esc(current.project_manager)}</p><p>التوقيع:</p><p>الختم:</p></div><div><b>اعتماد العميل</b><p>الاسم:</p><p>التوقيع:</p><p>الختم:</p></div></div>
