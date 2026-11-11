@@ -3,10 +3,19 @@ export const runtime='nodejs';
 export const maxDuration=60;
 export const dynamic='force-dynamic';
 const fail=(message:string,status=400)=>Response.json({error:message},{status,headers:{'Cache-Control':'no-store'}});
+export async function GET(req:Request){
+ const cookies=req.headers.get('cookie')||'';
+ if(!cookies.includes('hr_access='))return fail('سجّل الدخول أولًا',401);
+ const ready=Boolean(process.env.AI_GATEWAY_API_KEY||process.env.VERCEL_OIDC_TOKEN);
+ return Response.json({ready,model:process.env.CONTRACT_AI_MODEL||'google/gemini-3-flash',message:ready?'إعداد الاتصال موجود. يلزم تجربة عقد للتحقق من الاستجابة.':'الاتصال غير مهيأ: فعّل Vercel AI Gateway أو أضف AI_GATEWAY_API_KEY إلى إعدادات الخادم.'},{headers:{'Cache-Control':'private, no-store'}});
+}
 export async function POST(req:Request){
  try{
   const origin=new URL(req.url).origin;
-  if(req.headers.get('origin')!==origin)return fail('مصدر الطلب غير مسموح',403);
+  const originHeader=req.headers.get('origin');
+  const forwardedHost=req.headers.get('x-forwarded-host')||req.headers.get('host');
+  const permittedOrigins=new Set([origin,forwardedHost?'https://'+forwardedHost:'']);
+  if(!originHeader||!permittedOrigins.has(originHeader))return fail('مصدر الطلب غير مسموح',403);
   const cookies=req.headers.get('cookie')||'';
   if(!cookies.includes('hr_access='))return fail('سجّل الدخول أولًا',401);
   const {contract_id,document_id}=await req.json();
@@ -38,7 +47,7 @@ export async function POST(req:Request){
    'المبالغ المطلوبة قبل ضريبة القيمة المضافة. إذا ورد المبلغ شامل الضريبة فقط وكانت نسبة 15% منصوصًا عليها يمكن اشتقاق ما قبل الضريبة بدقة سنتين مع التحذير.',
    'استجب JSON فقط بالهيكل التالي:',
    '{"contract_no":"","document_summary":"","warnings":[],"installments":[{"title":"","description":"","due_date":null,"payment_percent":null,"amount_ex_vat":null,"source":"","items":[{"item_code":"","description":"","quantity":1,"unit":"بند","unit_price_ex_vat":0}]}]}',
-   'إن لم يذكر العقد بنودًا تفصيلية اترك items فارغة. source مقتطف قصير أو موضع البند للمراجعة. لا تتجاوز 30 دفعة و50 بندًا لكل دفعة.'
+   'إن لم يذكر العقد بنودًا تفصيلية اترك items فارغة. source مقتطف قصير أو موضع البند للمراجعة. لا تتجاوز 10 دفعات و50 بندًا لكل دفعة.'
   ].join('\n');
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),49000);
@@ -62,8 +71,8 @@ export async function POST(req:Request){
   if(typeof raw!=='string'||!raw.trim())return fail('لم يرجع النموذج بيانات قابلة للمراجعة',502);
   let parsed;
   try{
-   const cleaned=raw.trim().replace(/^.{3}(?:json)?\s*/i,'').replace(/\s*.{3}$/,'');
-   parsed=normalizeContractAIResult(JSON.parse(raw.trim().startsWith('{')?raw.trim():cleaned));
+   const cleaned=raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
+   parsed=normalizeContractAIResult(JSON.parse(cleaned));
   }catch{return fail('تعذر قراءة جدول الدفعات المستخرج؛ أعد المحاولة أو أدخل الدفعات يدويًا',502)}
   if(parsed.contract_no&&parsed.contract_no!==verification.contract.contract_no)parsed.warnings.unshift('رقم العقد في المستند ('+parsed.contract_no+') يختلف عن السجل ('+verification.contract.contract_no+'). تحقق من صحة المرفق.');
   return Response.json({document_id,contract_id,contract_base_ex_vat:Number(verification.contract.base_ex_vat||0),...parsed,model,requires_review:true},{headers:{'Cache-Control':'private, no-store'}});
