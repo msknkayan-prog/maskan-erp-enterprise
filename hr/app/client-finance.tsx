@@ -78,7 +78,7 @@ export default function ClientFinance({user,company,profiles,companyList,project
    {key:'document',label:'ملف العقد',ok:files.length>0,details:files.length?files.length+' ملف محفوظ':'ملف العقد غير مرفق',tab:'documents'},
    {key:'schedule',label:'جدول الدفعات',ok:scheduled.length>0&&Math.abs(unscheduled)<.01,details:scheduled.length+' دفعة · غير موزع '+money(unscheduled)+' ر.س',tab:'installments'},
    {key:'claims',label:'مطالبات مستحقة',ok:readyClaims.length===0,details:readyClaims.length?readyClaims.length+' مطالبة جاهزة للإصدار':'لا توجد مطالبة تنتظر الإصدار',tab:'claims'},
-   {key:'email',label:'بريد العميل',ok:/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email),details:email||'غير مسجل',tab:'contract'}
+   {key:'email',label:'بريد العميل',ok:/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email),details:email||'غير مسجل',tab:'contract'}
   ];
  };
  const totalReceivable=contracts.reduce((x,c)=>x+summary(c).remaining,0);
