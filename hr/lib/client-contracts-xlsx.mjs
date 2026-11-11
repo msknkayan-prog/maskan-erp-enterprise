@@ -40,7 +40,7 @@ export function buildContractsXlsx(rows=[],sample=false){
 }
 const decodeXml=s=>String(s).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&');
 const attr=(tag,k)=>(tag.match(new RegExp('(?:^|\\s)'+k+'="([^"]*)"'))||[])[1]||'';
-const content=xml=>([...xml.matchAll(/<t(?:\\s[^>]*)?>([\\s\\S]*?)<\\/t>/g)].map(m=>decodeXml(m[1])).join(''));
+const content=xml=>([...xml.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map(m=>decodeXml(m[1])).join(''));
 const colIdx=ref=>{const a=ref.match(/^[A-Z]+/i)?.[0]?.toUpperCase()||'';let x=0;for(const c of a)x=x*26+(c.charCodeAt(0)-64);return x-1};
 export function parseContractsXlsx(bytes,{maxRows=500,maxBytes=5*1024*1024}={}){
  if(bytes.byteLength>maxBytes)throw Error('ملف Excel يتجاوز الحد المسموح 5 ميجابايت');
@@ -48,15 +48,15 @@ export function parseContractsXlsx(bytes,{maxRows=500,maxBytes=5*1024*1024}={}){
  const sheet=archive['xl/worksheets/sheet1.xml'];if(!sheet)throw Error('الورقة الأولى غير موجودة؛ استخدم قالب عقود العملاء');
  const xml=strFromU8(sheet);if(xml.length>6000000)throw Error('ملف Excel كبير جدًا');
  const sharedXml=archive['xl/sharedStrings.xml']?strFromU8(archive['xl/sharedStrings.xml']):'';
- const shared=[...sharedXml.matchAll(/<si(?:\\s[^>]*)?>([\\s\\S]*?)<\\/si>/g)].map(m=>content(m[1]));
+ const shared=[...sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)].map(m=>content(m[1]));
  const rows=[];
- for(const m of xml.matchAll(/<row\\b[^>]*>([\\s\\S]*?)<\\/row>/g)){
+ for(const m of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)){
   const cells=Array(contractColumns.length).fill('');
-  for(const c of m[1].matchAll(/<c\\b([^>]*)(?:\\/\>|>([\\s\\S]*?)<\\/c>)/g)){
+  for(const c of m[1].matchAll(/<c\b([^>]*)(?:\/\>|>([\s\S]*?)<\/c>)/g)){
    const index=colIdx(attr(c[1],'r'));if(index<0||index>=cells.length)continue;
    const body=c[2]||'';
-   if(/<f(?:\\s|>)/.test(body))throw Error('لا تُقبل الصيغ في ملف الاستيراد. انسخ القيم أولًا.');
-   const type=attr(c[1],'t'),v=body.match(/<v>([\\s\\S]*?)<\\/v>/)?.[1]||'';
+   if(/<f(?:\s|>)/.test(body))throw Error('لا تُقبل الصيغ في ملف الاستيراد. انسخ القيم أولًا.');
+   const type=attr(c[1],'t'),v=body.match(/<v>([\s\S]*?)<\/v>/)?.[1]||'';
    cells[index]=type==='inlineStr'?content(body):type==='s'?(shared[Number(v)]||''):decodeXml(v);
   }
   rows.push(cells.map(x=>String(x??'').trim()));
@@ -70,7 +70,7 @@ export function parseContractsXlsx(bytes,{maxRows=500,maxBytes=5*1024*1024}={}){
  for(const row of imported){
   for(const key of required)if(!row[key])errors.push('السطر '+row.line+': '+contractColumns.find(c=>c[0]===key)[1]+' مطلوب');
   if(row.contract_type&&!types.has(row.contract_type))errors.push('السطر '+row.line+': نوع العقد غير معتمد');
-  for(const key of ['signed_date','start_date','end_date'])if(row[key]&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(row[key]))errors.push('السطر '+row.line+': التاريخ يجب أن يكون YYYY-MM-DD');
+  for(const key of ['signed_date','start_date','end_date'])if(row[key]&&!/^\d{4}-\d{2}-\d{2}$/.test(row[key]))errors.push('السطر '+row.line+': التاريخ يجب أن يكون YYYY-MM-DD');
   if(row.start_date&&row.end_date&&row.end_date<row.start_date)errors.push('السطر '+row.line+': تاريخ النهاية يسبق البداية');
   for(const key of ['base_ex_vat','vat_rate','retention_percent'])if(row[key]!==''&&(!Number.isFinite(Number(row[key]))||Number(row[key])<0))errors.push('السطر '+row.line+': قيمة '+key+' غير صالحة');
   if(row.vat_rate!==''&&Number(row.vat_rate)>100)errors.push('السطر '+row.line+': نسبة الضريبة أكبر من 100%');
