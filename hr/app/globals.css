@@ -874,3 +874,23 @@ body{line-height:1.55}
 .cf-brief>div{display:flex;flex-direction:column;gap:8px;border:1px solid #dfcfad;background:#fff;padding:13px 15px;border-radius:8px;border-right:3px solid #b38a32;min-width:0}
 .cf-brief small{font-size:11px;color:#637168}
 .cf-brief strong{font-size:16px;font-weight:800;color:#74551f;overflow-wrap:anywhere}
+
+/* Finance section heading: same approved gold used by the selected navigation item. */
+.app aside .nav-label.nav-label-finance {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:linear-gradient(135deg,#a77f27,#d7bb62);
+  color:#211b0b;
+  border:1px solid #c9a74d;
+  border-radius:8px;
+  padding:12px 9px;
+  margin-top:22px;
+  margin-bottom:9px;
+  font-size:14px;
+  line-height:1.5;
+  text-align:center;
+  font-weight:800;
+  box-shadow:inset -3px 0 #f0d987;
+}
+@media(max-width:720px){.app aside .nav-label.nav-label-finance{display:none!important}}
