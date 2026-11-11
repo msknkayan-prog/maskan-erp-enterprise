@@ -207,6 +207,18 @@ export async function POST(req){
    if(!res[0].meta.changes)throw Error('المسير تغير؛ أعد التحميل');
    return response({ok:true});
   }
+  // Enforce employment status at every approval/payment boundary, including
+  // batches created before the employee became inactive.
+  if(['submit','managers_approve','projects_approve','finance_pay','admin_approve','finance_approve'].includes(action)){
+   const included=monthly.filter(r=>!r.data.excluded);
+   if(included.length){
+    const employeeIds=included.map(r=>String(r.data.employee_id||''));
+    const employeeRows=(await db.prepare("SELECT id,company,data FROM records WHERE module='employees' AND company=?").bind(batch.company).all()).results.map(parse);
+    const activeIds=new Set(employeeRows.filter(r=>['active','نشط','على رأس العمل','علي راس العمل'].includes(String(r.data.employment_status||r.data.employee_status||'').trim())).map(r=>r.id));
+    const invalid=employeeIds.find(id=>!activeIds.has(id));
+    if(invalid)throw Error('يوجد موظف غير نشط في المسير؛ يجب استبعاده أو تعديل حالته إلى نشط في سجل الموظفين قبل الاعتماد أو الصرف');
+   }
+  }
   if(action==='submit'){
    if(!prepAllowed||batch.status!=='draft')return err('الإرسال من صلاحيات إعداد المسير فقط',403);
    if(monthly.length!==Number(batch.data.employee_count))throw Error('قائمة الموظفين غير مكتملة');

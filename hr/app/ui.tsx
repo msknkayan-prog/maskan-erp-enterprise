@@ -132,7 +132,7 @@ const fieldsFor=spec?spec.fields.filter(f=>!['project_manager','projects_directo
 const tableFields=module==='employees'?[...employeeRegisterFields,...spec.fields.filter(f=>['iqama_expiry','contract_expiry','notes'].includes(f.key))].filter(f=>!['project_manager','projects_director'].includes(user?.role)||['name','code','job','department','project_id','employment_status'].includes(f.key)):fieldsFor.slice(0,7);
 // Payroll previews use the imported employee source of truth. A preview is not a paid or approved payroll.
 const payrollCompanies=[...new Set(rows.filter(r=>r.module==='employees').map(r=>r.company).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
-const payrollEmployees=rows.filter(r=>r.module==='employees'&&(payrollCompany==='__all__'||r.company===payrollCompany));
+const payrollEmployees=rows.filter(r=>r.module==='employees'&&(payrollCompany==='__all__'||r.company===payrollCompany)&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(r.data?.employment_status||r.data?.employee_status||'').trim()));
 const payrollNumber=(...values)=>{const item=values.find(v=>v!==undefined&&v!==null&&String(v).trim()!=='');const n=Number(item??0);return Number.isFinite(n)?n:0};
 const payrollEntries=payrollEmployees.map(emp=>{
  const d=emp.data||{};
@@ -191,10 +191,12 @@ const visibleCycleBatches=cycleBatches.filter(b=>payrollStage==='__all__'||b.sta
 const visibleCycleIds=new Set(visibleCycleBatches.map(b=>b.id));
 const cycleBatchIds=new Set(cycleBatches.map(r=>r.id));
 const cyclePayroll=rows.filter(r=>r.module==='payroll'&&cycleBatchIds.has(r.data?.batch_id)).sort((a,b)=>a.company.localeCompare(b.company,'ar')||String(a.data?.employee_name||'').localeCompare(String(b.data?.employee_name||''),'ar'));
-const visibleCyclePayroll=cyclePayroll.filter(r=>visibleCycleIds.has(r.data?.batch_id));
+const payrollEmployeeIsActive=id=>rows.some(e=>e.module==='employees'&&e.id===id&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(e.data?.employment_status||e.data?.employee_status||'').trim()));
+const cycleRowShouldShow=row=>{const batch=cycleBatches.find(b=>b.id===row.data?.batch_id);return batch?.status==='paid'||payrollEmployeeIsActive(row.data?.employee_id)};
+const visibleCyclePayroll=cyclePayroll.filter(r=>visibleCycleIds.has(r.data?.batch_id)&&cycleRowShouldShow(r));
 const cycleBatchFor=row=>cycleBatches.find(b=>b.id===row.data?.batch_id);
 const payrollManagedBatch=cycleBatches.find(b=>b.id===payrollManageBatchId);
-const payrollManagedRows=payrollManagedBatch?cyclePayroll.filter(row=>row.data.batch_id===payrollManagedBatch.id):[];
+const payrollManagedRows=payrollManagedBatch?cyclePayroll.filter(row=>row.data.batch_id===payrollManagedBatch.id&&cycleRowShouldShow(row)):[];
 const payrollManagedIncluded=payrollManagedRows.filter(row=>!row.data.excluded);
 const payrollManagedReviewed=payrollManagedIncluded.filter(row=>row.data.split_confirmed).length;
 const payrollStages=['draft','manager_review','projects_review','finance_review','paid'];
