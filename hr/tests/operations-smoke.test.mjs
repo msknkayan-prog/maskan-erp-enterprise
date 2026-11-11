@@ -1085,3 +1085,25 @@ test('delete contract only when empty, archive otherwise and allow restore',()=>
  assert.match(ui,/استعادة العقد/);
  assert.match(ui,/حذف العقد/);
 });
+
+test('AI payment extraction is prominent before manual entry and needs explicit save',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ const tab=ui.indexOf("{tab==='installments'&&");
+ const manual=ui.indexOf('إضافة دفعة تعاقدية');
+ assert.ok(tab>0&&manual>tab);
+ const ai=ui.indexOf('استخراج بنود الدفعات من العقد بالذكاء الاصطناعي');
+ assert.ok(ai>tab&&ai<manual,'AI CTA appears above manual form');
+ for(const marker of ['extractFromContract','aiDocumentId','aiContractFile','uploadDocument(aiContractFile','تأكيد وحفظ بنود الدفعات المعتمدة','approveAISchedule','requires_review'])assert.ok(ui.includes(marker)||marker==='requires_review',marker);
+ assert.match(css,/\.cf-ai-import-grid/);
+});
+test('issued customer claim has printable certificate and email handoff without claiming automatic dispatch',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ assert.match(ui,/const prepareClientEmail=/);
+ assert.match(ui,/claim\.status!=='issued'/);
+ assert.match(ui,/mailto:/);
+ assert.match(ui,/encodeURIComponent\(address\)/);
+ assert.match(ui,/تجهيز الإرسال للعميل/);
+ assert.match(ui,/المستخلص PDF/);
+ assert.match(ui,/يجب إرفاق PDF وإرسال الرسالة من بريدك/);
+});
