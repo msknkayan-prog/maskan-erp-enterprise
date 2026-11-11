@@ -15,7 +15,7 @@ const amt=x=>{const n=Number(x);if(!Number.isFinite(n)||n<0||n>1e12)throw Error(
 const date=x=>{const s=str(x,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||!Number.isFinite(Date.parse(s)))throw Error('التاريخ غير صالح');return s};
 const unique=(r)=>r?.results||[];
 const row=async(db,id,u)=>{const r=await db.prepare('SELECT * FROM client_contracts WHERE id=?').bind(id).first();if(!r)throw Error('العقد غير موجود');checkCompany(u,r.company);return r};
-const input=async req=>{const b=await req.text();if(b.length>100000)throw Error('الطلب كبير');return JSON.parse(b||'{}')};
+const input=async req=>{const b=await req.text();if(b.length>850000)throw Error('ملف الاستيراد كبير جدًا؛ قسم العقود إلى مجموعات لا تتجاوز 500 عقد');return JSON.parse(b||'{}')};
 const fail=e=>json({error:e.message||'تعذر إتمام العملية'},/صلاحية|403/.test(String(e.message))?403:400);
 const addAudit=async(db,u,id,action,details)=>{await db.prepare('INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),u.email,id,action,new Date().toISOString(),JSON.stringify(details)).run()};
 const checkTotal=async(db,c,additional=0)=>{
