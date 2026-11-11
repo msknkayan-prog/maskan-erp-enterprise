@@ -1191,3 +1191,11 @@ test('AI-approved contracts retain source document evidence',()=>{
  assert.match(api,/لا يمكن مسح مستند اعتمدت منه دفعات/);
  assert.match(api,/لا يمكن استبدال ملف عقد اعتمدت منه دفعات/);
 });
+
+test('contract dashboard exposes operational readiness checks and routes to missing work',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ for(const marker of ['const readiness=(c)=>','فحص جاهزية العقد للتشغيل','ملف العقد','جدول الدفعات','مطالبات مستحقة','بريد العميل','setTab(entry.tab)','openEditContract(current)'])assert.ok(ui.includes(marker),marker);
+ assert.match(ui,/Math\.abs\(unscheduled\)<\.01/);
+ assert.match(css,/\.cf-readiness-grid/);
+});
