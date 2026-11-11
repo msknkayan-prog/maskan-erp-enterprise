@@ -132,7 +132,7 @@ const fieldsFor=spec?spec.fields.filter(f=>!['project_manager','projects_directo
 const tableFields=module==='employees'?[...employeeRegisterFields,...spec.fields.filter(f=>['iqama_expiry','contract_expiry','notes'].includes(f.key))].filter(f=>!['project_manager','projects_director'].includes(user?.role)||['name','code','job','department','project_id','employment_status'].includes(f.key)):fieldsFor.slice(0,7);
 // Payroll previews use the imported employee source of truth. A preview is not a paid or approved payroll.
 const payrollCompanies=[...new Set(rows.filter(r=>r.module==='employees').map(r=>r.company).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
-const payrollEmployees=rows.filter(r=>r.module==='employees'&&(payrollCompany==='__all__'||r.company===payrollCompany));
+const payrollEmployees=rows.filter(r=>r.module==='employees'&&(payrollCompany==='__all__'||r.company===payrollCompany)&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(r.data?.employment_status||r.data?.employee_status||'').trim()));
 const payrollNumber=(...values)=>{const item=values.find(v=>v!==undefined&&v!==null&&String(v).trim()!=='');const n=Number(item??0);return Number.isFinite(n)?n:0};
 const payrollEntries=payrollEmployees.map(emp=>{
  const d=emp.data||{};
@@ -195,7 +195,7 @@ const visibleCyclePayroll=cyclePayroll.filter(r=>visibleCycleIds.has(r.data?.bat
 const cycleBatchFor=row=>cycleBatches.find(b=>b.id===row.data?.batch_id);
 const payrollManagedBatch=cycleBatches.find(b=>b.id===payrollManageBatchId);
 const payrollManagedRows=payrollManagedBatch?cyclePayroll.filter(row=>row.data.batch_id===payrollManagedBatch.id):[];
-const payrollManagedIncluded=payrollManagedRows.filter(row=>!row.data.excluded);
+const payrollManagedIncluded=payrollManagedRows.filter(row=>!row.data.excluded&&rows.some(employee=>employee.module==='employees'&&employee.id===row.data.employee_id&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(employee.data?.employment_status||employee.data?.employee_status||'').trim())));
 const payrollManagedReviewed=payrollManagedIncluded.filter(row=>row.data.split_confirmed).length;
 const payrollStages=['draft','manager_review','projects_review','finance_review','paid'];
 const payrollStageLabels=['مساعد الإدارة','مدراء المشاريع','إدارة المشاريع','المالية / الصرف'];
