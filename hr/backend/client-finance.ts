@@ -57,6 +57,8 @@ export async function POST(req){
  if(replacingId){
   const old=await db.prepare('SELECT id,document_type FROM client_documents WHERE id=? AND contract_id=? AND deleted_at IS NULL').bind(replacingId,c.id).first();
   if(!old||old.document_type!==documentType)throw Error('يجب استبدال مرفق نشط بنفس النوع ومن العقد نفسه');
+  const approvedAI=await db.prepare('SELECT id FROM client_ai_imports WHERE document_id=?').bind(replacingId).first();
+  if(approvedAI)throw Error('لا يمكن استبدال ملف عقد اعتمدت منه دفعات؛ أرفق ملحقًا جديدًا مع الاحتفاظ بالمستند الأصلي');
  }
  if(!['contract','contract_appendix','extra','deduction','claim','receipt','other'].includes(documentType))throw Error('نوع المرفق غير معتمد');
  const adjustmentId=str(p.get('adjustment_id'),40)||null,claimId=str(p.get('claim_id'),40)||null,receiptId=str(p.get('receipt_id'),40)||null;
@@ -159,6 +161,8 @@ export async function POST(req){
   if(c.contract_status==='archived')throw Error('لا يمكن حذف مرفق من عقد مؤرشف');
   const doc=await db.prepare('SELECT * FROM client_documents WHERE id=? AND contract_id=? AND deleted_at IS NULL').bind(str(b.document_id,40),c.id).first();
   if(!doc)throw Error('المرفق غير موجود أو تم مسحه سابقًا');
+  const approvedAI=await db.prepare('SELECT id FROM client_ai_imports WHERE document_id=?').bind(doc.id).first();
+  if(approvedAI)throw Error('لا يمكن مسح مستند اعتمدت منه دفعات. يُحتفظ به لإثبات مصدر المستخلصات.');
   await db.prepare('UPDATE client_documents SET deleted_at=now(),deleted_by=? WHERE id=? AND contract_id=? AND deleted_at IS NULL').bind(u.email,doc.id,c.id).run();
   await addAudit(db,u,c.id,'client_contract_document_removed',{document_id:doc.id,name:doc.name,document_type:doc.document_type});
   return json({ok:true,deleted:true});
