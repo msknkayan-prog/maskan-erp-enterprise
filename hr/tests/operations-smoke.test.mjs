@@ -1060,7 +1060,7 @@ test('AI document route is session guarded, and schedules save only by explicit 
  const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
  for(const marker of ["hr_access=","ai_document=","already_imported","ai-gateway.vercel.sh/v1/responses","input_file","input_image","VERCEL_OIDC_TOKEN","requires_review:true"])assert.ok(route.includes(marker),marker);
  for(const marker of ["approve_ai_schedule","client_ai_imports","await db.batch(statements)","document_id","auto_generate_client_claims()"])assert.ok(api.includes(marker),marker);
- for(const marker of ["analyzeContractAI","approveAISchedule","validateAISchedule","مراجعة بنود الدفعات المستخرجة","تأكيد وحفظ بنود الدفعات المعتمدة"])assert.ok(ui.includes(marker),marker);
+ for(const marker of ["analyzeContractAI","approveAISchedule","validateAISchedule","مراجعة الدفعات المستخرجة من 1 إلى 10","تأكيد وحفظ بنود الدفعات المعتمدة"])assert.ok(ui.includes(marker),marker);
 });
 
 test('contract installment percent, sequential number and safe archive are integrated',()=>{
