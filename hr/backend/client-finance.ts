@@ -148,6 +148,46 @@ export async function POST(req){
  ['active','completed','suspended'].includes(b.contract_status)?b.contract_status:c.contract_status,c.id).run();
  await addAudit(db,u,c.id,'client_contract_updated',{customer:b.customer,manager:b.project_manager});return json({ok:true});
  }
+ if(action==='approve_ai_schedule'){
+  const documentId=str(b.document_id,40),doc=await db.prepare('SELECT id,contract_id,mime,document_type FROM client_documents WHERE id=? AND contract_id=?').bind(documentId,c.id).first();
+  if(!doc||!['contract','contract_appendix'].includes(doc.document_type))throw Error('يجب اختيار عقد أو ملحق معتمد مرفق لنفس العقد');
+  const already=await db.prepare('SELECT id FROM client_ai_imports WHERE document_id=?').bind(documentId).first();
+  if(already)throw Error('تم اعتماد بنود هذا المستند سابقًا. لن تُكرر الدفعات');
+  const plans=b.installments;
+  if(!Array.isArray(plans)||plans.length<1||plans.length>30)throw Error('يُسمح من دفعة واحدة إلى 30 دفعة لكل عقد');
+  const existing=unique(await db.prepare("SELECT amount_ex_vat FROM client_installments WHERE contract_id=? AND status='scheduled'").bind(c.id).all()).reduce((t,x)=>t+Number(x.amount_ex_vat),0);
+  const capacity=await checkTotal(db,c);
+  const statements=[],dueKeys=new Set();let requested=0;
+  for(let ix=0;ix<plans.length;ix++){
+   const p=plans[ix]||{},due=date(p.due_date),value=amt(p.amount_ex_vat),title=str(p.title,160),desc=str(p.description,1500),rawItems=p.items||[];
+   if(value<=0||!title)throw Error('دفعة رقم '+(ix+1)+': العنوان والمبلغ مطلوبان');
+   if(!Array.isArray(rawItems)||rawItems.length>50)throw Error('دفعة رقم '+(ix+1)+': عدد البنود يتجاوز 50');
+   const signature=title+'|'+due;
+   if(dueKeys.has(signature))throw Error('تكرار نفس الدفعة بتاريخ الاستحقاق');dueKeys.add(signature);
+   requested+=value;const id=crypto.randomUUID();
+   const progress=amt(p.progress_percent||0);if(progress>100)throw Error('نسبة إنجاز غير صالحة');
+   statements.push(db.prepare('INSERT INTO client_installments(id,contract_id,title,description,due_date,amount_ex_vat,progress_percent,milestone_type) VALUES(?,?,?,?,?,?,?,?)')
+   .bind(id,c.id,title,desc,due,value,progress,'ai_contract_reviewed'));
+   let itemAmount=0;const itemCodes=new Set();
+   for(let j=0;j<rawItems.length;j++){
+    const item=rawItems[j]||{},itemCode=str(item.item_code||'AI-'+(j+1),50),description=str(item.description,900);
+    const qty=Number(item.quantity),unitPrice=amt(item.unit_price_ex_vat);
+    if(!description||!Number.isFinite(qty)||qty<=0||qty>100000000||itemCodes.has(itemCode))throw Error('تفاصيل بند غير صالحة في الدفعة '+(ix+1));
+    itemCodes.add(itemCode);itemAmount+=Math.round(qty*unitPrice*100)/100;
+    statements.push(db.prepare('INSERT INTO client_installment_items(id,installment_id,contract_id,item_code,description,quantity,unit,unit_price_ex_vat,created_by) VALUES(?,?,?,?,?,?,?,?,?)')
+      .bind(crypto.randomUUID(),id,c.id,itemCode,description,qty,str(item.unit||'بند',50),unitPrice,u.email));
+   }
+   if(itemAmount>value+0.005)throw Error('قيمة بنود الدفعة رقم '+(ix+1)+' تتجاوز إجمالي الدفعة');
+  }
+  if(existing+requested>capacity+0.005)throw Error('مجموع الدفعات المستخرجة يتجاوز المتبقي من قيمة العقد قبل الضريبة');
+  statements.push(db.prepare('INSERT INTO client_ai_imports(id,contract_id,document_id,installment_count,total_ex_vat,approved_by) VALUES(?,?,?,?,?,?)')
+    .bind(crypto.randomUUID(),c.id,documentId,plans.length,Math.round(requested*100)/100,u.email));
+  statements.push(db.prepare('INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)')
+    .bind(crypto.randomUUID(),u.email,c.id,'ai_installment_schedule_approved',new Date().toISOString(),JSON.stringify({document_id:documentId,installments:plans.length,total_ex_vat:requested})));
+  try{await db.batch(statements)}catch(err){if(/unique|duplicate/i.test(String(err.message||'')))throw Error('هذه الدفعات مستوردة مسبقًا');throw err;}
+  await db.prepare('SELECT auto_generate_client_claims()').first();
+  return json({ok:true,imported:plans.length,total_ex_vat:Math.round(requested*100)/100});
+ }
  if(action==='add_installment'){
  const due=date(b.due_date),amount=amt(b.amount_ex_vat);
  if(!amount)throw Error('قيمة الدفعة مطلوبة');
