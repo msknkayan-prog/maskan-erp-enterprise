@@ -6,10 +6,12 @@ import {buildContractsXlsx,parseContractsXlsx,exportContractRows} from '../lib/c
 import {validateAISchedule} from '../lib/contract-ai.mjs';
 const kinds=['سباكة وكهرباء','تشطيبات عامة','أعمال عظم','أعمال تكييف','أعمال دفاع مدني'];
 const n=x=>Number(x||0);
+const dateOnly=v=>String(v??'').slice(0,10);
 const money=x=>n(x).toLocaleString('ar-SA',{minimumFractionDigits:2,maximumFractionDigits:2});
 const today=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,10);
 const projectDuration=(start,end)=>{
- if(!/^\d{4}-\d{2}-\d{2}$/.test(String(start||''))||!/^\d{4}-\d{2}-\d{2}$/.test(String(end||'')))return null;
+ start=dateOnly(start);end=dateOnly(end);
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end))return null;
  const a=Date.parse(start+'T00:00:00Z'),b=Date.parse(end+'T00:00:00Z');
  if(!Number.isFinite(a)||!Number.isFinite(b)||b<a)return null;
  return Math.round((b-a)/86400000)+1;
@@ -18,7 +20,7 @@ const durationLabel=(start,end)=>{const days=projectDuration(start,end);return d
 const documentLabels={contract:'العقد الأساسي',contract_appendix:'ملحق العقد',extra:'مستند الأعمال الإضافية',deduction:'مرفق الخصم',claim:'مرفق المطالبة المالية',receipt:'سند استلام الدفعة',other:'مستند آخر'};
 const esc=x=>String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const blank={company:'',customer:'',project_name:'',project_manager:'',contract_no:'',contract_type:kinds[0],start_date:today(),end_date:today(),signed_date:today(),base_ex_vat:'',vat_rate:'15',customer_phone:'',customer_email:'',customer_vat_no:'',site_location:'',contract_subject:'',client_reference:'',retention_percent:'0',contract_status:'active',notes:''};
-const p0={title:'',description:'',amount_ex_vat:'',due_date:today(),progress_percent:'0',milestone_type:'contractual'};
+const p0={title:'',description:'',amount_ex_vat:'',payment_percent:'',due_date:today(),progress_percent:'0',milestone_type:'contractual'};
 const item0={installment_id:'',item_code:'',description:'',quantity:'1',unit:'بند',unit_price_ex_vat:''};
 const a0={kind:'extra',description:'',amount_ex_vat:'',approved_at:today()};
 const r0={paid_at:today(),amount_inc_vat:'',method:'تحويل بنكي',reference:'',claim_id:''};
@@ -34,11 +36,12 @@ export default function ClientFinance({user,company,profiles,companyList,project
  const [aiPreview,setAiPreview]=useState(null),[aiBusy,setAiBusy]=useState(false);
  const privileges=(()=>{try{return typeof user?.permissions==='string'?JSON.parse(user.permissions||'{}'):user?.permissions||{}}catch{return {}}})();
  const canEdit=user?.role==='admin'||(user?.role==='finance'&&privileges['client_finance:edit']!==false)||privileges['client_finance:edit']===true;
+ const canArchive=user?.role==='admin'||user?.role==='finance'||privileges['client_finance:delete']===true;
  const canApprove=user?.role==='admin'||user?.role==='projects_director'||privileges['client_finance:approve']===true;
  const reload=async()=>{setLoading(true);try{const response=await fetch('/api/client-finance',{cache:'no-store'});const result=await response.json();if(!response.ok)throw Error(result.error||'تعذر تحميل المطالبات');setData(result);setError('');}catch(e){setError(e.message)}finally{setLoading(false)}};
  useEffect(()=>{reload()},[]);
  const userCompanies=(()=>{try{return user?.companies==='*'||!user?.companies?companyList:JSON.parse(user.companies)}catch{return []}})();
- const contracts=data.contracts.filter(c=>(!company||c.company===company)&&[c.customer,c.project_name,c.contract_no,c.project_manager].join(' ').toLowerCase().includes(search.trim().toLowerCase()));
+ const contracts=data.contracts.filter(c=>c.contract_status!=='archived'&&(!company||c.company===company)&&[c.customer,c.project_name,c.contract_no,c.project_manager].join(' ').toLowerCase().includes(search.trim().toLowerCase()));
  const current=data.contracts.find(c=>c.id===selected&&(!company||c.company===company));
  const overdue=data.installments.filter(i=>i.status==='scheduled'&&i.due_date<today()&&data.contracts.some(c=>c.id===i.contract_id&&(!company||c.company===company))&&!data.claims.some(cl=>cl.installment_id===i.id&&cl.status==='issued'));
  const pendingClaims=data.claims.filter(cl=>cl.status==='ready'&&data.contracts.some(c=>c.id===cl.contract_id&&(!company||c.company===company)));
@@ -85,8 +88,14 @@ const register=async e=>{e.preventDefault();const result=await execute({action:'
  if(initialContractFile){try{const document=await uploadDocument(initialContractFile,result.id,{document_type:'contract'});setNotice('تم تسجيل العقد وإرفاق ملف العقد الأصلي');await reload();if(document?.id)await analyzeContractAI(document.id,result.id);}catch(err){setError('العقد محفوظ لكن فشل رفع ملفه: '+err.message);}finally{setInitialContractFile(null)}}
 }};
  const saveContract=async e=>{e.preventDefault();if(await execute({action:'update_contract',contract_id:selected,...editContract,vat_rate:Number(editContract.vat_rate)},'تم تحديث معلومات العقد'))setContractEditOpen(false)};
+ const archiveContract=async()=>{
+  if(!current||!canArchive)return;
+  if(!window.confirm('تأكيد أرشفة العقد رقم '+current.contract_no+'؟ سيختفي من العقود النشطة وتُحفظ المطالبات والدفعات وسجلات المراجعة، ولن تصدر مطالبات جديدة للعقد المؤرشف.'))return;
+  const res=await execute({action:'archive_contract',contract_id:current.id},'تم أرشفة العقد دون فقد المستندات والسجل المالي');
+  if(res){setSelected('');setContractEditOpen(false);}
+ };
  const addItem=async e=>{e.preventDefault();if(await execute({action:'add_installment_item',contract_id:selected,...item},'تم ربط بند الدفعة بالعقد'))setItem(item0)};
- const addPay=async e=>{e.preventDefault();if(await execute({action:'add_installment',contract_id:selected,...installment},'تم تسجيل دفعة العقد وتوليد المطالبة تلقائيًا إن حل موعدها')){setInstallment(p0)}};
+ const addPay=async e=>{e.preventDefault();if(await execute({action:'add_installment',contract_id:selected,...installment},'تم تسجيل دفعة العقد برقم تلقائي وربطها بموعد الاستحقاق')){setInstallment(p0)}};
  const addAdjust=async e=>{e.preventDefault();if(await execute({action:'add_adjustment',contract_id:selected,...adjustment},'تم تسجيل ملحق العقد')){setAdjustment(a0)}};
  const recordClientApproval=async e=>{e.preventDefault();if(await execute({action:'record_claim_client_approval',contract_id:selected,...approvalEdit},'تم حفظ تاريخ اعتماد العميل'))setApprovalEdit(null)};
  const addReceipt=async e=>{e.preventDefault();if(await execute({action:'add_receipt',contract_id:selected,...receipt},'تم تسجيل استلام المبلغ وتحديث المستحق المتبقي')){setReceipt(r0)}};
@@ -128,7 +137,7 @@ const register=async e=>{e.preventDefault();const result=await execute({action:'
   const logo=companyLogoPath(current.company,profiles);
   const labels={contract:'سجل العقد وبيانات المشروع',installments:'جدول الدفعات وبنودها',adjustments:'سجل الأعمال الإضافية والخصومات',receipts:'سجل الدفعات المستلمة',documents:'سجل مرفقات العقود',claims:'كشف المطالبات المالية'};
   const rowsByType={
-   contract:[['رقم العقد',current.contract_no],['اسم العميل',current.customer],['اسم المشروع',current.project_name],['نوع العقد',current.contract_type],['مدير المشروع',current.project_manager],['تاريخ توقيع العقد',current.signed_date],['بداية المشروع',current.start_date],['نهاية المشروع',current.end_date],['مدة تنفيذ المشروع',durationLabel(current.start_date,current.end_date)],['قيمة العقد قبل الضريبة',money(summary(current).ex)+' ر.س'],['قيمة العقد شامل الضريبة',money(summary(current).all)+' ر.س'],['المدفوع شامل الضريبة',money(summary(current).paid)+' ر.س'],['المتبقي شامل الضريبة',money(summary(current).remaining)+' ر.س']],
+   contract:[['رقم العقد',current.contract_no],['اسم العميل',current.customer],['اسم المشروع',current.project_name],['نوع العقد',current.contract_type],['مدير المشروع',current.project_manager],['تاريخ توقيع العقد',dateOnly(current.signed_date)],['بداية المشروع',dateOnly(current.start_date)],['نهاية المشروع',dateOnly(current.end_date)],['مدة تنفيذ المشروع',durationLabel(current.start_date,current.end_date)],['قيمة العقد قبل الضريبة',money(summary(current).ex)+' ر.س'],['قيمة العقد شامل الضريبة',money(summary(current).all)+' ر.س'],['المدفوع شامل الضريبة',money(summary(current).paid)+' ر.س'],['المتبقي شامل الضريبة',money(summary(current).remaining)+' ر.س']],
    installments:items('installments').map(x=>[x.title,x.due_date+' | إنجاز '+n(x.progress_percent)+'% | '+money(x.amount_ex_vat)+' ر.س قبل الضريبة']),
    adjustments:items('adjustments').map(x=>[x.kind==='deduction'?'خصم: '+x.description:'أعمال إضافية: '+x.description,money(x.amount_ex_vat)+' ر.س | '+(x.approved_at?'اعتمد بتاريخ '+x.approved_at:'قيد الاعتماد')]),
    receipts:items('receipts').map(x=>[x.paid_at+' | '+x.reference,money(x.amount_inc_vat)+' ر.س | '+x.method]),
@@ -214,7 +223,7 @@ const register=async e=>{e.preventDefault();const result=await execute({action:'
   <div className="cf-controls"><label>البحث في العقود<input type="search" placeholder="اسم العميل أو المشروع أو رقم العقد" value={search} onChange={e=>setSearch(e.target.value)}/></label><button onClick={reload} disabled={loading}>تحديث المستحقات</button><span>{contracts.length} عقد</span></div>
   {loading&&<p>جارٍ تحميل بيانات العملاء والعقود…</p>}
   <div className="cf-layout"><div className="cf-contracts">{contracts.map(c=>{const b=summary(c);return <button key={c.id} className={'cf-contract '+(selected===c.id?'selected':'')} onClick={()=>{setSelected(c.id);setTab('installments');setAiPreview(null)}}><strong>{c.project_name}</strong><small>{c.company} · {c.customer}</small><small><b>رقم العقد: {c.contract_no}</b> · {c.project_manager}</small><span>المتبقي: <b>{money(b.remaining)} ر.س</b></span></button>})}{!loading&&!contracts.length&&<div className="cf-empty">لا توجد عقود ضمن نطاق الشركة المحددة. يمكنك إضافة عقد جديد.</div>}</div>
-  <div className="cf-detail">{current?<><div className="cf-head"><div><h3>{current.project_name}</h3><p>{current.customer} | <strong>رقم العقد: {current.contract_no}</strong> | {current.contract_type}</p><p>مدير المشروع: <b>{current.project_manager}</b> · تاريخ التوقيع {current.signed_date} · من {current.start_date} إلى {current.end_date} · <b>مدة التنفيذ: {durationLabel(current.start_date,current.end_date)}</b></p><p>الموقع: {current.site_location||'غير محدد'} · هاتف العميل: {current.customer_phone||'—'}</p><p>بريد العميل: {current.customer_email||'—'} · الرقم الضريبي: {current.customer_vat_no||'—'}</p></div><div className="cf-actions">{canEdit&&<button onClick={()=>{setEditContract({...current,vat_rate:String(n(current.vat_rate)*100)});setContractEditOpen(true)}}>تعديل بيانات العقد</button>}<button onClick={()=>printFinanceRegister('contract')}>طباعة بيانات العقد</button>{canEdit&&<button onClick={()=>{setDocumentLink({document_type:'contract',adjustment_id:'',claim_id:'',receipt_id:''});setTab('documents')}}>إرفاق العقد</button>}</div></div>
+  <div className="cf-detail">{current?<><div className="cf-head"><div><h3>{current.project_name}</h3><p>{current.customer} | <strong>رقم العقد: {current.contract_no}</strong> | {current.contract_type}</p><p>مدير المشروع: <b>{current.project_manager}</b> · تاريخ التوقيع {dateOnly(current.signed_date)} · من {dateOnly(current.start_date)} إلى {dateOnly(current.end_date)} · <b>مدة التنفيذ: {durationLabel(current.start_date,current.end_date)}</b></p><p>الموقع: {current.site_location||'غير محدد'} · هاتف العميل: {current.customer_phone||'—'}</p><p>بريد العميل: {current.customer_email||'—'} · الرقم الضريبي: {current.customer_vat_no||'—'}</p></div><div className="cf-actions">{canEdit&&<button onClick={()=>{setEditContract({...current,signed_date:dateOnly(current.signed_date),start_date:dateOnly(current.start_date),end_date:dateOnly(current.end_date),vat_rate:String(n(current.vat_rate)*100)});setContractEditOpen(true)}}>تعديل بيانات العقد</button>}{canArchive&&<button onClick={archiveContract} style={{color:'#9d341c',borderColor:'#a94a35'}}>حذف / أرشفة العقد</button>}<button onClick={()=>printFinanceRegister('contract')}>طباعة بيانات العقد</button>{canEdit&&<button onClick={()=>{setDocumentLink({document_type:'contract',adjustment_id:'',claim_id:'',receipt_id:''});setTab('documents')}}>إرفاق العقد</button>}</div></div>
   <div className="cf-stat-grid">{[['قيمة العقد قبل الضريبة',summary(current).ex],['ضريبة القيمة المضافة',summary(current).vat],['العقد شامل الضريبة',summary(current).all],['المدفوع من العملاء',summary(current).paid],['المتبقي شامل الضريبة',summary(current).remaining],['نسبة حجز الضمان',n(current.retention_percent)]].map(([label,value])=><div key={label}><small>{label}</small><strong>{money(value)}</strong><small>ريال سعودي</small></div>)}</div>
   <div className="cf-tabs">{[['installments','بنود الدفعات'],['claims','المطالبات والمستخلصات'],['receipts','الدفعات المستلمة'],['adjustments','الأعمال الإضافية والخصومات'],['documents','العقد والمرفقات']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>setTab(k)}>{t}</button>)}</div>
   {tab==='installments'&&<>{aiBusy&&<div className="cf-preview"><strong>يجري تحليل بنود العقد بواسطة الذكاء الاصطناعي…</strong><p>لا تُنشأ دفعات أو مطالبات حتى تنتهي المراجعة والاعتماد.</p></div>}
