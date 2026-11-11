@@ -66,7 +66,7 @@ export async function POST(req:Request){
    parsed=normalizeContractAIResult(JSON.parse(raw.trim().startsWith('{')?raw.trim():cleaned));
   }catch{return fail('تعذر قراءة جدول الدفعات المستخرج؛ أعد المحاولة أو أدخل الدفعات يدويًا',502)}
   if(parsed.contract_no&&parsed.contract_no!==verification.contract.contract_no)parsed.warnings.unshift('رقم العقد في المستند ('+parsed.contract_no+') يختلف عن السجل ('+verification.contract.contract_no+'). تحقق من صحة المرفق.');
-  return Response.json({document_id,contract_id,...parsed,model,requires_review:true},{headers:{'Cache-Control':'private, no-store'}});
+  return Response.json({document_id,contract_id,contract_base_ex_vat:Number(verification.contract.base_ex_vat||0),...parsed,model,requires_review:true},{headers:{'Cache-Control':'private, no-store'}});
  }catch(error:any){
   if(error?.name==='AbortError')return fail('انتهت مهلة قراءة العقد. أعد المحاولة بملف أصغر أو أوضح.',504);
   return fail('تعذر إكمال تحليل العقد. لم يتم حفظ دفعات غير معتمدة.',500);
