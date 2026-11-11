@@ -94,8 +94,11 @@ export async function POST(req){
  const b=await input(req),action=str(b.action,40);
  const perms=typeof u.permissions==='string'?JSON.parse(u.permissions||'{}'):u.permissions||{};
  const isApproving=action==='approve_adjustment';
+ const isDeleting=['archive_contract','delete_contract','restore_contract'].includes(action);
  if(isApproving){
    if(!(u.role==='admin'||u.role==='projects_director'||perms['client_finance:approve']===true))throw Error('ليس لديك صلاحية اعتماد ملاحق العقود');
+ }else if(isDeleting){
+   if(!(u.role==='admin'||u.role==='finance'||perms['client_finance:delete']===true))throw Error('ليس لديك صلاحية حذف أو استعادة العقود');
  }else if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية تحرير العقود المالية');
  if(action==='bulk_import_contracts'){
  const list=b.contracts;
@@ -153,6 +156,7 @@ export async function POST(req){
  }
  const c=await row(db,str(b.contract_id),u);
  if(action==='delete_document'){
+  if(c.contract_status==='archived')throw Error('لا يمكن حذف مرفق من عقد مؤرشف');
   const doc=await db.prepare('SELECT * FROM client_documents WHERE id=? AND contract_id=? AND deleted_at IS NULL').bind(str(b.document_id,40),c.id).first();
   if(!doc)throw Error('المرفق غير موجود أو تم مسحه سابقًا');
   await db.prepare('UPDATE client_documents SET deleted_at=now(),deleted_by=? WHERE id=? AND contract_id=? AND deleted_at IS NULL').bind(u.email,doc.id,c.id).run();
@@ -160,12 +164,13 @@ export async function POST(req){
   return json({ok:true,deleted:true});
  }
  if(action==='update_contract'){
+ if(c.contract_status==='archived')throw Error('استعد العقد من الأرشيف قبل تعديله');
  if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية تعديل العقد');
  const start=date(b.start_date||c.start_date),end=date(b.end_date||c.end_date),signed=date(b.signed_date||c.signed_date);
  if(end<start)throw Error('نهاية المشروع تسبق البداية');
  const existing=await db.prepare('SELECT count(*) AS count FROM client_installments WHERE contract_id=?').bind(c.id).first();
  const payment=await db.prepare('SELECT count(*) AS count FROM client_receipts WHERE contract_id=?').bind(c.id).first();
- const newBase=amt(b.base_ex_vat??c.base_ex_vat),newVat=Number(b.vat_rate===undefined?n(c.vat_rate)*100:b.vat_rate)/100;
+ const newBase=amt(b.base_ex_vat??c.base_ex_vat),newVat=Number(b.vat_rate===undefined?Number(c.vat_rate)*100:b.vat_rate)/100;
  if(!Number.isFinite(newVat)||newVat<0||newVat>1)throw Error('نسبة ضريبة غير صالحة');
  if((Number(existing?.count)||Number(payment?.count))&&(newBase!==Number(c.base_ex_vat)||Math.abs(newVat-Number(c.vat_rate))>0.00001))throw Error('لا يمكن تغيير القيمة الأساسية أو الضريبة بعد تسجيل دفعات أو تحصيل؛ استخدم ملحقًا معتمدًا');
  const retention=amt(b.retention_percent??c.retention_percent);if(retention>100)throw Error('نسبة الحجز غير صالحة');
@@ -325,7 +330,12 @@ export async function POST(req){
  if(action==='add_receipt'){
  const amount=amt(b.amount_inc_vat);if(amount<=0)throw Error('مبلغ الدفعة غير صالح');
  const claimId=b.claim_id?str(b.claim_id):null;
- if(claimId){const cl=await db.prepare('SELECT * FROM client_claims WHERE id=? AND contract_id=?').bind(claimId,c.id).first();if(!cl||cl.status!=='issued')throw Error('يجب إصدار المطالبة أولًا');}
+ if(claimId){
+  const cl=await db.prepare('SELECT * FROM client_claims WHERE id=? AND contract_id=?').bind(claimId,c.id).first();
+  if(!cl||cl.status!=='issued')throw Error('يجب إصدار المطالبة أولًا');
+  const claimPaid=unique(await db.prepare('SELECT amount_inc_vat FROM client_receipts WHERE contract_id=? AND claim_id=?').bind(c.id,cl.id).all()).reduce((sum,x)=>sum+Number(x.amount_inc_vat),0);
+  if(Math.round((claimPaid+amount)*100)>Math.round(Number(cl.amount_inc_vat)*100))throw Error('مبلغ التحصيل يتجاوز المتبقي من قيمة المطالبة المرتبطة');
+ }
  const total=(await checkTotal(db,c))*(1+Number(c.vat_rate));
  const paid=unique(await db.prepare('SELECT amount_inc_vat FROM client_receipts WHERE contract_id=?').bind(c.id).all()).reduce((n,x)=>n+Number(x.amount_inc_vat),0);
  if(paid+amount>total+0.02)throw Error('إجمالي المدفوع يتجاوز المستحق شامل الضريبة');
