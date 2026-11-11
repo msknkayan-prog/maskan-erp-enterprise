@@ -953,3 +953,14 @@ test('financial receivables complete flow: customer details, BOQ, VAT, signature
  assert.match(backend,/client_finance:edit/);
  assert.match(backend,/client_finance:approve/);
 });
+
+test('official financial claims inherit per-company bank, tax, and commercial registration identity',()=>{
+ const frontend=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/modules.mjs',import.meta.url),'utf8');
+ const finance=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ for(const key of ["f('english_name'","f('commercial_registration'","f('vat_registration'","f('bank_name'","f('iban'","f('bank_account'"]) {
+  assert.ok(frontend.includes(key),key);assert.ok(backend.includes(key),key);
+ }
+ for(const key of ['corporate.bank_name','corporate.iban','corporate.bank_account','corporate.vat_registration','corporate.commercial_registration'])assert.ok(finance.includes(key),key);
+ assert.match(finance,/companyLogoPath\(current\.company,profiles\)/);
+});
