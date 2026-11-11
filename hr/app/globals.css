@@ -894,3 +894,21 @@ body{line-height:1.55}
   box-shadow:inset -3px 0 #f0d987;
 }
 @media(max-width:720px){.app aside .nav-label.nav-label-finance{display:none!important}}
+
+/* AI payment schedule discovery, preview and approval */
+.cf-ai-import{border:1px solid #bfa065;border-right:4px solid #b38b3e;border-radius:10px;background:linear-gradient(135deg,#fffdf9,#f5edda);padding:18px;margin:16px 0 20px}
+.cf-ai-import .cf-head h3{color:#3a301b;font-size:18px}
+.cf-ai-import .cf-head p{font-size:12px;line-height:1.8}
+.cf-ai-tag{background:#231f17;color:#d6b25c;padding:7px 11px;border-radius:6px;font-size:12px;font-weight:800;white-space:nowrap}
+.cf-ai-import-grid{display:grid;grid-template-columns:repeat(2,minmax(190px,1fr)) auto;gap:12px;align-items:end}
+.cf-ai-import-grid label{font-weight:700;font-size:12px;display:flex;flex-direction:column;gap:7px}
+.cf-ai-import-grid select,.cf-ai-import-grid input[type=file]{width:100%;max-width:100%;border:1px solid #d0bb8d;background:white;border-radius:6px;min-height:40px;padding:8px;font-size:12px}
+.cf-ai-import-grid .cf-primary{min-height:40px}
+.cf-ai-steps{display:flex;flex-wrap:wrap;gap:6px;margin:17px 0 8px}
+.cf-ai-steps span{background:#fff;border:1px solid #dac89d;border-radius:20px;padding:6px 10px;font-size:11px;color:#785d2f}
+.cf-ai-help{color:#6d6453;font-size:12px;line-height:1.7;margin:7px 0 0}
+.cf-ai-review{background:white;border:2px solid #b28c41;border-radius:8px;padding:15px;margin:15px 0}
+.cf-ai-review h3{font-size:17px;color:#2d332c}
+.cf-ai-installment{border:1px solid #dfd1b3;border-right:3px solid #ae8634;border-radius:7px;padding:10px;margin:12px 0}
+@media(max-width:1000px){.cf-ai-import-grid{grid-template-columns:1fr 1fr}.cf-ai-import-grid .cf-primary{grid-column:1/-1}}
+@media(max-width:600px){.cf-ai-import-grid{grid-template-columns:1fr}.cf-ai-import-grid .cf-primary{grid-column:auto}}
