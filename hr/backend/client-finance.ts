@@ -84,7 +84,13 @@ export async function POST(req){
  const amount=amt(b.amount_ex_vat);if(amount<=0)throw Error('المبلغ يجب أن يكون أكبر من صفر');
  const approved=b.approved_at?date(b.approved_at):null;
  const delta=kind==='extra'?amount:-amount;
- if(approved)await checkTotal(db,c,delta);
+ if(approved){
+ const newTotal=await checkTotal(db,c,delta);
+ const scheduled=unique(await db.prepare("SELECT amount_ex_vat FROM client_installments WHERE contract_id=? AND status='scheduled'").bind(c.id).all()).reduce((n,x)=>n+Number(x.amount_ex_vat),0);
+ const paid=unique(await db.prepare('SELECT amount_inc_vat FROM client_receipts WHERE contract_id=?').bind(c.id).all()).reduce((n,x)=>n+Number(x.amount_inc_vat),0);
+ if(scheduled>newTotal+0.005)throw Error('الخصم يجعل جدول الدفعات يتجاوز صافي قيمة العقد؛ عدّل الدفعات أولًا');
+ if(paid>newTotal*(1+Number(c.vat_rate))+0.02)throw Error('الخصم يجعل المدفوع يتجاوز قيمة العقد بعد التعديل');
+ }
  const id=crypto.randomUUID();
  await db.prepare('INSERT INTO client_adjustments(id,contract_id,kind,description,amount_ex_vat,approved_at,created_by) VALUES(?,?,?,?,?,?,?)').bind(id,c.id,kind,str(b.description,1500)||'ملحق العقد',amount,approved,u.email).run();
  await addAudit(db,u,c.id,'client_adjustment_added',{kind,amount,id,approved});return json({ok:true,id});
