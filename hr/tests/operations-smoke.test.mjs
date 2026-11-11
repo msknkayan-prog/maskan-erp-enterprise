@@ -1038,3 +1038,27 @@ test('finance print and attachment quick actions are present and scoped to the s
  assert.match(backend,/SELECT id FROM client_claims WHERE id=\? AND contract_id=\?/);
  assert.match(backend,/SELECT id FROM client_receipts WHERE id=\? AND contract_id=\?/);
 });
+
+test('AI schedule normalization never invents missing installment dates and checks sums',async()=>{
+ const {normalizeContractAIResult,validateAISchedule}=await import('../lib/contract-ai.mjs');
+ const proposal=normalizeContractAIResult({contract_no:'C-55',warnings:[],installments:[
+ {title:'دفعة عند انتهاء العظم',description:'بعد التنفيذ',due_date:null,amount_ex_vat:45000,items:[{item_code:'A',description:'عظم',quantity:2,unit:'طن',unit_price_ex_vat:20000}]},
+ {title:'دفعة ثانية',due_date:'2026-12-20',amount_ex_vat:5000,items:[]}
+ ]});
+ assert.equal(proposal.installments[0].due_date,'');
+ assert.ok(proposal.warnings.some(w=>w.includes('تاريخ استحقاق')));
+ assert.ok(validateAISchedule(proposal.installments).some(e=>e.includes('تاريخ')));
+ proposal.installments[0].due_date='2026-12-01';
+ assert.deepEqual(validateAISchedule(proposal.installments,{remaining:50000}),[]);
+ assert.ok(validateAISchedule(proposal.installments,{remaining:49000}).some(e=>e.includes('يتجاوز')));
+ proposal.installments[0].items[0].unit_price_ex_vat=25000;
+ assert.ok(validateAISchedule(proposal.installments).some(e=>e.includes('أكبر')));
+});
+test('AI document route is session guarded, and schedules save only by explicit approval with deduplication',()=>{
+ const route=readFileSync(new URL('../app/api/client-contract-ai/route.ts',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ for(const marker of ["hr_access=","ai_document=","already_imported","ai-gateway.vercel.sh/v1/responses","input_file","input_image","VERCEL_OIDC_TOKEN","requires_review:true"])assert.ok(route.includes(marker),marker);
+ for(const marker of ["approve_ai_schedule","client_ai_imports","await db.batch(statements)","document_id","auto_generate_client_claims()"])assert.ok(api.includes(marker),marker);
+ for(const marker of ["analyzeContractAI","approveAISchedule","validateAISchedule","مراجعة بنود الدفعات المستخرجة","اعتماد وحفظ الدفعات المستخرجة"])assert.ok(ui.includes(marker),marker);
+});
