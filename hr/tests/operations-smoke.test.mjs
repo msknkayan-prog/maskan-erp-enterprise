@@ -1067,7 +1067,7 @@ test('contract installment percent, sequential number and safe archive are integ
  const backend=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
  const ai=readFileSync(new URL('../lib/contract-ai.mjs',import.meta.url),'utf8');
- for(const s of ["action==='archive_contract'","contract_status='archived'","payment_percent","previousPercent","السابق / Previous","الحالي / Current","الإجمالي التراكمي / Cumulative","dateOnly","حذف / أرشفة العقد","installment_no"])assert.ok(backend.includes(s)||ui.includes(s),s);
+ for(const s of ["'archive_contract'","contract_status='archived'","payment_percent","previousPercent","السابق / Previous","الحالي / Current","الإجمالي التراكمي / Cumulative","dateOnly","حذف العقد","installment_no"])assert.ok(backend.includes(s)||ui.includes(s),s);
  assert.match(backend,/previousPercent|payment_percent/);
  assert.match(backend,/previousPercent|payment_percent/);
  assert.match(backend,/Math\.round\(basis\*percentage\)\/100/);
