@@ -107,6 +107,13 @@ if(body.action==='update_member'){
  if(body.permissions&&(typeof body.permissions!=='object'||Array.isArray(body.permissions)||Object.entries(body.permissions).some(([k,v])=>typeof v!=='boolean'||!/^([a-z_]+):(view|edit|approve)$/.test(k))))throw Error('صلاحيات غير صالحة');
  if(body.companies!=='*'&&(!Array.isArray(body.companies)||body.companies.some(c=>!companies.includes(c))))throw Error('نطاق الشركات غير صالح');
  if(body.projects!=='*'&&(!Array.isArray(body.projects)||body.projects.some(id=>typeof id!=='string')))throw Error('نطاق المشاريع غير صالح');
+ if(body.role==='project_manager'&&body.projects!=='*'){
+ if(!Array.isArray(body.projects)||!body.projects.length)throw Error('حدد مشروعًا واحدًا على الأقل لمدير المشروع');
+ const projectRows=(await db.prepare("SELECT id,company FROM records WHERE module='projects'").all()).results;
+ const allowedCompanies=body.companies==='*'?null:body.companies;
+ if(body.projects.some((id:string)=>!projectRows.some((r:any)=>r.id===id&&(!allowedCompanies||allowedCompanies.includes(r.company)))))throw Error('المشاريع المختارة لا تتبع الشركات المسموح بها أو لم تعد موجودة');
+}
+
  if(email!==oldEmail&&await db.prepare('SELECT email FROM members WHERE email=?').bind(email).first())throw Error('البريد الجديد مسجل لمستخدم آخر');
  const oldAuth=await db.prepare('SELECT id FROM auth.users WHERE lower(email)=? LIMIT 1').bind(oldEmail).first();
  if(email!==oldEmail&&await db.prepare('SELECT id FROM auth.users WHERE lower(email)=? LIMIT 1').bind(email).first())throw Error('البريد الجديد مستخدم بالفعل في نظام الدخول');
@@ -139,7 +146,14 @@ if(body.action==='update_member'){
  }
  return json({ok:true,requires_relogin:email!==oldEmail});
 }
-if(body.action==='member'){if(u.role!=='admin')throw Error('403');const email=String(body.email||'').trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!['hr','administrative_assistant','finance','administrative_manager','project_manager','projects_director','employee'].includes(body.role))throw Error('بيانات المستخدم غير صالحة');const username=String(body.username||'').trim().replace(/\s+/g,' ').toLowerCase();if(username&&(!/^[\p{L}][\p{L}\p{N} ._-]{2,63}$/u.test(username)||username.includes('  ')))throw Error('اسم المستخدم من 3 إلى 64 حرفًا ويقبل الحروف العربية والإنجليزية والمسافات');if(body.permissions&&(typeof body.permissions!=='object'||Array.isArray(body.permissions)||Object.entries(body.permissions).some(([k,v])=>typeof v!=='boolean'||!/^([a-z_]+):(view|edit|approve)$/.test(k))))throw Error('صلاحيات غير صالحة');if(body.projects!=='*'&&body.projects!==undefined&&(!Array.isArray(body.projects)||body.projects.some((id:any)=>typeof id!=='string')))throw Error('نطاق مشاريع غير صالح');if(body.companies!=='*'&&body.companies!==undefined&&(!Array.isArray(body.companies)||body.companies.some((c:any)=>!companies.includes(c))))throw Error('نطاق شركات غير صالح');const contactEmail=String(body.contact_email||email).trim().toLowerCase();
+if(body.action==='member'){if(u.role!=='admin')throw Error('403');const email=String(body.email||'').trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!['hr','administrative_assistant','finance','administrative_manager','project_manager','projects_director','employee'].includes(body.role))throw Error('بيانات المستخدم غير صالحة');const username=String(body.username||'').trim().replace(/\s+/g,' ').toLowerCase();if(username&&(!/^[\p{L}][\p{L}\p{N} ._-]{2,63}$/u.test(username)||username.includes('  ')))throw Error('اسم المستخدم من 3 إلى 64 حرفًا ويقبل الحروف العربية والإنجليزية والمسافات');if(body.permissions&&(typeof body.permissions!=='object'||Array.isArray(body.permissions)||Object.entries(body.permissions).some(([k,v])=>typeof v!=='boolean'||!/^([a-z_]+):(view|edit|approve)$/.test(k))))throw Error('صلاحيات غير صالحة');if(body.projects!=='*'&&body.projects!==undefined&&(!Array.isArray(body.projects)||body.projects.some((id:any)=>typeof id!=='string')))throw Error('نطاق مشاريع غير صالح');
+if(body.role==='project_manager'&&body.projects!=='*'){
+ if(!Array.isArray(body.projects)||!body.projects.length)throw Error('حدد مشروعًا واحدًا على الأقل لمدير المشروع');
+ const projectRows=(await db.prepare("SELECT id,company FROM records WHERE module='projects'").all()).results;
+ const allowedCompanies=body.companies==='*'?null:body.companies;
+ if(body.projects.some((id:string)=>!projectRows.some((r:any)=>r.id===id&&(!allowedCompanies||allowedCompanies.includes(r.company)))))throw Error('المشاريع المختارة لا تتبع الشركات المسموح بها أو لم تعد موجودة');
+}
+if(body.companies!=='*'&&body.companies!==undefined&&(!Array.isArray(body.companies)||body.companies.some((c:any)=>!companies.includes(c))))throw Error('نطاق شركات غير صالح');const contactEmail=String(body.contact_email||email).trim().toLowerCase();
 if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail))throw Error('بريد التواصل غير صالح');
 if(await db.prepare('SELECT 1 FROM members WHERE email=?').bind(email).first())throw Error('بريد الدخول مسجل مسبقًا؛ استخدم بريد دخول مختلفًا واسم مستخدم فريدًا، ويمكن تكرار بريد التواصل');
 if(await db.prepare('SELECT 1 FROM auth.users WHERE lower(email)=? LIMIT 1').bind(email).first())throw Error('بريد الدخول مستخدم في حساب مصادقة آخر');
@@ -189,6 +203,7 @@ if(current==='project_manager'&&u.role!=='admin'){
  if(!projectId)throw Error('الطلب غير مرتبط بمشروع محدد');
  const project=await db.prepare("SELECT data FROM records WHERE id=? AND module='projects'").bind(projectId).first<any>();
  if(!project||String(JSON.parse(project.data).manager_email||'').trim().toLowerCase()!==String(u.email||'').trim().toLowerCase())throw Error('الطلب يخص مدير مشروع آخر');
+ if(u.projects&&u.projects!=='*'&&!JSON.parse(u.projects).includes(projectId))throw Error('ليس لديك صلاحية مراجعة طلبات هذا المشروع');
 }
 if(mod==='payroll'&&decision==='approve'){
  const rounded=n=>Math.round(Number(n||0)*100);

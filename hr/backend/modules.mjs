@@ -41,6 +41,7 @@ export function visible(user,row,all=[]){
   if(!project)return false;
   const assigned=all.find(r=>r.module==='projects'&&r.id===project);
   if(!assigned||String(assigned.data?.manager_email||'').trim().toLowerCase()!==String(user.email||'').trim().toLowerCase())return false;
+  if(user.projects&&user.projects!=='*'&&(!Array.isArray(JSON.parse(user.projects))||!JSON.parse(user.projects).includes(project)))return false;
  }
  if(user.role!=='project_manager'&&user.projects&&user.projects!=='*'&&(!project||!JSON.parse(user.projects).includes(project)))return false;
  return true;

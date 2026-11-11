@@ -28,8 +28,10 @@ export function RecordPaper({row,spec,rows,display}){
  return <article className="record-paper maskan-standard-paper" dir="rtl">
   <div className="paper-letterhead">
    <div className="paper-license">سجل تجاري: <b>{profile?.data.commercial_registration||(row.company==='مسكن الكيان'?'7028881634':'—')}</b></div>
-   {companyLogo?<img src={companyLogo} alt={'شعار '+brand}/>:<div className="paper-logo-placeholder" aria-label="شعار الشركة غير مرفوع"><span>هوية الشركة</span></div>}
-   <div className="paper-brand"><strong>{brand}</strong><span>{row.company==='مسكن الكيان'?'MASKAN ALKAYAN CONTRACTING CO.':row.company}</span></div>
+   <div className="paper-identity">
+    {companyLogo?<img src={companyLogo} alt={'شعار '+brand}/>:<div className="paper-logo-placeholder" aria-label="شعار الشركة غير مرفوع"><span>هوية الشركة</span></div>}
+    <div className="paper-brand"><strong>{brand}</strong><span>{row.company==='مسكن الكيان'?'MASKAN ALKAYAN CONTRACTING CO.':row.company}</span></div>
+   </div>
   </div>
   <div className="paper-party-line"><span>السادة: <b>{brand}</b></span><span>المحترمون</span></div>
   <table className="paper-metadata"><tbody>
