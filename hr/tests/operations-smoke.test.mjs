@@ -1107,3 +1107,27 @@ test('issued customer claim has printable certificate and email handoff without 
  assert.match(ui,/المستخلص PDF/);
  assert.match(ui,/يجب إرفاق PDF وإرسال الرسالة من بريدك/);
 });
+
+test('contract payment limit, automatic claim number, and customer issuer signatures',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ const ai=readFileSync(new URL('../lib/contract-ai.mjs',import.meta.url),'utf8');
+ assert.match(api,/plans\.length>10/);
+ assert.match(api,/existingCount\?\.n\|\|0\)\+plans\.length>10/);
+ assert.match(api,/existingCount\?\.n\|\|0\)>=10/);
+ assert.match(ai,/schedule\.length>10/);
+ assert.match(ui,/عدد الدفعات المسجلة/);
+ assert.match(ui,/الشركة المصدرة للمطالبة المالية/);
+ assert.match(ui,/مدير المشروع/);
+ assert.match(ui,/اعتماد العميل/);
+ assert.match(ui,/رقم المطالبة/);
+ assert.match(ui,/cl\.vat_amount/);
+ assert.match(ui,/cl\.amount_ex_vat/);
+ assert.match(ui,/installment_no/);
+});
+test('contract attachments have explicit save replace and soft-delete with audit history',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ for(const marker of ['حفظ العقد / المرفق بعد الإرفاق','تعديل / استبدال','مسح المرفق','saveAttachedContract','deleteAttachedContract','replaceDocumentId'])assert.ok(ui.includes(marker),marker);
+ for(const marker of ['delete_document','deleted_at IS NULL','replaces_document_id','client_contract_document_removed','client_contract_file_replaced','validMime'])assert.ok(api.includes(marker),marker);
+});
