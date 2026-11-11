@@ -26,7 +26,6 @@ export default function ClientFinance({user,company,profiles,companyList,project
  const current=data.contracts.find(c=>c.id===selected);
  const overdue=data.installments.filter(i=>i.status==='scheduled'&&i.due_date<today()&&data.contracts.some(c=>c.id===i.contract_id&&(!company||c.company===company))&&!data.claims.some(cl=>cl.installment_id===i.id&&cl.status==='issued'));
  const pendingClaims=data.claims.filter(cl=>cl.status==='ready'&&data.contracts.some(c=>c.id===cl.contract_id&&(!company||c.company===company)));
- const totalReceivable=contracts.reduce((x,c)=>x+summary(c).remaining,0);
  const items=(key)=>data[key].filter(x=>x.contract_id===selected);
  const sum=arr=>arr.reduce((a,b)=>a+n(b),0);
  const summary=(c)=>{
@@ -37,6 +36,7 @@ export default function ClientFinance({user,company,profiles,companyList,project
   const scheduled=sum(data.installments.filter(x=>x.contract_id===c.id&&x.status!=='cancelled').map(x=>x.amount_ex_vat));
   return {ex,vat,all,paid,remaining:all-paid,scheduled,unscheduled:ex-scheduled};
  };
+ const totalReceivable=contracts.reduce((x,c)=>x+summary(c).remaining,0);
  const execute=async(obj,success)=>{
   if(!canEdit)return;setBusy(true);setNotice('');setError('');
   try{const r=await fetch('/api/client-finance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});const x=await r.json();if(!r.ok)throw Error(x.error||'تعذر حفظ البيانات');setNotice(success);await reload();return x;}
