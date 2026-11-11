@@ -44,13 +44,31 @@ export async function POST(req){
  try{const u=await identity();
  const db=env.DB,p=new URL(req.url).searchParams;
  if(p.get('action')==='upload'){if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية رفع مستندات العقود');const c=await row(db,p.get('contract_id'),u);const name=str(p.get('name'),180);const mime=str(req.headers.get('content-type')||'application/pdf',100);
+ const documentType=str(p.get('document_type')||'contract');
+ if(!['contract','contract_appendix','extra','deduction','claim','receipt','other'].includes(documentType))throw Error('نوع المرفق غير معتمد');
+ const adjustmentId=str(p.get('adjustment_id'),40)||null,claimId=str(p.get('claim_id'),40)||null,receiptId=str(p.get('receipt_id'),40)||null;
+ if(['extra','deduction'].includes(documentType)){
+  if(!adjustmentId)throw Error('حدد بند الإضافة أو الخصم المرتبط بالمرفق');
+  const record=await db.prepare('SELECT kind FROM client_adjustments WHERE id=? AND contract_id=?').bind(adjustmentId,c.id).first();
+  if(!record||record.kind!==documentType)throw Error('الملحق لا يتبع العقد أو نوعه غير مطابق');
+ }
+ if(documentType==='claim'){
+  if(!claimId)throw Error('حدد المطالبة التي يخصها المرفق');
+  const claim=await db.prepare('SELECT id FROM client_claims WHERE id=? AND contract_id=?').bind(claimId,c.id).first();
+  if(!claim)throw Error('المطالبة لا تتبع العقد');
+ }
+ if(documentType==='receipt'){
+  if(!receiptId)throw Error('حدد سند الاستلام الذي يخصه المرفق');
+  const payment=await db.prepare('SELECT id FROM client_receipts WHERE id=? AND contract_id=?').bind(receiptId,c.id).first();
+  if(!payment)throw Error('السند لا يتبع العقد');
+ }
  if(!name||!(/\.pdf$|\.png$|\.jpe?g$/i.test(name))||!['application/pdf','image/png','image/jpeg'].includes(mime))throw Error('يسمح بإرفاق PDF أو صورة JPG/PNG فقط');
  const bytes=await req.arrayBuffer();if(bytes.byteLength<1||bytes.byteLength>8388608)throw Error('الحد الأقصى للمرفق 8 ميجابايت');
  const key='client-finance/'+c.id+'/'+crypto.randomUUID();await env.BUCKET.put(key,bytes);
  const id=crypto.randomUUID();
- try{await db.prepare('INSERT INTO client_documents(id,contract_id,name,mime,size,blob_key,uploaded_by) VALUES(?,?,?,?,?,?,?)').bind(id,c.id,name,mime,bytes.byteLength,key,u.email).run();}
+ try{await db.prepare('INSERT INTO client_documents(id,contract_id,name,mime,size,blob_key,uploaded_by,document_type,adjustment_id,claim_id,receipt_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(id,c.id,name,mime,bytes.byteLength,key,u.email,documentType,adjustmentId,claimId,receiptId).run();}
  catch(e){await env.BUCKET.delete(key);throw e;}
- await addAudit(db,u,c.id,'client_contract_file',{id,name});return json({ok:true,id});
+ await addAudit(db,u,c.id,'client_contract_file',{id,name,document_type:documentType,adjustment_id:adjustmentId,claim_id:claimId});return json({ok:true,id});
  }
  const b=await input(req),action=str(b.action,40);
  const perms=typeof u.permissions==='string'?JSON.parse(u.permissions||'{}'):u.permissions||{};
