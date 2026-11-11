@@ -634,3 +634,11 @@ test('related HR forms display the canonical employee details and server saves a
  assert.match(backend,/data\.net=Math\.round\(\(Number\(data\.salary_basis\)\/30/);
  assert.match(backend,/if\(mod==='settlements'\)/);
 });
+
+test('company switching clears old employee and leave links and manager views exclude financial snapshots',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/leave_id:'',project_id:'',contract_id:''/);
+ assert.match(erp,/const \{employee_snapshot,\.\.\.safeData\}=r\.data/);
+ assert.match(erp,/data:safeData/);
+});
