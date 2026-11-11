@@ -191,11 +191,13 @@ const visibleCycleBatches=cycleBatches.filter(b=>payrollStage==='__all__'||b.sta
 const visibleCycleIds=new Set(visibleCycleBatches.map(b=>b.id));
 const cycleBatchIds=new Set(cycleBatches.map(r=>r.id));
 const cyclePayroll=rows.filter(r=>r.module==='payroll'&&cycleBatchIds.has(r.data?.batch_id)).sort((a,b)=>a.company.localeCompare(b.company,'ar')||String(a.data?.employee_name||'').localeCompare(String(b.data?.employee_name||''),'ar'));
-const visibleCyclePayroll=cyclePayroll.filter(r=>visibleCycleIds.has(r.data?.batch_id));
+const payrollEmployeeIsActive=id=>rows.some(e=>e.module==='employees'&&e.id===id&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(e.data?.employment_status||e.data?.employee_status||'').trim()));
+const cycleRowShouldShow=row=>{const batch=cycleBatches.find(b=>b.id===row.data?.batch_id);return batch?.status==='paid'||payrollEmployeeIsActive(row.data?.employee_id)};
+const visibleCyclePayroll=cyclePayroll.filter(r=>visibleCycleIds.has(r.data?.batch_id)&&cycleRowShouldShow(r));
 const cycleBatchFor=row=>cycleBatches.find(b=>b.id===row.data?.batch_id);
 const payrollManagedBatch=cycleBatches.find(b=>b.id===payrollManageBatchId);
-const payrollManagedRows=payrollManagedBatch?cyclePayroll.filter(row=>row.data.batch_id===payrollManagedBatch.id):[];
-const payrollManagedIncluded=payrollManagedRows.filter(row=>!row.data.excluded&&rows.some(employee=>employee.module==='employees'&&employee.id===row.data.employee_id&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(employee.data?.employment_status||employee.data?.employee_status||'').trim())));
+const payrollManagedRows=payrollManagedBatch?cyclePayroll.filter(row=>row.data.batch_id===payrollManagedBatch.id&&cycleRowShouldShow(row)):[];
+const payrollManagedIncluded=payrollManagedRows.filter(row=>!row.data.excluded);
 const payrollManagedReviewed=payrollManagedIncluded.filter(row=>row.data.split_confirmed).length;
 const payrollStages=['draft','manager_review','projects_review','finance_review','paid'];
 const payrollStageLabels=['مساعد الإدارة','مدراء المشاريع','إدارة المشاريع','المالية / الصرف'];
