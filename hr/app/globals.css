@@ -677,3 +677,70 @@ main button:focus-visible,main input:focus-visible,main select:focus-visible,mai
 body,body :is(p,span,small,label,button,input,select,textarea,td,th,li,caption,summary,a,b,strong,em,code,.nav,.badge,.stat,.pill,.form-grid,.panel,.table-wrap){font-size:var(--maskan-body-font-size)!important}
 body :is(h1,h2,h3,h4,h5,h6),body :is(.page-heading h1,.panel-head h2,.modal h2,.payroll-main-heading h2,.payroll-all-header h2,.employee-payout-summary>strong,.payroll-net-summary-heading>span){font-size:var(--maskan-heading-font-size)!important;line-height:1.6}
 body{line-height:1.55}
+
+
+/* Uniform, readable, right-to-left personnel stationery (screen preview and A4 print). */
+.maskan-standard-paper .paper-letterhead{
+ display:grid!important;
+ grid-template-columns:minmax(0,1fr) 106px minmax(0,1.65fr)!important;
+ gap:14px!important;align-items:center;direction:rtl;
+ padding:9px 8px 13px!important;margin:0 0 8px!important;
+ min-height:105px;border-bottom:2px solid #ac9150!important;
+}
+.maskan-standard-paper .paper-letterhead>*{min-width:0}
+.maskan-standard-paper .paper-letterhead img{width:106px!important;height:86px!important;object-fit:contain}
+.maskan-standard-paper .paper-brand{
+ display:block!important;text-align:right!important;
+ border-bottom:2px solid #bcad79;padding:0 8px 9px!important;
+ min-width:0!important;overflow-wrap:normal!important;
+}
+.maskan-standard-paper .paper-brand strong{
+ display:block;font-size:19px!important;line-height:1.65!important;
+ word-break:normal!important;overflow-wrap:normal!important;white-space:normal;
+}
+.maskan-standard-paper .paper-brand span{display:block;font-size:11px!important;line-height:1.5!important}
+.maskan-standard-paper .paper-license{text-align:center!important;font-size:12px!important}
+.maskan-standard-paper .paper-logo-placeholder{
+ width:106px;height:86px;display:flex;align-items:center;justify-content:center;
+ border:1px dashed #cabb93;border-radius:6px;color:#806b40;
+ font-size:11px;text-align:center;padding:8px;background:#fffdf6;
+}
+.maskan-standard-paper .paper-party-line{font-size:13px!important;margin:0!important;padding:8px 5px!important}
+.maskan-standard-paper .paper-metadata th,.maskan-standard-paper .paper-metadata td{
+ font-size:12px!important;line-height:1.6!important;padding:8px 7px!important;
+}
+.maskan-standard-paper .paper-data-table th,.maskan-standard-paper .paper-data-table td{
+ font-size:13px!important;line-height:1.65!important;padding:9px 10px!important;
+}
+.maskan-standard-paper .paper-main-heading strong{font-size:19px!important;line-height:1.5!important}
+.maskan-standard-paper .paper-main-heading span{font-size:12px!important}
+.maskan-standard-paper .paper-approval-heading{font-size:13px!important;margin-top:18px!important}
+.maskan-standard-paper .paper-signatures>div{min-height:105px!important}
+.maskan-standard-paper .paper-note{font-size:11px!important;margin:8px 0!important}
+.maskan-standard-paper .paper-footer{font-size:11px!important;margin-top:12px!important}
+@media print{
+ @page{size:A4 portrait;margin:11mm}
+ .maskan-standard-paper .paper-letterhead{
+  grid-template-columns:minmax(0,1fr) 88px minmax(0,1.55fr)!important;
+  gap:11px!important;min-height:86px!important;padding:5px 4px 10px!important;
+ }
+ .maskan-standard-paper .paper-letterhead img,.maskan-standard-paper .paper-logo-placeholder{
+  width:88px!important;height:70px!important
+ }
+ .maskan-standard-paper .paper-brand strong{font-size:16px!important;line-height:1.5!important}
+ .maskan-standard-paper .paper-brand span{font-size:10px!important}
+ .maskan-standard-paper .paper-license{font-size:11px!important}
+ .maskan-standard-paper .paper-metadata th,.maskan-standard-paper .paper-metadata td{
+  font-size:11px!important;padding:6px 5px!important
+ }
+ .maskan-standard-paper .paper-data-table th,.maskan-standard-paper .paper-data-table td{
+  font-size:12px!important;padding:7px 8px!important
+ }
+ .maskan-standard-paper .paper-main-heading strong{font-size:17px!important}
+ .maskan-standard-paper .paper-signatures>div{min-height:96px!important;padding:9px!important}
+ .maskan-standard-paper .paper-approval-line{min-height:25px!important;padding:5px!important}
+ .maskan-standard-paper .paper-letterhead,
+ .maskan-standard-paper .paper-metadata,
+ .maskan-standard-paper .paper-signatures,
+ .maskan-standard-paper .paper-footer{break-inside:avoid}
+}
