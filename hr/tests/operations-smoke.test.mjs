@@ -964,3 +964,35 @@ test('official financial claims inherit per-company bank, tax, and commercial re
  for(const key of ['corporate.bank_name','corporate.iban','corporate.bank_account','corporate.vat_registration','corporate.commercial_registration'])assert.ok(finance.includes(key),key);
  assert.match(finance,/companyLogoPath\(current\.company,profiles\)/);
 });
+
+test('Excel contract template round-trips and preserves contract IDs as text',async()=>{
+ const {buildContractsXlsx,parseContractsXlsx,contractColumns,exportContractRows}=await import('../lib/client-contracts-xlsx.mjs');
+ const raw=[['مسكن الكيان','000123','عميل اختبار','مشروع اختبار','مدير المشروع','أعمال تكييف','2026-11-11','2026-11-12','2027-01-30','10000','15','','','','','','','','0']];
+ const bytes=buildContractsXlsx(raw);
+ const parsed=parseContractsXlsx(bytes);
+ assert.equal(parsed.errors.length,0);
+ assert.equal(parsed.rows.length,1);
+ assert.equal(parsed.rows[0].contract_no,'000123');
+ assert.equal(parsed.rows[0].customer,'عميل اختبار');
+ assert.equal(contractColumns[1][1],'رقم العقد');
+ const summed=exportContractRows([{contract_no:'000123',company:'مسكن الكيان',vat_rate:.15}],()=>({vat:1500,all:11500,paid:1000,remaining:10500}));
+ assert.equal(summed[0].length,contractColumns.length);
+ assert.equal(summed[0][10],15);
+ assert.equal(summed[0].at(-1),10500);
+});
+test('Excel contract import catches duplicates, invalid dates and protects against formulas',async()=>{
+ const {buildContractsXlsx,parseContractsXlsx}=await import('../lib/client-contracts-xlsx.mjs');
+ const a=['مسكن الكيان','000123','عميل','مشروع','مدير','أعمال تكييف','2026-11-11','2026-11-12','2027-01-30','1000','15','','','','','','','',''];
+ const parsed=parseContractsXlsx(buildContractsXlsx([a,a]));
+ assert.ok(parsed.errors.some(e=>e.includes('مكرر')));
+ const dated=[...a];dated[7]='11/11/2026';
+ assert.ok(parseContractsXlsx(buildContractsXlsx([dated])).errors.some(e=>e.includes('التاريخ')));
+ const backend=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ assert.match(backend,/bulk_import_contracts/);
+ assert.match(backend,/await db\.batch\(statements\)/);
+ assert.match(backend,/keyset\.has\(signature\)/);
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ assert.match(ui,/Load Excel/);
+ assert.match(ui,/Export Excel/);
+ assert.match(ui,/رقم العقد: \{c\.contract_no\}/);
+});
