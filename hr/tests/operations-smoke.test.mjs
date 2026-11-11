@@ -396,7 +396,7 @@ test('employee profile bank and calculated cash always reconcile to monthly sala
  assert.match(mod,/f\('cash_amount','المبلغ كاش \(محسوب تلقائيًا\)','number'\)/);
  assert.match(mod,/out.cash_amount=\(cents-bankCents\)\/100/);
  assert.match(mod,/if\(bankCents>cents\)throw Error/);
- assert.match(ui,/readOnly=\{module==='employees'&&f.key==='cash_amount'\}/);
+ assert.match(ui,/readOnly=\{\(module==='employees'&&f\.key==='cash_amount'\)/);
  assert.match(ui,/employee-payout-summary/);
  assert.match(ui,/المبلغ كاش \+ التحويل البنكي = الراتب المرجعي/);
 });
@@ -641,4 +641,33 @@ test('company switching clears old employee and leave links and manager views ex
  assert.match(ui,/leave_id:'',project_id:'',contract_id:''/);
  assert.match(erp,/const \{employee_snapshot,\.\.\.safeData\}=r\.data/);
  assert.match(erp,/data:safeData/);
+});
+
+test('four special leave policies have fixed calendar durations and no annual balance deduction',async()=>{
+ const {fixedLeaveDays,leaveEndDate,normalize,enumOptions}=await import('../lib/modules.mjs');
+ const cases=[['bereavement',5],['wife_childbirth',60],['marriage',5],['newborn',3]];
+ const types=new Set(enumOptions.leave_type.map(([code])=>code));
+ for(const [leave_type,days] of cases){
+  assert.ok(types.has(leave_type));
+  assert.equal(fixedLeaveDays(leave_type),days);
+  const start='2026-11-11',end=leaveEndDate(start,days);
+  const data={employee_id:'employee-1',leave_type,start,end,days};
+  const out=normalize('leave',{company:'مسكن الكيان',data});
+  assert.equal(out.days,days);
+  assert.equal(out.balance_deducted,false);
+  assert.throws(()=>normalize('leave',{company:'مسكن الكيان',data:{...data,days:days-1}}),/مدة الإجازة الخاصة/);
+  assert.throws(()=>normalize('leave',{company:'مسكن الكيان',data:{...data,end:'2026-12-31'}}),/مدة الإجازة الخاصة/);
+ }
+ assert.equal(leaveEndDate('2026-11-11',5),'2026-11-15');
+ assert.equal(leaveEndDate('2026-11-11',60),'2027-01-09');
+ assert.equal(fixedLeaveDays('annual'),null);
+});
+test('leave editor recalculates duration and end date on type and start date changes',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/function applyLeaveField\(key,value\)/);
+ assert.match(ui,/next\.days=String\(days\);next\.end=leaveEndDate\(next\.start,days\)/);
+ assert.match(ui,/module==='leave'&&f\.key==='leave_type'\?applyLeaveField/);
+ assert.match(ui,/module==='leave'&&f\.key==='start'\)applyLeaveField/);
+ assert.match(ui,/fixedLeaveDays\(edit\.data\.leave_type\)!==null/);
+ assert.match(ui,/لا تخصم من رصيد الإجازة السنوية/);
 });
