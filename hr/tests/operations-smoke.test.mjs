@@ -742,3 +742,37 @@ test('server blocks payroll approval and payment for inactive included employees
  assert.match(server,/if\(invalid\)throw Error\('يوجد موظف غير نشط في المسير/);
  assert.match(server,/if\(!\['active','نشط','على رأس العمل','علي راس العمل'\]\.includes\(status\)\)throw Error\('لا يمكن إدراج موظف غير نشط/);
 });
+
+test('project manager directory appears as separate management module and requires active project manager account',async()=>{
+ const {modules,canRead,canWrite}=await import('../lib/modules.mjs');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.equal(modules.project_managers.label,'دليل مدراء المشاريع');
+ assert.ok(modules.project_managers.fields.some(f=>f.key==='email'));
+ assert.ok(modules.project_managers.fields.some(f=>f.key==='phone'));
+ assert.equal(canWrite('hr','project_managers'),true);
+ assert.equal(canWrite('project_manager','project_managers'),false);
+ assert.equal(canRead('projects_director','project_managers'),true);
+ assert.match(erp,/if\(mod==='project_managers'\)/);
+ assert.match(erp,/يجب ربط بيانات المدير بحساب نشط بصلاحية مدير مشروع/);
+ assert.match(erp,/مدير المشروع مسجل مسبقًا لدى الشركة/);
+});
+test('project assignment and employee request details use project manager directory records',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/r\.module==='project_managers'&&r\.company===edit\.company/);
+ assert.match(ui,/module==='project_managers'&&f\.key==='email'/);
+ assert.match(ui,/managerDirectoryForRequest\(edit,edit\.company\)/);
+ assert.match(erp,/سجّل بيانات مدير المشروع أولًا في دليل مدراء المشاريع للشركة/);
+ assert.match(erp,/data\.project_manager=\{name:manager\?\.name/);
+ assert.match(erp,/details\.project_manager=\{name:dir\.name/);
+ assert.match(erp,/UPDATE records SET status=\?,data=\?,revision=revision\+1/);
+});
+
+test('HR directory choices expose only active project manager identities without credentials',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(erp,/if\(mod==='project_manager_choices'\)/);
+ assert.match(erp,/SELECT email,username,display_name,role,is_active,companies FROM members WHERE role='project_manager' AND is_active=true/);
+ assert.match(erp,/\['admin','hr','projects_director'\]\.includes\(u\.role\)/);
+ assert.match(ui,/user\?\.role==='admin'\?'members':'project_manager_choices'/);
+});

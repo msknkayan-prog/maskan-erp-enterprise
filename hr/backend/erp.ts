@@ -6,7 +6,16 @@ export const dynamic='force-dynamic';
 const json=(v:any,status=200)=>Response.json(v,{status,headers:{'Cache-Control':'no-store'}});
 export async function identity(){const u=currentUser();if(!u)throw Error('401');const row=await env.DB.prepare('SELECT * FROM members WHERE email=?').bind(u.email.toLowerCase()).first();if(!row||row.is_active===false)throw Error('403');return {...u,...row};}
 const parse=(r:any)=>({...r,data:JSON.parse(r.data)});
-export async function GET(req:Request){try{const u=await identity();const db=env.DB!;const query=new URL(req.url).searchParams;const mod=query.get('module');if(mod==='audit'){if(u.role!=='admin')throw Error('403');return json({rows:(await db.prepare('SELECT * FROM audit ORDER BY at DESC LIMIT 100').all()).results});}if(mod==='record_history'){const all=(await db.prepare('SELECT * FROM records').all()).results.map(parse);const row=all.find((r:any)=>r.id===query.get('id'));if(!row||!permittedRead(u,row.module)||!visible(u,row,all))throw Error('403');const current=(await db.prepare('SELECT * FROM audit WHERE record_id=? ORDER BY at').bind(row.id).all()).results.map((r:any)=>({at:r.at,actor:r.actor,action:r.action,details:r.details,source:'cloud'}));const old=row.data._legacy;if(old){const archive=(await db.prepare('SELECT table_name,payload FROM legacy WHERE source=?').bind(old.source).all()).results.map((r:any)=>({...r,payload:JSON.parse(r.payload)}));const users=Object.fromEntries(archive.filter((r:any)=>r.table_name==='users').map((r:any)=>[r.payload.id,r.payload.display_name]));for(const item of archive){const r=item.payload;let match=item.table_name==='approval_events'&&((old.table==='leave_requests'&&r.leave_request_id===old.id)||(old.table==='advance_requests'&&r.advance_request_id===old.id))||item.table_name==='resignation_events'&&old.table==='resignation_requests'&&r.resignation_id===old.id;if(match)current.push({at:r.decided_at,actor:users[r.actor_user_id]||'مستخدم مرحّل',action:r.decision,details:JSON.stringify({step:r.step,note:r.note}),source:'python'});}}return json({rows:current.sort((a:any,b:any)=>String(a.at).localeCompare(String(b.at)))});}if(mod==='members'){if(u.role!=='admin')throw Error('403');return json({rows:(await db.prepare('SELECT m.*, EXISTS(SELECT 1 FROM auth.users a WHERE lower(a.email)=lower(m.email)) AS auth_ready, EXISTS(SELECT 1 FROM auth.users a WHERE lower(a.email)=lower(m.email) AND a.email_confirmed_at IS NOT NULL) AS auth_confirmed FROM members m ORDER BY m.email').all()).results});}
+export async function GET(req:Request){try{const u=await identity();const db=env.DB!;const query=new URL(req.url).searchParams;const mod=query.get('module');if(mod==='audit'){if(u.role!=='admin')throw Error('403');return json({rows:(await db.prepare('SELECT * FROM audit ORDER BY at DESC LIMIT 100').all()).results});}if(mod==='record_history'){const all=(await db.prepare('SELECT * FROM records').all()).results.map(parse);const row=all.find((r:any)=>r.id===query.get('id'));if(!row||!permittedRead(u,row.module)||!visible(u,row,all))throw Error('403');const current=(await db.prepare('SELECT * FROM audit WHERE record_id=? ORDER BY at').bind(row.id).all()).results.map((r:any)=>({at:r.at,actor:r.actor,action:r.action,details:r.details,source:'cloud'}));const old=row.data._legacy;if(old){const archive=(await db.prepare('SELECT table_name,payload FROM legacy WHERE source=?').bind(old.source).all()).results.map((r:any)=>({...r,payload:JSON.parse(r.payload)}));const users=Object.fromEntries(archive.filter((r:any)=>r.table_name==='users').map((r:any)=>[r.payload.id,r.payload.display_name]));for(const item of archive){const r=item.payload;let match=item.table_name==='approval_events'&&((old.table==='leave_requests'&&r.leave_request_id===old.id)||(old.table==='advance_requests'&&r.advance_request_id===old.id))||item.table_name==='resignation_events'&&old.table==='resignation_requests'&&r.resignation_id===old.id;if(match)current.push({at:r.decided_at,actor:users[r.actor_user_id]||'مستخدم مرحّل',action:r.decision,details:JSON.stringify({step:r.step,note:r.note}),source:'python'});}}return json({rows:current.sort((a:any,b:any)=>String(a.at).localeCompare(String(b.at)))});}if(mod==='project_manager_choices'){
+ if(!['admin','hr','projects_director'].includes(u.role))throw Error('403');
+ const result=(await db.prepare("SELECT email,username,display_name,role,is_active,companies FROM members WHERE role='project_manager' AND is_active=true").all()).results;
+ return json({rows:result.filter((m:any)=>{
+  const userScope=u.companies==='*'||!u.companies?null:(()=>{try{return JSON.parse(u.companies)}catch{return []}})();
+  const managerScope=m.companies==='*'||!m.companies?null:(()=>{try{return JSON.parse(m.companies)}catch{return []}})();
+  return !userScope||!managerScope||userScope.some((company:string)=>managerScope.includes(company));
+ })});
+}
+if(mod==='members'){if(u.role!=='admin')throw Error('403');return json({rows:(await db.prepare('SELECT m.*, EXISTS(SELECT 1 FROM auth.users a WHERE lower(a.email)=lower(m.email)) AS auth_ready, EXISTS(SELECT 1 FROM auth.users a WHERE lower(a.email)=lower(m.email) AND a.email_confirmed_at IS NOT NULL) AS auth_confirmed FROM members m ORDER BY m.email').all()).results});}
 const all=(await db.prepare('SELECT * FROM records ORDER BY updated_at DESC LIMIT 10000').all()).results.map(parse);const rows=all.filter((r:any)=>(modules as any)[r.module]&&permittedRead(u,r.module)&&visible(u,r,all)).map((r:any)=>{if(!['project_manager','projects_director'].includes(u.role))return r;if(r.module==='employees')return {...r,data:{name:r.data.name,code:r.data.code,job:r.data.job,project_id:r.data.project_id}};if(r.data?.employee_snapshot){const {employee_snapshot,...safeData}=r.data;return {...r,data:safeData};}return r;});return json({user:{name:u.displayName,email:u.email,role:u.role,employee_id:u.employee_id,companies:u.companies,projects:u.projects,permissions:u.permissions},rows,companies});}catch(e:any){return json({error:e.message==='401'?'يرجى تسجيل الدخول':e.message==='403'?'الحساب غير مخوّل':'تعذر قراءة البيانات'},['401','403'].includes(e.message)?Number(e.message):500);}}
 export async function POST(req:Request){try{// Same-origin CSRF checks occur at the Next.js proxy before forwarding.
 // Supabase edge routing rewrites req.url, so its origin is not the browser origin.
@@ -152,6 +161,10 @@ if(current==='draft'&&decision==='approve'&&next==='project_manager'){
   try{authorized=JSON.parse(manager.companies).includes(old.company)}catch{}
   if(!authorized)throw Error('مدير المشروع لا يمتلك صلاحية الشركة التابعة للطلب');
  }
+ const dir=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(old.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
+ if(!dir)throw Error('بيانات مدير المشروع غير مسجلة في دليل مدراء المشاريع');
+ details.project_id=projectId;
+ details.project_manager={name:dir.name,email:managerEmail,phone:dir.phone||'',project_name:pd.name||''};
 }
 if(current==='project_manager'&&u.role!=='admin'){
  const employeeRecord=details.employee_id?await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(details.employee_id,old.company).first<any>():null;
@@ -167,7 +180,7 @@ if(mod==='payroll'&&decision==='approve'){
 }
 let balanceCondition='';let balanceArgs:any[]=[];
 if(mod==='leave'&&current==='hr'&&JSON.parse(old.data).leave_type==='sick'&&next!=='draft'&&next!=='rejected'){const count=await db.prepare('SELECT count(*) n FROM files WHERE record_id=?').bind(old.id).first<any>();if(!count?.n||body.medical_verified!==true)throw Error('تحقق من المرفق الطبي وأكّد مراجعته قبل الاعتماد');}if(mod==='leave'&&next==='approved'){const employee=await db.prepare('SELECT data FROM records WHERE id=? AND module=? AND company=?').bind(details.employee_id,'employees',old.company).first<any>();if(!employee)throw Error('الموظف غير موجود');const e=JSON.parse(employee.data);const service=annualLeave(e.hire_date);const leaves=(await db.prepare("SELECT data FROM records WHERE module='leave' AND status='approved' AND company=?").bind(old.company).all()).results;const used=leaves.map((r:any)=>JSON.parse(r.data)).filter((d:any)=>d.employee_id===details.employee_id&&(d.balance_deducted??(!d.leave_type||d.leave_type==='annual'))).reduce((n:number,d:any)=>n+Number(d.days),0);if(details.balance_deducted??(!details.leave_type||details.leave_type==='annual')){if(e.sponsorship==='yes'&&!service)throw Error('استكمل تاريخ التعيين قبل اعتماد الإجازة السنوية');const available=(e.sponsorship==='yes'?(service?.accrued||0):Number(e.legacy_ledger_adjustment||0))+Number(e.opening_leave||0);if(details.days>available-used)throw Error('رصيد الإجازة غير كاف');balanceCondition=" AND (COALESCE((SELECT SUM(CAST(json_extract(data,'$.days') AS REAL)) FROM records WHERE module='leave' AND status='approved' AND json_extract(data,'$.employee_id')=? AND coalesce(json_extract(data,'$.balance_deducted'),CASE WHEN coalesce(json_extract(data,'$.leave_type'),'annual')='annual' THEN 1 ELSE 0 END)=1),0)+?<=?)";balanceArgs=[details.employee_id,Number(details.days),available];}}
-const result=await db.batch([db.prepare('UPDATE records SET status=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=?'+balanceCondition).bind(next,now,mutation,old.id,old.revision,...balanceArgs),db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,old.id,'transition',now,JSON.stringify({from:current,to:next,note:String(body.note||'').slice(0,2000)}),old.id,mutation)]);if(!result[0].meta.changes)throw Error('تغير السجل أو الرصيد؛ حدّث الصفحة وأعد المحاولة');return json({ok:true});}
+const result=await db.batch([db.prepare('UPDATE records SET status=?,data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=?'+balanceCondition).bind(next,JSON.stringify(details),now,mutation,old.id,old.revision,...balanceArgs),db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,old.id,'transition',now,JSON.stringify({from:current,to:next,note:String(body.note||'').slice(0,2000)}),old.id,mutation)]);if(!result[0].meta.changes)throw Error('تغير السجل أو الرصيد؛ حدّث الصفحة وأعد المحاولة');return json({ok:true});}
 if(mod==='employees'&&['archive_employee','restore_employee'].includes(body.action)){
  if(!permittedWrite(u,'employees')||!permission(u,'employees','edit')||!['admin','hr'].includes(u.role))throw Error('403');
  if(!old)throw Error('الموظف غير موجود');
@@ -200,7 +213,19 @@ if(mod==='projects'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 const data={...(previous||{}),...normalize(mod,body)};
 if(mod==='projects'&&old)data.code=String(previous.code||old.code||'');
 
-if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previous.salary??previous.total_monthly_salary)===Number(data.salary))for(const key of ['basic','housing','transport'])if(previous[key]!==undefined)data[key]=previous[key];if(mod==='employees'){data._review_flags=[...(!data.hire_date?['تاريخ التعيين يحتاج استكمال']:[]),...(data.company==='غير محددة'?['الشركة تحتاج مراجعة']:[])];}if(mod==='warnings'&&data.warning_type!=='notice'&&!Number(data.sequence)){data.sequence=({first:1,second:2,final:3} as any)[data.warning_type];}if(!visible(u,{module:mod,company:body.company,data},(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(mod==='projects'&&String(data.manager_email||'').trim()){
+if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previous.salary??previous.total_monthly_salary)===Number(data.salary))for(const key of ['basic','housing','transport'])if(previous[key]!==undefined)data[key]=previous[key];if(mod==='employees'){data._review_flags=[...(!data.hire_date?['تاريخ التعيين يحتاج استكمال']:[]),...(data.company==='غير محددة'?['الشركة تحتاج مراجعة']:[])];}if(mod==='warnings'&&data.warning_type!=='notice'&&!Number(data.sequence)){data.sequence=({first:1,second:2,final:3} as any)[data.warning_type];}if(!visible(u,{module:mod,company:body.company,data},(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(mod==='project_managers'){
+ if(!['admin','hr'].includes(u.role))throw Error('403');
+ data.email=String(data.email||'').trim().toLowerCase();
+ const member=await db.prepare('SELECT email,role,is_active,companies FROM members WHERE lower(email)=?').bind(data.email).first<any>();
+ if(!member||member.role!=='project_manager'||member.is_active===false)throw Error('يجب ربط بيانات المدير بحساب نشط بصلاحية مدير مشروع');
+ if(member.companies&&member.companies!=='*'){
+  let valid=false;try{valid=JSON.parse(member.companies).includes(body.company)}catch{}
+  if(!valid)throw Error('حساب المدير لا يملك صلاحية الشركة المحددة');
+ }
+ const records=(await db.prepare("SELECT id,company,data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results;
+ if(records.some((r:any)=>r.id!==old?.id&&String(JSON.parse(r.data).email||'').trim().toLowerCase()===data.email))throw Error('مدير المشروع مسجل مسبقًا لدى الشركة؛ عدّل سجله الموجود');
+}
+if(mod==='projects'&&String(data.manager_email||'').trim()){
  const managerEmail=String(data.manager_email).trim().toLowerCase();
  const manager=await db.prepare('SELECT role,is_active,companies FROM members WHERE email=?').bind(managerEmail).first<any>();
  if(!manager||manager.role!=='project_manager'||manager.is_active===false)throw Error('اختر مدير مشروع يمتلك حساب دخول نشط بصلاحية مدير مشروع');
@@ -209,7 +234,23 @@ if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previo
   try{authorized=JSON.parse(manager.companies).includes(body.company)}catch{}
   if(!authorized)throw Error('مدير المشروع لا يمتلك صلاحية الشركة المحددة؛ عدّل نطاق حسابه أولًا');
  }
+ const managerRecord=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
+ if(!managerRecord)throw Error('سجّل بيانات مدير المشروع أولًا في دليل مدراء المشاريع للشركة');
+ data.manager_name=managerRecord.name;
+ data.manager_phone=managerRecord.phone||'';
  data.manager_email=managerEmail;
+}
+if(mod==='employees'&&data.project_id){
+ const project=await db.prepare("SELECT data,company FROM records WHERE module='projects' AND id=?").bind(data.project_id).first<any>();
+ if(project){
+  const details=JSON.parse(project.data);
+  const managerEmail=String(details.manager_email||'').trim().toLowerCase();
+  if(managerEmail){
+   const manager=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
+   data.manager=manager?.name||details.manager_name||'';
+   data.manager_email=managerEmail;
+  }else{data.manager='';data.manager_email='';}
+ }
 }
 const transferringEmployee=mod==='employees'&&Boolean(old)&&old.company!==body.company;
 let linkedAccount=false;
@@ -249,6 +290,18 @@ if(mod!=='employees'&&['leave','advances','warnings','resignations','returns','t
  const employee=JSON.parse(employeeRecord.data);
  const snapshot={employee_id:employeeRecord.id,company:body.company,name:String(employee.name||''),code:String(employee.code||''),job:String(employee.job||''),department:String(employee.department||''),project_id:String(employee.project_id||''),manager:String(employee.manager||''),identity:String(employee.identity||''),nationality:String(employee.nationality||''),hire_date:String(employee.hire_date||''),salary:Number(employee.salary||0),basic:Number(employee.basic||0),housing:Number(employee.housing||0),transport:Number(employee.transport||0),bank_amount:Number(employee.bank_amount||0),cash_amount:Number(employee.cash_amount||0),bank:String(employee.bank||''),iban:String(employee.iban||'')};
  if(!old||previous?.employee_id!==data.employee_id||!previous?.employee_snapshot)data.employee_snapshot=snapshot;
+ if(employee.project_id){
+  const project=await db.prepare("SELECT company,data FROM records WHERE module='projects' AND id=?").bind(employee.project_id).first<any>();
+  if(project){
+   const projectDetails=JSON.parse(project.data);
+   const managerEmail=String(projectDetails.manager_email||'').trim().toLowerCase();
+   const manager=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
+   if(managerEmail){
+    data.project_id=employee.project_id;
+    data.project_manager={name:manager?.name||projectDetails.manager_name||'',email:managerEmail,phone:manager?.phone||'',project_name:projectDetails.name||''};
+   }
+  }
+ }
  if(mod==='leave_dues'){
   if(!Number(data.salary_basis))data.salary_basis=snapshot.salary;
   data.net=Math.round((Number(data.salary_basis)/30*Number(data.days)+Number(data.travel_amount||0)+Number(data.other_amount||0)-Number(data.deductions||0))*100)/100;
