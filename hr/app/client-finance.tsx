@@ -35,7 +35,16 @@ export default function ClientFinance({user,company,profiles,companyList,project
  const [pendingDocumentFile,setPendingDocumentFile]=useState(null),[replaceDocumentId,setReplaceDocumentId]=useState('');
  const [importPreview,setImportPreview]=useState(null),[importOpen,setImportOpen]=useState(false);
  const [aiPreview,setAiPreview]=useState(null),[aiBusy,setAiBusy]=useState(false);
+ const [aiStatus,setAiStatus]=useState({ready:null,message:'فحص الاتصال بخدمة AI…'});
  const [aiDocumentId,setAiDocumentId]=useState(''),[aiContractFile,setAiContractFile]=useState(null);
+ useEffect(()=>{
+  let active=true;
+  fetch('/api/client-contract-ai',{cache:'no-store'}).then(async res=>{
+    const json=await res.json().catch(()=>({}));
+    if(active)setAiStatus({ready:res.ok?Boolean(json.ready):false,message:json.message||json.error||'تعذر فحص الاتصال'});
+  }).catch(()=>{if(active)setAiStatus({ready:false,message:'تعذر الاتصال بخدمة تحليل العقود. تحقق من إعدادات المنصة.'})});
+  return ()=>{active=false};
+ },[user?.email]);
  const privileges=(()=>{try{return typeof user?.permissions==='string'?JSON.parse(user.permissions||'{}'):user?.permissions||{}}catch{return {}}})();
  const canEdit=user?.role==='admin'||(user?.role==='finance'&&privileges['client_finance:edit']!==false)||privileges['client_finance:edit']===true;
  const canArchive=user?.role==='admin'||user?.role==='finance'||privileges['client_finance:delete']===true;
@@ -297,13 +306,14 @@ const deleteAttachedContract=async(doc)=>{
   <div className="cf-tabs">{[['installments','بنود الدفعات'],['claims','المطالبات والمستخلصات'],['receipts','الدفعات المستلمة'],['adjustments','الأعمال الإضافية والخصومات'],['documents','العقد والمرفقات']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>setTab(k)}>{t}</button>)}</div>
   {tab==='installments'&&<>
   <p className="cf-preview">عدد الدفعات المسجلة: <b>{items('installments').length} / 10</b> · المتاح إضافة <b>{Math.max(0,10-items('installments').length)}</b> دفعة. تُنشأ المطالبات بأرقام تلقائية عند استحقاقها.</p>
+  <div className="cf-ai-inline-action"><strong>استخراج الدفعات من العقد بالذكاء الاصطناعي</strong><button type="button" onClick={()=>document.getElementById('finance-ai-contract-upload')?.scrollIntoView({behavior:'smooth',block:'start'})}>فتح نافذة AI وحفظ الدفعات</button></div>
   <p>جدول الاستحقاقات — المتبقي لتوزيع الدفعات قبل الضريبة: <b>{money(summary(current).unscheduled)} ر.س</b> <button type="button" onClick={()=>printFinanceRegister('installments')}>طباعة جدول الدفعات</button></p><div className="cf-table"><table><thead><tr><th>رقم الدفعة</th><th>الدفعة والبنود</th><th>تاريخ الاستحقاق</th><th>نسبة الدفعة من العقد</th><th>نسبة الإنجاز</th><th>قبل الضريبة</th><th>شامل الضريبة</th><th>توزيع البنود</th><th>الطباعة</th></tr></thead><tbody>{items('installments').map(x=><tr key={x.id}><td><b>{x.installment_no||'—'}</b></td><td><strong>{x.title}</strong><small>{x.description}</small>{data.installment_items.filter(i=>i.installment_id===x.id).map(i=><small key={i.id}>• {i.item_code}: {i.description} · {i.quantity} {i.unit} × {money(i.unit_price_ex_vat)} = {money(i.amount_ex_vat)} ر.س</small>)}</td><td>{dateOnly(x.due_date)}</td><td>{x.payment_percent==null?'—':n(x.payment_percent).toFixed(2)+'%'}</td><td>{n(x.progress_percent).toFixed(2)}%</td><td>{money(x.amount_ex_vat)}</td><td>{money(n(x.amount_ex_vat)*(1+n(current.vat_rate)))}</td><td>{money(n(x.amount_ex_vat)-sum(data.installment_items.filter(i=>i.installment_id===x.id).map(i=>i.amount_ex_vat)))} ر.س غير موزعة</td><td><button type="button" onClick={()=>printFinanceRegister('installments',x)}>طباعة الدفعة</button>{items('claims').some(cl=>cl.installment_id===x.id)&&<button type="button" onClick={()=>setTab('claims')}>المطالبة والمستخلص</button>}</td></tr>)}</tbody></table></div>
     {canEdit&&current.contract_status==='active'&&<div className="cf-ai-import" id="finance-ai-contract-upload">
-   <div className="cf-head"><div><h3>استخراج بنود الدفعات من العقد بالذكاء الاصطناعي</h3><p>ابدأ من هنا بدل إدخال الدفعات يدويًا: اختر العقد المرفق أو ارفع PDF أو صورة، ثم راجع الدفعات المستخرجة واعتمدها مرة واحدة.</p></div><span className="cf-ai-tag">AI · استخراج ومراجعة</span></div>
+   <div className="cf-head"><div><h3>استخراج بنود الدفعات من العقد بالذكاء الاصطناعي</h3><p>ارفع العقد أو اختر ملفًا محفوظًا، ثم اضغط استخراج. بعد المراجعة يظهر زر تأكيد وحفظ الدفعات هنا مباشرة.</p><p role="status" className={aiStatus.ready===false?'cf-alert':'cf-ai-help'}><b>حالة خدمة AI:</b> {aiStatus.message}</p></div><span className="cf-ai-tag">AI · استخراج ومراجعة</span></div>
    <div className="cf-ai-import-grid">
     <label>ملف العقد المسجل<select value={aiDocumentId} onChange={e=>{setAiDocumentId(e.target.value);setAiContractFile(null)}}><option value="">اختر من مرفقات العقد</option>{contractFiles.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
     <label>أو ارفع عقدًا جديدًا<input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e=>{setAiContractFile(e.target.files?.[0]||null);setAiDocumentId('')}}/></label>
-    <button type="button" className="cf-primary" disabled={aiBusy||busy||(!aiDocumentId&&!aiContractFile)} onClick={extractFromContract}>{aiBusy?'تحليل العقد جارٍ…':'استخراج الدفعات بواسطة AI'}</button>
+    <button type="button" className="cf-primary" disabled={aiBusy||busy||aiStatus.ready===false||(!aiDocumentId&&!aiContractFile)} onClick={extractFromContract}>{aiBusy?'تحليل العقد جارٍ…':'استخراج الدفعات بواسطة AI'}</button>
    </div>
    <div className="cf-ai-steps"><span>1. تحديد العقد</span><span>2. استخراج النسب والبنود</span><span>3. مراجعة وتصحيح</span><span>4. تأكيد وحفظ</span><span>5. إنشاء المستخلص عند الاستحقاق</span></div>
    <p className="cf-ai-help">لا تُحفظ الدفعات ولا تُنشأ المطالبات أثناء التحليل. أي موعد غير محدد في العقد سيُعرض لاستكماله قبل الحفظ.</p>
