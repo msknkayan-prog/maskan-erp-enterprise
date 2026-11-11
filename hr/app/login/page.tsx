@@ -32,7 +32,7 @@ export default function Login(){
     <p style={{textAlign:'center',fontWeight:800,fontSize:19,color:'#193c35',margin:'0 0 5px'}}>شركة مسكن الكيان للمقاولات</p>
     <div style={{height:2,width:100,background:'#bc9b61',margin:'16px auto 26px'}}/>
     <h1 style={{fontSize:30,color:'#193c35',textAlign:'center',marginBottom:8}}>شؤون الموظفين</h1>
-    <p style={{textAlign:'center',color:'#718178',fontSize:14,marginBottom:30}}>شركة مسكن الكيان للمقاولات</p>
+    <p style={{textAlign:'center',color:'#718178',fontSize:14,marginBottom:10}}>شركة مسكن الكيان للمقاولات</p><p style={{textAlign:'center',fontSize:12,color:'#a18348',marginBottom:25,fontWeight:700}}>الإصدار V57</p>
     <form onSubmit={submit} autoComplete="on">
       <label htmlFor="hr-email" style={{display:'block',marginBottom:9,fontWeight:600}}>اسم المستخدم أو البريد الإلكتروني</label>
       <input id="hr-email" name="email" type="text" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} required dir="ltr" style={{borderColor:'#d9c7a6',minHeight:48,marginBottom:19}}/>
