@@ -671,3 +671,18 @@ test('leave editor recalculates duration and end date on type and start date cha
  assert.match(ui,/fixedLeaveDays\(edit\.data\.leave_type\)!==null/);
  assert.match(ui,/لا تخصم من رصيد الإجازة السنوية/);
 });
+
+test('pending requests center lists active request types with filters and excludes closed statuses',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/module==='pending_requests'/);
+ assert.match(ui,/الطلبات قيد الإجراء/);
+ assert.match(ui,/pendingRequestTypes=\['leave','advances','resignations','returns','terminations','leave_dues','settlements','warnings','appointments'\]/);
+ assert.match(ui,/pendingStages=\['draft','returned','project_manager','projects_director','hr','finance'\]/);
+ assert.match(ui,/accessiblePendingTypes=pendingRequestTypes\.filter\(k=>user&&permittedRead\(user,k\)\)/);
+ assert.match(ui,/\(!company\|\|r\.company===company\)/);
+ assert.match(ui,/pendingType,setPendingType/);
+ assert.match(ui,/pendingStage,setPendingStage/);
+ assert.match(ui,/pendingSearch,setPendingSearch/);
+ assert.match(ui,/setModule\(r\.module\);setEdit\(\{\.\.\.r,data:\{\.\.\.r\.data\}\}\)/);
+ assert.match(ui,/لا تشمل المعتمدة أو المصروفة أو المرفوضة/);
+});
