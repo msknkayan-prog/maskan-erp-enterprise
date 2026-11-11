@@ -396,7 +396,7 @@ test('employee profile bank and calculated cash always reconcile to monthly sala
  assert.match(mod,/f\('cash_amount','المبلغ كاش \(محسوب تلقائيًا\)','number'\)/);
  assert.match(mod,/out.cash_amount=\(cents-bankCents\)\/100/);
  assert.match(mod,/if\(bankCents>cents\)throw Error/);
- assert.match(ui,/readOnly=\{module==='employees'&&f.key==='cash_amount'\}/);
+ assert.match(ui,/readOnly=\{\(module==='employees'&&f\.key==='cash_amount'\)/);
  assert.match(ui,/employee-payout-summary/);
  assert.match(ui,/المبلغ كاش \+ التحويل البنكي = الراتب المرجعي/);
 });
