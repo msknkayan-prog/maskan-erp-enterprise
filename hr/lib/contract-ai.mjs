@@ -9,6 +9,8 @@ export function normalizeContractAIResult(raw){
  const warnings=Array.isArray(result.warnings)?result.warnings.slice(0,25).map(x=>text(x,250)):[];
  const cleaned=result.installments.slice(0,30).map((p,i)=>{
   const title=text(p.title||'دفعة رقم '+(i+1),160);
+  const percent=p.payment_percent===undefined||p.payment_percent===null||p.payment_percent===''?null:amount(p.payment_percent);
+  if(percent!==null&&(percent<=0||percent>100))warnings.push('نسبة الدفعة '+(i+1)+' غير صالحة');
   const value=amount(p.amount_ex_vat);
   const originalDate=text(p.due_date,10);
   const due_date=validDate(originalDate)?originalDate:'';
@@ -24,17 +26,19 @@ export function normalizeContractAIResult(raw){
   if(items.reduce((sum,item)=>sum+Math.round(item.quantity*item.unit_price_ex_vat*100)/100,0)>(value||0)+.005){
    warnings.push('قيمة بنود الدفعة '+(i+1)+' تتجاوز إجماليها؛ راجع البنود');
   }
-  return {title,description:text(p.description||'',1500),due_date,amount_ex_vat:value===null?'':value,progress_percent:0,items,source:text(p.source||'',300)};
+  return {title,description:text(p.description||'',1500),due_date,amount_ex_vat:value===null?'':value,payment_percent:percent??'',progress_percent:0,items,source:text(p.source||'',300)};
  });
  return {installments:cleaned,warnings,contract_no:text(result.contract_no,90),document_summary:text(result.document_summary,450)};
 }
 export function validateAISchedule(schedule,{remaining=Infinity}={}){
- const problems=[],seen=new Set();let total=0;
+ const problems=[],seen=new Set();let total=0,totalPercent=0;
  if(!Array.isArray(schedule)||!schedule.length||schedule.length>30)return ['عدد الدفعات يجب أن يكون بين 1 و30'];
  schedule.forEach((p,i)=>{
   const label='الدفعة '+(i+1);
   if(!text(p.title))problems.push(label+': الاسم مطلوب');
   if(!validDate(p.due_date))problems.push(label+': تاريخ استحقاق صحيح مطلوب');
+  const percent=p.payment_percent===''||p.payment_percent===null||p.payment_percent===undefined?null:amount(p.payment_percent);
+  if(percent!==null){if(percent<=0||percent>100)problems.push(label+': نسبة تعاقدية غير صالحة');totalPercent+=percent;}
   const m=amount(p.amount_ex_vat);
   if(m===null||m<=0)problems.push(label+': قيمة موجبة قبل الضريبة مطلوبة');else total+=m;
   const key=text(p.title)+'|'+p.due_date;if(seen.has(key))problems.push(label+': مكررة');seen.add(key);
@@ -49,6 +53,7 @@ export function validateAISchedule(schedule,{remaining=Infinity}={}){
   });
   if(m!==null&&itemTotal>m+.005)problems.push(label+': بنودها أكبر من قيمتها');
  });
+ if(totalPercent>100.0001)problems.push('مجموع النسب التعاقدية أكبر من 100%');
  if(Number.isFinite(remaining)&&total>remaining+.005)problems.push('إجمالي الدفعات المستخرجة يتجاوز الرصيد غير المجدول من العقد');
  return problems;
 }
