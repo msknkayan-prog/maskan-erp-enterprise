@@ -133,7 +133,7 @@ export async function POST(req){
  const c=await row(db,str(b.contract_id),u);
  if(action==='update_contract'){
  if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية تعديل العقد');
- const start=date(b.start_date||c.start_date),end=date(b.end_date||c.end_date);
+ const start=date(b.start_date||c.start_date),end=date(b.end_date||c.end_date),signed=date(b.signed_date||c.signed_date);
  if(end<start)throw Error('نهاية المشروع تسبق البداية');
  const existing=await db.prepare('SELECT count(*) AS count FROM client_installments WHERE contract_id=?').bind(c.id).first();
  const payment=await db.prepare('SELECT count(*) AS count FROM client_receipts WHERE contract_id=?').bind(c.id).first();
@@ -141,8 +141,8 @@ export async function POST(req){
  if(!Number.isFinite(newVat)||newVat<0||newVat>1)throw Error('نسبة ضريبة غير صالحة');
  if((Number(existing?.count)||Number(payment?.count))&&(newBase!==Number(c.base_ex_vat)||Math.abs(newVat-Number(c.vat_rate))>0.00001))throw Error('لا يمكن تغيير القيمة الأساسية أو الضريبة بعد تسجيل دفعات أو تحصيل؛ استخدم ملحقًا معتمدًا');
  const retention=amt(b.retention_percent??c.retention_percent);if(retention>100)throw Error('نسبة الحجز غير صالحة');
- await db.prepare('UPDATE client_contracts SET customer=?,project_name=?,project_manager=?,start_date=?,end_date=?,contract_type=?,base_ex_vat=?,vat_rate=?,customer_phone=?,customer_email=?,customer_vat_no=?,site_location=?,contract_subject=?,client_reference=?,retention_percent=?,notes=?,contract_status=?,updated_at=now() WHERE id=?')
- .bind(str(b.customer||c.customer),str(b.project_name||c.project_name),str(b.project_manager||c.project_manager),start,end,str(b.contract_type||c.contract_type),newBase,newVat,
+ await db.prepare('UPDATE client_contracts SET customer=?,project_name=?,project_manager=?,start_date=?,end_date=?,signed_date=?,contract_type=?,base_ex_vat=?,vat_rate=?,customer_phone=?,customer_email=?,customer_vat_no=?,site_location=?,contract_subject=?,client_reference=?,retention_percent=?,notes=?,contract_status=?,updated_at=now() WHERE id=?')
+ .bind(str(b.customer||c.customer),str(b.project_name||c.project_name),str(b.project_manager||c.project_manager),start,end,signed,str(b.contract_type||c.contract_type),newBase,newVat,
  str(b.customer_phone??c.customer_phone,50),str(b.customer_email??c.customer_email,200),str(b.customer_vat_no??c.customer_vat_no,40),
  str(b.site_location??c.site_location,400),str(b.contract_subject??c.contract_subject,1000),str(b.client_reference??c.client_reference,120),retention,str(b.notes??c.notes,3000),
  ['active','completed','suspended'].includes(b.contract_status)?b.contract_status:c.contract_status,c.id).run();
