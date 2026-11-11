@@ -744,3 +744,71 @@ body{line-height:1.55}
  .maskan-standard-paper .paper-signatures,
  .maskan-standard-paper .paper-footer{break-inside:avoid}
 }
+
+/* HR 2026 final: balanced horizontal stationery for all RTL forms. */
+.maskan-standard-paper .paper-letterhead{
+ display:grid!important;grid-template-columns:165px minmax(0,1fr)!important;
+ gap:14px!important;align-items:center!important;min-height:104px!important;
+ padding:10px 8px 12px!important;margin-bottom:10px!important;
+ border-bottom:2px solid #b29551!important;direction:rtl;
+}
+.maskan-standard-paper .paper-license{
+ grid-column:1!important;font-size:12px!important;line-height:1.6!important;
+ border:0!important;border-left:1px solid #ded2b6!important;
+ text-align:right!important;padding:12px 10px!important;
+}
+.maskan-standard-paper .paper-identity{
+ grid-column:2!important;display:flex!important;flex-direction:row!important;
+ justify-content:flex-start!important;align-items:center!important;
+ gap:16px!important;min-width:0!important;
+}
+.maskan-standard-paper .paper-identity img,
+.maskan-standard-paper .paper-identity .paper-logo-placeholder{
+ width:104px!important;height:80px!important;flex:0 0 104px!important;
+ object-fit:contain!important;
+}
+.maskan-standard-paper .paper-identity .paper-brand{
+ min-width:0!important;flex:1 1 auto!important;
+ text-align:right!important;padding:4px 8px!important;
+ border-bottom:0!important;
+}
+.maskan-standard-paper .paper-identity .paper-brand strong{
+ font-size:20px!important;font-weight:800!important;
+ line-height:1.55!important;overflow-wrap:normal!important;word-break:normal!important;
+}
+.maskan-standard-paper .paper-document-title,
+.maskan-standard-paper .paper-party-line{margin-top:8px!important;margin-bottom:9px!important}
+.maskan-standard-paper .paper-signatures{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.maskan-standard-paper .paper-signatures>div{min-width:0!important}
+.member-project-access{grid-column:1/-1;border:1px solid #dfc998;border-radius:12px;padding:14px;margin:10px 0;background:#fffcf4}
+.member-project-access legend{font-size:14px;font-weight:800;color:#70511d;padding:0 8px}
+.member-project-access>label{display:block;font-weight:700;font-size:13px;margin-bottom:10px}
+.member-project-access select,.member-project-access input[type=search]{width:100%;margin-top:6px;padding:10px;border:1px solid #d9c59d;border-radius:8px;background:white}
+.member-scope-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:10px 0;font-size:12px}
+.member-scope-actions span{flex:1;min-width:165px}
+.member-scope-actions button{padding:7px 12px;border:1px solid #d7c294;border-radius:8px;background:white}
+.member-project-list{max-height:265px;overflow:auto;border:1px solid #eadfca;border-radius:9px;background:white;padding:4px}
+.member-project-option{display:flex!important;gap:12px;align-items:center;border-bottom:1px solid #f1e8d6;padding:9px 12px;cursor:pointer}
+.member-project-option:last-child{border:0}
+.member-project-option input[type=checkbox]{flex:0 0 auto;width:17px;height:17px;accent-color:#b2924c}
+.member-project-option span{display:flex;flex-direction:column;gap:4px;min-width:0}
+.member-project-option strong{font-size:13px;line-height:1.5}
+.member-project-option small{font-size:11px;color:#776847;direction:rtl}
+@media print{
+ @page{size:A4 portrait;margin:11mm}
+ .maskan-standard-paper .paper-letterhead{
+  grid-template-columns:138px minmax(0,1fr)!important;
+  min-height:82px!important;gap:9px!important;padding:5px 4px 8px!important
+ }
+ .maskan-standard-paper .paper-license{font-size:11px!important;padding:8px 7px!important}
+ .maskan-standard-paper .paper-identity{gap:10px!important}
+ .maskan-standard-paper .paper-identity img,
+ .maskan-standard-paper .paper-identity .paper-logo-placeholder{width:78px!important;height:65px!important;flex-basis:78px!important}
+ .maskan-standard-paper .paper-identity .paper-brand strong{font-size:17px!important;line-height:1.55!important}
+ .maskan-standard-paper .paper-identity .paper-brand span{font-size:10px!important}
+ .maskan-standard-paper .paper-data-table th,
+ .maskan-standard-paper .paper-data-table td{font-size:12px!important;line-height:1.55!important;padding:6px 8px!important}
+ .maskan-standard-paper .paper-metadata th,.maskan-standard-paper .paper-metadata td{font-size:11px!important;padding:6px!important}
+ .maskan-standard-paper .paper-signatures{break-inside:avoid}
+ .maskan-standard-paper .paper-signatures>div{min-height:90px!important}
+}
