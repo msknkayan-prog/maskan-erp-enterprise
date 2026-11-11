@@ -944,3 +944,12 @@ body{line-height:1.55}
 .cf-ai-review-compact .cf-ai-save-panel{display:flex;justify-content:flex-end;align-items:center;gap:9px;flex-wrap:wrap;margin:8px 0 0;padding:10px}
 .cf-ai-save-placeholder{font-size:11px;margin:8px 0 0;padding:7px}
 @media(max-width:850px){.cf-ai-compact-controls{grid-template-columns:1fr}.cf-ai-compact-controls button{width:100%}.cf-ai-compact-heading{align-items:flex-start;flex-direction:column}.cf-ai-payment-table{min-width:700px}}
+
+/* Contract list quick management controls (edit and safe delete). */
+.cf-contract-record{position:relative;display:flex;flex-direction:column;gap:0;margin-bottom:9px;border:1px solid #dfcba1;border-radius:9px;overflow:hidden;background:#fff}
+.cf-contract-record .cf-contract{width:100%;margin:0;border:0;border-radius:0;min-height:100px}
+.cf-contract-record .cf-contract.selected{border-radius:0}
+.cf-contract-record-actions{display:flex;justify-content:flex-end;gap:6px;padding:7px 9px;border-top:1px solid #efe3cd;background:#faf7ef}
+.cf-contract-record-actions button{border:1px solid #c6a15c;background:#fffaf0;color:#62481d;border-radius:5px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}
+.cf-contract-record-actions button.cf-delete-action{border-color:#c68675;color:#943c2c;background:#fff6f4}
+.cf-contract-record-actions button:disabled{opacity:.5;cursor:not-allowed}
