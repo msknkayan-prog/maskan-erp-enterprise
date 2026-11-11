@@ -165,17 +165,20 @@ export async function POST(req){
   if(!Array.isArray(plans)||plans.length<1||plans.length>30)throw Error('يُسمح من دفعة واحدة إلى 30 دفعة لكل عقد');
   const existing=unique(await db.prepare("SELECT amount_ex_vat FROM client_installments WHERE contract_id=? AND status='scheduled'").bind(c.id).all()).reduce((t,x)=>t+Number(x.amount_ex_vat),0);
   const capacity=await checkTotal(db,c);
-  const statements=[],dueKeys=new Set();let requested=0;
+  const statements=[],dueKeys=new Set();let requested=0,requestedPercent=0;
+  const existingPercent=unique(await db.prepare("SELECT payment_percent FROM client_installments WHERE contract_id=? AND status='scheduled'").bind(c.id).all()).reduce((z,x)=>z+Number(x.payment_percent||0),0);
   for(let ix=0;ix<plans.length;ix++){
-   const p=plans[ix]||{},due=date(p.due_date),value=amt(p.amount_ex_vat),title=str(p.title,160),desc=str(p.description,1500),rawItems=p.items||[];
+   const p=plans[ix]||{},due=date(p.due_date),percent=p.payment_percent===''||p.payment_percent===undefined||p.payment_percent===null?null:amt(p.payment_percent),
+    value=percent===null?amt(p.amount_ex_vat):Math.round(capacity*percent)/100,title=str(p.title,160),desc=str(p.description,1500),rawItems=p.items||[];
+   if(percent!==null&&(percent<=0||percent>100))throw Error('نسبة الدفعة غير صالحة');if(percent!==null)requestedPercent+=percent;
    if(value<=0||!title)throw Error('دفعة رقم '+(ix+1)+': العنوان والمبلغ مطلوبان');
    if(!Array.isArray(rawItems)||rawItems.length>50)throw Error('دفعة رقم '+(ix+1)+': عدد البنود يتجاوز 50');
    const signature=title+'|'+due;
    if(dueKeys.has(signature))throw Error('تكرار نفس الدفعة بتاريخ الاستحقاق');dueKeys.add(signature);
    requested+=value;const id=crypto.randomUUID();
    const progress=amt(p.progress_percent||0);if(progress>100)throw Error('نسبة إنجاز غير صالحة');
-   statements.push(db.prepare('INSERT INTO client_installments(id,contract_id,title,description,due_date,amount_ex_vat,progress_percent,milestone_type) VALUES(?,?,?,?,?,?,?,?)')
-   .bind(id,c.id,title,desc,due,value,progress,'ai_contract_reviewed'));
+   statements.push(db.prepare('INSERT INTO client_installments(id,contract_id,title,description,due_date,amount_ex_vat,progress_percent,milestone_type,payment_percent) VALUES(?,?,?,?,?,?,?,?,?)')
+   .bind(id,c.id,title,desc,due,value,progress,'ai_contract_reviewed',percent));
    let itemAmount=0;const itemCodes=new Set();
    for(let j=0;j<rawItems.length;j++){
     const item=rawItems[j]||{},itemCode=str(item.item_code||'AI-'+(j+1),50),description=str(item.description,900);
@@ -187,6 +190,7 @@ export async function POST(req){
    }
    if(itemAmount>value+0.005)throw Error('قيمة بنود الدفعة رقم '+(ix+1)+' تتجاوز إجمالي الدفعة');
   }
+  if(existingPercent+requestedPercent>100.0001)throw Error('النسب التعاقدية المستخرجة تتجاوز 100%');
   if(existing+requested>capacity+0.005)throw Error('مجموع الدفعات المستخرجة يتجاوز المتبقي من قيمة العقد قبل الضريبة');
   statements.push(db.prepare('INSERT INTO client_ai_imports(id,contract_id,document_id,installment_count,total_ex_vat,approved_by) VALUES(?,?,?,?,?,?)')
     .bind(crypto.randomUUID(),c.id,documentId,plans.length,Math.round(requested*100)/100,u.email));
@@ -196,16 +200,29 @@ export async function POST(req){
   await db.prepare('SELECT auto_generate_client_claims()').first();
   return json({ok:true,imported:plans.length,total_ex_vat:Math.round(requested*100)/100});
  }
+ if(action==='archive_contract'){
+ if(u.role!=='admin'&&u.role!=='finance'&&!(typeof u.permissions==='string'?JSON.parse(u.permissions||'{}'):u.permissions||{})['client_finance:delete'])throw Error('ليس لديك صلاحية إلغاء العقود');
+ if(c.contract_status==='archived')throw Error('العقد مؤرشف بالفعل');
+ await db.prepare("UPDATE client_contracts SET contract_status='archived',updated_at=now() WHERE id=?").bind(c.id).run();
+ await addAudit(db,u,c.id,'client_contract_archived',{contract_no:c.contract_no});
+ return json({ok:true,archived:true});
+ }
+ if(c.contract_status==='archived')throw Error('العقد مؤرشف ولا يمكن تسجيل دفعات أو إصدار مطالبة');
  if(action==='add_installment'){
- const due=date(b.due_date),amount=amt(b.amount_ex_vat);
+ const due=date(b.due_date),percentage=b.payment_percent===''||b.payment_percent===undefined||b.payment_percent===null?null:amt(b.payment_percent);
+ const basis=await checkTotal(db,c);
+ if(percentage!==null&&(percentage<=0||percentage>100))throw Error('النسبة التعاقدية يجب أن تكون بين 0 و100');
+ const amount=percentage===null?amt(b.amount_ex_vat):Math.round(basis*percentage)/100;
  if(!amount)throw Error('قيمة الدفعة مطلوبة');
  const scheduled=unique(await db.prepare("SELECT amount_ex_vat FROM client_installments WHERE contract_id=? AND status='scheduled'").bind(c.id).all()).reduce((a,x)=>a+Number(x.amount_ex_vat),0);
- const total=await checkTotal(db,c);
+ const total=basis;
+ const previousPercent=unique(await db.prepare("SELECT payment_percent FROM client_installments WHERE contract_id=? AND status='scheduled'").bind(c.id).all()).reduce((z,x)=>z+Number(x.payment_percent||0),0);
+ if(percentage!==null&&previousPercent+percentage>100.0001)throw Error('مجموع نسب الدفعات يتجاوز 100%');
  if(scheduled+amount>total+0.005)throw Error('مجموع الدفعات يتجاوز قيمة العقد بعد الإضافات والخصومات المعتمدة');
  const id=crypto.randomUUID();
  const progress=amt(b.progress_percent??0);if(progress>100)throw Error('نسبة الإنجاز لا تتجاوز 100%');
- await db.prepare('INSERT INTO client_installments(id,contract_id,title,description,due_date,amount_ex_vat,progress_percent,milestone_type) VALUES(?,?,?,?,?,?,?,?)')
- .bind(id,c.id,str(b.title,160)||'دفعة تعاقدية',str(b.description,1500),due,amount,progress,str(b.milestone_type,50)||'contractual').run();
+ await db.prepare('INSERT INTO client_installments(id,contract_id,title,description,due_date,amount_ex_vat,progress_percent,milestone_type,payment_percent) VALUES(?,?,?,?,?,?,?,?,?)')
+ .bind(id,c.id,str(b.title,160)||'دفعة تعاقدية',str(b.description,1500),due,amount,progress,str(b.milestone_type,50)||'contractual',percentage).run();
  await db.prepare('SELECT auto_generate_client_claims()').first();
  await addAudit(db,u,c.id,'client_installment_added',{id,amount,due});return json({ok:true,id});
  }
