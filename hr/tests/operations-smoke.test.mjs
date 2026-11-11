@@ -800,3 +800,42 @@ test('request search uses indexed records and appointment fields offer searchabl
  assert.match(ui,/list=\{'appointment-options-'\+f\.key\}/);
  assert.match(ui,/changes\.direct_manager=project\?\.data\.manager_name\|\|d\.manager/);
 });
+
+test('each HR company document uses that company logo and never incorrectly uses the Maskan logo',async()=>{
+ const {companyLogoPath,companyOfficialName}=await import('../lib/company-brand.mjs');
+ const uuid='a5a5a5a5-1234-4abc-8def-000000000001';
+ const profiles=[{module:'company_profiles',company:'المعايير العصرية',data:{name:'مؤسسة المعايير العصرية لأعمال التكييف',logo_file_id:uuid}}];
+ assert.equal(companyLogoPath('المعايير العصرية',profiles),'/api/files?id='+uuid+'&logo=1');
+ assert.equal(companyOfficialName('المعايير العصرية',profiles),'مؤسسة المعايير العصرية لأعمال التكييف');
+ assert.equal(companyLogoPath('مسكن الكيان',[]),'/maskan-logo.jpg');
+ assert.equal(companyLogoPath('رياح الاعمار',[]),'');
+ assert.equal(companyLogoPath('الشركة غير معروفة',[]),'');
+});
+test('logo upload is private, image-only, administrator controlled and audit logged',()=>{
+ const files=readFileSync(new URL('../backend/files.ts',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(files,/q\.get\('logo'\)==='1'/);
+ assert.match(files,/JSON\.parse\(record\.data\)\.logo_file_id!==id/);
+ assert.match(files,/isCompanyLogo\?'inline'/);
+ assert.match(erp,/if\(body\.action==='set_company_logo'\)/);
+ assert.match(erp,/if\(u\.role!=='admin'\)throw Error\('403'\)/);
+ assert.match(erp,/file\.record_id!==recordId/);
+ assert.match(erp,/company_logo_updated/);
+ assert.match(ui,/async function uploadCompanyLogo\(file\)/);
+ assert.match(ui,/form\.append\('record',edit\.id\)/);
+ assert.match(ui,/action:'set_company_logo'/);
+});
+test('printable documents and payroll receipts use company-based branding',()=>{
+ const operations=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(operations,/companyLogoPath\(row\.company,rows\)/);
+ assert.match(operations,/companyOfficialName\(row\.company,rows\)/);
+ assert.doesNotMatch(operations,/<img src="\/maskan-logo.jpg"/);
+ assert.match(ui,/companyLogoPath\(b\.company,rows\)/);
+ assert.match(ui,/companyLogoPath\(title,rows\)/);
+ assert.match(ui,/companyLogoPath\(company,rows\)/);
+ assert.match(ui,/title==='جميع الشركات'\?'':companyLogoPath/);
+ assert.doesNotMatch(ui,/const logosrc=safe\(window\.location\.origin\+'\/maskan-logo.jpg'\)/);
+ assert.doesNotMatch(ui,/const logoUrl=safe\(window\.location\.origin\+'\/maskan-logo.jpg'\)/);
+});

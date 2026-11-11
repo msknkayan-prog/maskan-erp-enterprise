@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use client';
+import {companyLogoPath,companyOfficialName} from '../lib/company-brand.mjs';
 import {useEffect,useRef,useState} from 'react';import {CloudUpload,MapPin,LogIn,LogOut,Pause,Play,Download,FileCheck,AlertCircle} from 'lucide-react';import {unzipSync,strFromU8} from 'fflate';import {fromTables} from '../lib/migration.mjs';
 async function request(url,body,options={}){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',...options.headers},body:typeof body==='string'||body instanceof Uint8Array?body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error||'تعذر الطلب');return d}
 export function Attachments({record,notify}){const [files,setFiles]=useState([]),[busy,setBusy]=useState(false);const refresh=()=>fetch('/api/files?record='+encodeURIComponent(record)).then(r=>r.json()).then(d=>setFiles(d.files||[]));useEffect(()=>{refresh()},[record]);async function upload(f){if(!f)return;setBusy(true);try{const data=new FormData();data.append('record',record);data.append('file',f);const r=await fetch('/api/files',{method:'POST',body:data}),d=await r.json();if(!r.ok)throw Error(d.error);notify('تم رفع المرفق وحفظه');refresh()}catch(e){notify(e.message)}finally{setBusy(false)}}return <section className="attachments no-print"><h3>المرفقات المرتبطة بالسجل</h3><label className="upload"><CloudUpload size={16}/>{busy?'جارٍ الرفع…':'رفع PDF أو صورة أو ملف — حتى 4 ميجابايت'}<input disabled={busy} type="file" onChange={e=>upload(e.target.files?.[0])}/></label><ul>{files.map(f=><li key={f.id}><a href={'/api/files?id='+encodeURIComponent(f.id)} target="_blank" rel="noreferrer">{f.name}</a><small>{Math.ceil(f.size/1024)} كيلوبايت</small></li>)}</ul></section>}
@@ -18,7 +19,8 @@ return <><section className="panel migration-guide"><div className="panel-head">
 export function RecordPaper({row,spec,rows,display}){
  const employee=rows.find(r=>r.id===row.data.employee_id)||(row.module==='employees'&&row);
  const profile=rows.find(r=>r.module==='company_profiles'&&r.company===row.company);
- const brand=row.company==='مسكن الكيان'?'شركة مسكن الكيان للمقاولات':(profile?.data.name||row.company);
+ const brand=companyOfficialName(row.company,rows);
+ const companyLogo=companyLogoPath(row.company,rows);
  const docNo=row.data?.reference||row.data?.document_no||row.code||row.id?.slice(0,8)||'سجل جديد';
  const docDate=row.data.date||row.data.created_at||(row.created_at?String(row.created_at).slice(0,10):'—');
  const signatureLabels=row.module==='payroll'?['إعداد شؤون الموظفين','اعتماد مدير إدارة المشاريع','مراجعة الإدارة المالية']:['إعداد شؤون الموظفين','مدير المشروع','الجهة المختصة','الاعتماد'];
@@ -26,7 +28,7 @@ export function RecordPaper({row,spec,rows,display}){
  return <article className="record-paper maskan-standard-paper" dir="rtl">
   <div className="paper-letterhead">
    <div className="paper-license">سجل تجاري: <b>{profile?.data.commercial_registration||(row.company==='مسكن الكيان'?'7028881634':'—')}</b></div>
-   <img src="/maskan-logo.jpg" alt="شعار مسكن الكيان"/>
+   {companyLogo?<img src={companyLogo} alt={'شعار '+brand}/>:<div className="paper-logo-placeholder">{brand}</div>}
    <div className="paper-brand"><strong>{brand}</strong><span>{row.company==='مسكن الكيان'?'MASKAN ALKAYAN CONTRACTING CO.':row.company}</span></div>
   </div>
   <div className="paper-party-line"><span>السادة: <b>{brand}</b></span><span>المحترمون</span></div>
@@ -45,7 +47,7 @@ export function RecordPaper({row,spec,rows,display}){
   <div className="paper-approval-heading">الاعتماد والتوقيع / APPROVAL & SIGNATURE</div>
   <div className="paper-signatures">{signatureLabels.map(label=><div key={label}><b>{label}</b><div className="paper-approval-line"><span>الاسم</span></div><div className="paper-approval-line"><span>التوقيع</span></div><div className="paper-approval-line"><span>الختم / التاريخ</span></div></div>)}</div>
   <p className="paper-note">هذا النموذج صادر من منصة شؤون الموظفين. الاعتمادات الإلكترونية وسجل القرارات المعتمدة محفوظة في النظام، ولا يُعد هذا النموذج وحده إثباتًا للصرف.</p>
-  <div className="paper-footer">{[profile?.data.phone,profile?.data.mobile,profile?.data.email,profile?.data.website,profile?.data.address].filter(Boolean).join(' · ')||'شركة مسكن الكيان للمقاولات | إدارة شؤون الموظفين'}</div>
+  <div className="paper-footer">{[profile?.data.phone,profile?.data.mobile,profile?.data.email,profile?.data.website,profile?.data.address].filter(Boolean).join(' · ')||brand+' | إدارة شؤون الموظفين'}</div>
  </article>
 }
 export function RecordHistory({record}){const [rows,setRows]=useState([]);useEffect(()=>{fetch('/api/erp?module=record_history&id='+encodeURIComponent(record)).then(r=>r.json()).then(d=>setRows(d.rows||[]))},[record]);const label=r=>{let d={};try{d=JSON.parse(r.details)}catch{}return [d.from?'من '+({draft:'مسودة',project_manager:'مدير المشروع',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'المالية',approved:'معتمد'}[d.from]||d.from):'',d.to?'إلى '+({draft:'مسودة',project_manager:'مدير المشروع',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'المالية',approved:'معتمد',rejected:'مرفوض'}[d.to]||d.to):'',d.step?'المرحلة '+d.step:'',d.note||''].filter(Boolean).join(' · ')};return <section className="attachments no-print"><h3>سجل الاعتماد والتعديلات</h3>{rows.length?<div className="table-wrap"><table><thead><tr><th>المستخدم</th><th>العملية</th><th>التفاصيل</th><th>التاريخ</th><th>المصدر</th></tr></thead><tbody>{rows.map((r,i)=><tr key={i}><td>{r.actor}</td><td>{{create:'إضافة',update:'تعديل',transition:'قرار اعتماد',approve:'اعتماد',return:'إعادة للمراجعة',reject:'رفض',attachment:'مرفق',record_disbursement:'توثيق الصرف'}[r.action]||r.action}</td><td>{label(r)}</td><td>{new Date(r.at).toLocaleString('ar-SA')}</td><td>{r.source==='python'?'مرحّل من Python':'سحابي'}</td></tr>)}</tbody></table></div>:<p>لا توجد قرارات أو تعديلات مسجلة لهذا السجل.</p>}</section>}
