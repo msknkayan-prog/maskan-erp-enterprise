@@ -28,7 +28,7 @@ const checkTotal=async(db,c,additional=0)=>{
 const allData=async(db,u)=>{
  const cc=unique(await db.prepare('SELECT * FROM client_contracts ORDER BY created_at DESC LIMIT 5000').all()).filter(c=>{try{checkCompany(u,c.company);return true}catch{return false}});
  const ids=new Set(cc.map(x=>x.id));
- const get=async t=>unique(await db.prepare('SELECT * FROM '+t+' ORDER BY created_at DESC LIMIT 20000').all()).filter(x=>ids.has(x.contract_id));
+ const get=async t=>unique(await db.prepare('SELECT * FROM '+t+(t==='client_documents'?' WHERE deleted_at IS NULL':'')+' ORDER BY created_at DESC LIMIT 20000').all()).filter(x=>ids.has(x.contract_id));
  return {contracts:cc,installments:await get('client_installments'),installment_items:await get('client_installment_items'),adjustments:await get('client_adjustments'),claims:await get('client_claims'),receipts:await get('client_receipts'),documents:await get('client_documents')};
 };
 export async function GET(req){
@@ -36,13 +36,13 @@ export async function GET(req){
  const p=new URL(req.url).searchParams;
  if(p.get('ai_document')){
   if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية استخراج الدفعات');
-  const doc=await db.prepare('SELECT id,contract_id,name,mime,size,document_type FROM client_documents WHERE id=?').bind(p.get('ai_document')).first();
+  const doc=await db.prepare('SELECT id,contract_id,name,mime,size,document_type FROM client_documents WHERE id=? AND deleted_at IS NULL').bind(p.get('ai_document')).first();
   if(!doc||doc.contract_id!==p.get('contract_id')||!['contract','contract_appendix'].includes(doc.document_type))throw Error('يجب تحديد عقد مرفق صحيح');
   const c=await row(db,doc.contract_id,u);
   const imported=await db.prepare('SELECT id FROM client_ai_imports WHERE document_id=?').bind(doc.id).first();
   return json({document:doc,contract:{id:c.id,contract_no:c.contract_no,base_ex_vat:c.base_ex_vat,vat_rate:c.vat_rate,start_date:c.start_date,end_date:c.end_date},already_imported:!!imported});
  }
- if(p.get('download')){const doc=await db.prepare('SELECT * FROM client_documents WHERE id=?').bind(p.get('download')).first();if(!doc)throw Error('المرفق غير موجود');await row(db,doc.contract_id,u);const blob=await env.BUCKET.get(doc.blob_key);if(!blob)throw Error('ملف المرفق غير موجود');return new Response(blob.body,{headers:{'Content-Type':doc.mime,'Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(doc.name),'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});}
+ if(p.get('download')){const doc=await db.prepare('SELECT * FROM client_documents WHERE id=? AND deleted_at IS NULL').bind(p.get('download')).first();if(!doc)throw Error('المرفق غير موجود');await row(db,doc.contract_id,u);const blob=await env.BUCKET.get(doc.blob_key);if(!blob)throw Error('ملف المرفق غير موجود');return new Response(blob.body,{headers:{'Content-Type':doc.mime,'Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(doc.name),'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});}
  // Cron provides truly automatic generation; this call also reconciles any missed runs.
  await db.prepare('SELECT auto_generate_client_claims()').first();
  return json(await allData(db,u));
@@ -53,6 +53,11 @@ export async function POST(req){
  const db=env.DB,p=new URL(req.url).searchParams;
  if(p.get('action')==='upload'){if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية رفع مستندات العقود');const c=await row(db,p.get('contract_id'),u);const name=str(p.get('name'),180);const mime=str(req.headers.get('content-type')||'application/pdf',100);
  const documentType=str(p.get('document_type')||'contract');
+ const replacingId=str(p.get('replaces_document_id'),40)||null;
+ if(replacingId){
+  const old=await db.prepare('SELECT id,document_type FROM client_documents WHERE id=? AND contract_id=? AND deleted_at IS NULL').bind(replacingId,c.id).first();
+  if(!old||old.document_type!==documentType)throw Error('يجب استبدال مرفق نشط بنفس النوع ومن العقد نفسه');
+ }
  if(!['contract','contract_appendix','extra','deduction','claim','receipt','other'].includes(documentType))throw Error('نوع المرفق غير معتمد');
  const adjustmentId=str(p.get('adjustment_id'),40)||null,claimId=str(p.get('claim_id'),40)||null,receiptId=str(p.get('receipt_id'),40)||null;
  if(['extra','deduction'].includes(documentType)){
@@ -72,11 +77,19 @@ export async function POST(req){
  }
  if(!name||!(/\.pdf$|\.png$|\.jpe?g$/i.test(name))||!['application/pdf','image/png','image/jpeg'].includes(mime))throw Error('يسمح بإرفاق PDF أو صورة JPG/PNG فقط');
  const bytes=await req.arrayBuffer();if(bytes.byteLength<1||bytes.byteLength>8388608)throw Error('الحد الأقصى للمرفق 8 ميجابايت');
+ const magic=new Uint8Array(bytes);
+ const validMime=mime==='application/pdf'?new TextDecoder().decode(magic.slice(0,5))==='%PDF-':mime==='image/png'?magic.length>=8&&[137,80,78,71,13,10,26,10].every((v,i)=>magic[i]===v):magic.length>=3&&magic[0]===255&&magic[1]===216&&magic[2]===255;
+ if(!validMime)throw Error('محتوى الملف لا يطابق نوع PDF أو الصورة');
  const key='client-finance/'+c.id+'/'+crypto.randomUUID();await env.BUCKET.put(key,bytes);
  const id=crypto.randomUUID();
- try{await db.prepare('INSERT INTO client_documents(id,contract_id,name,mime,size,blob_key,uploaded_by,document_type,adjustment_id,claim_id,receipt_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(id,c.id,name,mime,bytes.byteLength,key,u.email,documentType,adjustmentId,claimId,receiptId).run();}
+ try{
+  const statements=[db.prepare('INSERT INTO client_documents(id,contract_id,name,mime,size,blob_key,uploaded_by,document_type,adjustment_id,claim_id,receipt_id,replaces_document_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
+    .bind(id,c.id,name,mime,bytes.byteLength,key,u.email,documentType,adjustmentId,claimId,receiptId,replacingId)];
+  if(replacingId)statements.push(db.prepare('UPDATE client_documents SET deleted_at=now(),deleted_by=? WHERE id=? AND contract_id=? AND deleted_at IS NULL').bind(u.email,replacingId,c.id));
+  await db.batch(statements);
+ }
  catch(e){await env.BUCKET.delete(key);throw e;}
- await addAudit(db,u,c.id,'client_contract_file',{id,name,document_type:documentType,adjustment_id:adjustmentId,claim_id:claimId});return json({ok:true,id});
+ await addAudit(db,u,c.id,replacingId?'client_contract_file_replaced':'client_contract_file',{id,name,document_type:documentType,adjustment_id:adjustmentId,claim_id:claimId,replaces_document_id:replacingId});return json({ok:true,id});
  }
  const b=await input(req),action=str(b.action,40);
  const perms=typeof u.permissions==='string'?JSON.parse(u.permissions||'{}'):u.permissions||{};
@@ -139,6 +152,13 @@ export async function POST(req){
  await addAudit(db,u,id,'client_contract_created',{contract_no:number,company});return json({ok:true,id});
  }
  const c=await row(db,str(b.contract_id),u);
+ if(action==='delete_document'){
+  const doc=await db.prepare('SELECT * FROM client_documents WHERE id=? AND contract_id=? AND deleted_at IS NULL').bind(str(b.document_id,40),c.id).first();
+  if(!doc)throw Error('المرفق غير موجود أو تم مسحه سابقًا');
+  await db.prepare('UPDATE client_documents SET deleted_at=now(),deleted_by=? WHERE id=? AND contract_id=? AND deleted_at IS NULL').bind(u.email,doc.id,c.id).run();
+  await addAudit(db,u,c.id,'client_contract_document_removed',{document_id:doc.id,name:doc.name,document_type:doc.document_type});
+  return json({ok:true,deleted:true});
+ }
  if(action==='update_contract'){
  if(!allowed(u,'edit'))throw Error('ليس لديك صلاحية تعديل العقد');
  const start=date(b.start_date||c.start_date),end=date(b.end_date||c.end_date),signed=date(b.signed_date||c.signed_date);
@@ -162,7 +182,9 @@ export async function POST(req){
   const already=await db.prepare('SELECT id FROM client_ai_imports WHERE document_id=?').bind(documentId).first();
   if(already)throw Error('تم اعتماد بنود هذا المستند سابقًا. لن تُكرر الدفعات');
   const plans=b.installments;
-  if(!Array.isArray(plans)||plans.length<1||plans.length>30)throw Error('يُسمح من دفعة واحدة إلى 30 دفعة لكل عقد');
+  if(!Array.isArray(plans)||plans.length<1||plans.length>10)throw Error('الحد الأقصى 10 دفعات للعقد');
+  const existingCount=await db.prepare('SELECT count(*) AS n FROM client_installments WHERE contract_id=?').bind(c.id).first();
+  if(Number(existingCount?.n||0)+plans.length>10)throw Error('لا يمكن تجاوز 10 دفعات إجمالًا لهذا العقد');
   const existing=unique(await db.prepare("SELECT amount_ex_vat FROM client_installments WHERE contract_id=? AND status='scheduled'").bind(c.id).all()).reduce((t,x)=>t+Number(x.amount_ex_vat),0);
   const capacity=await checkTotal(db,c);
   const statements=[],dueKeys=new Set();let requested=0,requestedPercent=0;
@@ -223,6 +245,8 @@ export async function POST(req){
  }
  if(c.contract_status==='archived')throw Error('العقد مؤرشف ولا يمكن تسجيل دفعات أو إصدار مطالبة');
  if(action==='add_installment'){
+  const existingCount=await db.prepare('SELECT count(*) AS n FROM client_installments WHERE contract_id=?').bind(c.id).first();
+  if(Number(existingCount?.n||0)>=10)throw Error('الحد الأقصى 10 دفعات لكل عقد');
  const due=date(b.due_date),percentage=b.payment_percent===''||b.payment_percent===undefined||b.payment_percent===null?null:amt(b.payment_percent);
  const basis=await checkTotal(db,c);
  if(percentage!==null&&(percentage<=0||percentage>100))throw Error('النسبة التعاقدية يجب أن تكون بين 0 و100');
