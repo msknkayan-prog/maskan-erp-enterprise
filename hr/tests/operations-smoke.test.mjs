@@ -1011,3 +1011,11 @@ test('contract XLSX importer supports Excel namespace-prefixed worksheet XML',as
  assert.equal(imported.errors.length,0);
  assert.equal(imported.rows[0].contract_no,'0005');
 });
+
+test('finance navigation header uses the approved gold background and revised Arabic title',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ assert.match(ui,/nav-label nav-label-finance">العقود والمطالبات المالية/);
+ assert.match(css,/\.app aside \.nav-label\.nav-label-finance/);
+ assert.match(css,/linear-gradient\(135deg,#a77f27,#d7bb62\)/);
+});
