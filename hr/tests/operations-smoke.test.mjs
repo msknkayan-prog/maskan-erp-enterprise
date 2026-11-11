@@ -188,8 +188,8 @@ test('admin permissions navigation recovers after role repair and rejects duplic
 
 test('every HR permissions box is editable, and read/write choices affect access',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- assert.match(ui,/checked=\{permissionChoice\(memberRole,memberPermissions,k,action\)\}/);
- assert.match(ui,/checked=\{permissionChoice\(memberEdit.role,memberEditPermissions,k,action\)\}/);
+ assert.match(ui,/financePermissions\(memberRole,memberPermissions,action\)/);
+ assert.match(ui,/financePermissions\(memberEdit.role,memberEditPermissions,action\)/);
  assert.ok(!ui.includes("disabled={!(action==='edit'?canWrite"));
  const u={role:'employee',permissions:{'employees:view':true,'employees:edit':true}};
  assert.equal(permittedRead(u,'employees'),true);
