@@ -1027,7 +1027,7 @@ test('contract duration, signed date, record printing and categorized attachment
  assert.match(api,/documentType/);
  assert.match(api,/adjustment_id,claim_id,receipt_id/);
  assert.match(api,/b\.signed_date\|\|c\.signed_date/);
- assert.match(api,/client_documents\(id,contract_id,name,mime,size,blob_key,uploaded_by,document_type,adjustment_id,claim_id,receipt_id\)/);
+ assert.match(api,/client_documents\(id,contract_id,name,mime,size,blob_key,uploaded_by,document_type,adjustment_id,claim_id,receipt_id,replaces_document_id\)/);
 });
 
 test('finance print and attachment quick actions are present and scoped to the selected contract',()=>{
