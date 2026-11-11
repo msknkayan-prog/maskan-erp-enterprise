@@ -1004,7 +1004,7 @@ test('contract XLSX importer supports Excel namespace-prefixed worksheet XML',as
  const archive=unzipSync(buildContractsXlsx(values));
  const path='xl/worksheets/sheet1.xml';
  let xml=strFromU8(archive[path]);
- xml=xml.replace(/<(\\/?)(worksheet|sheetViews|sheetView|sheetData|row|c|v|is|t|cols|col|autoFilter)(?=[\\s>])/g,'<'+String.fromCharCode(36)+'1x:'+String.fromCharCode(36)+'2');
+ xml=xml.replace(/<(\/)?(worksheet|sheetViews|sheetView|sheetData|row|c|v|is|t|cols|col|autoFilter)(?=[\s>])/g,(_,slash,tag)=>'<'+(slash||'')+'x:'+tag);
  // The SpreadsheetML XML declaration need not declare prefixes for our data-only reader.
  archive[path]=strToU8(xml);
  const imported=parseContractsXlsx(zipSync(archive));
