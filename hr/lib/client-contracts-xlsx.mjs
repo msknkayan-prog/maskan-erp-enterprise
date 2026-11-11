@@ -46,8 +46,10 @@ export function parseContractsXlsx(bytes,{maxRows=500,maxBytes=5*1024*1024}={}){
  if(bytes.byteLength>maxBytes)throw Error('ملف Excel يتجاوز الحد المسموح 5 ميجابايت');
  let archive;try{archive=unzipSync(bytes,{filter:file=>file.name==='xl/worksheets/sheet1.xml'||file.name==='xl/sharedStrings.xml'});}catch{throw Error('ملف غير صالح؛ اختر ملف XLSX حديث');}
  const sheet=archive['xl/worksheets/sheet1.xml'];if(!sheet)throw Error('الورقة الأولى غير موجودة؛ استخدم قالب عقود العملاء');
- const xml=strFromU8(sheet);if(xml.length>6000000)throw Error('ملف Excel كبير جدًا');
- const sharedXml=archive['xl/sharedStrings.xml']?strFromU8(archive['xl/sharedStrings.xml']):'';
+ // Excel writers use either unprefixed tags or namespace-prefixed tags (<x:row>).
+ const stripXmlNamespaces=value=>value.replace(/(<\/?)[A-Za-z_][\w.-]*:/g,'$1');
+ const xml=stripXmlNamespaces(strFromU8(sheet));if(xml.length>6000000)throw Error('ملف Excel كبير جدًا');
+ const sharedXml=archive['xl/sharedStrings.xml']?stripXmlNamespaces(strFromU8(archive['xl/sharedStrings.xml'])):'';
  const shared=[...sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)].map(m=>content(m[1]));
  const rows=[];
  for(const m of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)){
