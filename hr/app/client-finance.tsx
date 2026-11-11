@@ -69,7 +69,7 @@ export default function ClientFinance({user,company,profiles,companyList,project
  };
  const totalReceivable=contracts.reduce((x,c)=>x+summary(c).remaining,0);
  const execute=async(obj,success)=>{
-  if(!canEdit&&!(canArchive&&['delete_contract','archive_contract','restore_contract'].includes(obj.action))){setError('ليس لديك صلاحية تنفيذ هذه العملية');return null;}setBusy(true);setNotice('');setError('');
+  if(!canEdit&&!(canArchive&&['delete_contract','archive_contract','restore_contract'].includes(obj.action))&&!(canApprove&&obj.action==='approve_adjustment')){setError('ليس لديك صلاحية تنفيذ هذه العملية');return null;}setBusy(true);setNotice('');setError('');
   try{const r=await fetch('/api/client-finance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});const x=await r.json();if(!r.ok)throw Error(x.error||'تعذر حفظ البيانات');setNotice(success);await reload();return x;}
   catch(e){setError(e.message);return null}finally{setBusy(false)}
  };
