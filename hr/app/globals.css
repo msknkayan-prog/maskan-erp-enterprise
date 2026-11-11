@@ -953,3 +953,20 @@ body{line-height:1.55}
 .cf-contract-record-actions button{border:1px solid #c6a15c;background:#fffaf0;color:#62481d;border-radius:5px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}
 .cf-contract-record-actions button.cf-delete-action{border-color:#c68675;color:#943c2c;background:#fff6f4}
 .cf-contract-record-actions button:disabled{opacity:.5;cursor:not-allowed}
+
+/* Operational checks: concrete missing actions instead of decorative KPI cards. */
+.cf-readiness{margin:10px 0 14px;padding:12px;background:#fdfaf3;border:1px solid #dbc99f;border-radius:9px}
+.cf-readiness-title{display:flex;justify-content:space-between;gap:8px;margin-bottom:9px}
+.cf-readiness-title>b{font-size:13px;color:#3e372c}
+.cf-readiness-title>small{color:#7c735e;font-size:11px}
+.cf-readiness-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.cf-readiness-item{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto auto;align-items:center;gap:4px 7px;background:#fff;border:1px solid #e2d8c2;border-radius:7px;padding:9px}
+.cf-readiness-item>span{grid-column:1;grid-row:1;display:inline-grid;place-items:center;border-radius:50%;width:20px;height:20px;font-weight:bold;background:#eee3ce}
+.cf-readiness-item>strong{grid-column:2;grid-row:1;font-size:12px}
+.cf-readiness-item>small{grid-column:1/-1;color:#6f675b;overflow-wrap:anywhere;font-size:11px}
+.cf-readiness-item>button{grid-column:1/-1;justify-self:start;border:1px solid #c5a667;border-radius:5px;padding:5px 9px;font-size:11px;background:#fffaf1;color:#6b5021;cursor:pointer}
+.cf-readiness-item.ok>span{background:#e7f1e9;color:#21683c}
+.cf-readiness-item.needs-action{border-color:#d7a875}
+.cf-readiness-item.needs-action>span{background:#fff0df;color:#b1591f}
+@media(max-width:1100px){.cf-readiness-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.cf-readiness-grid{grid-template-columns:1fr}}
