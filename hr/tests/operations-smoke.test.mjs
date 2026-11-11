@@ -206,7 +206,7 @@ test('every HR permissions box is editable, and read/write choices affect access
 test('directory displays every user permission including hidden module permissions in expandable rows',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
- assert.match(ui,/memberPermissionRows=m=>Object.keys\(modules\)\.map/);
+ assert.match(ui,/memberPermissionRows=m=>financeModules\.map/);
  assert.match(ui,/عرض جميع الصلاحيات/);
  assert.match(ui,/expandedPermissions===m.email/);
  assert.match(ui,/members-permissions-matrix/);
