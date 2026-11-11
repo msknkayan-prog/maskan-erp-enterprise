@@ -904,3 +904,17 @@ test('project manager scope defaults do not affect creation of HR, finance and o
  assert.match(ui,/setMemberProject\(role==='project_manager'\?'selected':'\*'\)/);
  assert.match(ui,/setMemberSelectedProjects\(\[\]\)/);
 });
+
+test('edge backend imports exactly available module exports to prevent boot-time 503',async()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const edge=await import('../backend/modules.mjs');
+ const frontend=await import('../lib/modules.mjs');
+ const imports=[...backend.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]\.\/modules\.mjs['"]/g)]
+  .flatMap(match=>match[1].split(',').map(v=>v.trim()).filter(Boolean));
+ assert.ok(imports.includes('permittedRead'));
+ assert.ok(imports.includes('permittedWrite'));
+ for(const item of imports){assert.ok(Object.hasOwn(edge,item),'Missing Edge backend export: '+item);}
+ for(const name of ['companies','companyDisplayName','canonicalCompany','modules','canRead','canWrite','permission','permittedRead','permittedWrite']){
+  assert.equal(typeof edge[name]==='function'?edge[name].toString():JSON.stringify(edge[name]),typeof frontend[name]==='function'?frontend[name].toString():JSON.stringify(frontend[name]), 'Edge/frontend module mismatch: '+name);
+ }
+});
