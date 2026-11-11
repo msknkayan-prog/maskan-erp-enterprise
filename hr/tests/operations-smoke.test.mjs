@@ -839,3 +839,27 @@ test('printable documents and payroll receipts use company-based branding',()=>{
  assert.doesNotMatch(ui,/const logosrc=safe\(window\.location\.origin\+'\/maskan-logo.jpg'\)/);
  assert.doesNotMatch(ui,/const logoUrl=safe\(window\.location\.origin\+'\/maskan-logo.jpg'\)/);
 });
+
+test('printable form layout preserves RTL name width, readable body text and company logo',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ const operations=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
+ assert.match(ui,/grid-template-columns:minmax\(0,1fr\) 112px minmax\(0,1\.65fr\)/);
+ assert.match(ui,/header \.brand strong\{display:block;font-size:20px;line-height:1\.6/);
+ assert.match(ui,/body\{font:14px\/1\.65 Tahoma/);
+ assert.match(ui,/font-size:12px;line-height:1\.65/);
+ assert.match(css,/grid-template-columns:minmax\(0,1fr\) 106px minmax\(0,1\.65fr\)!important/);
+ assert.match(css,/@page\{size:A4 portrait;margin:11mm\}/);
+ assert.match(css,/\.paper-brand strong\{font-size:16px!important;line-height:1\.5!important\}/);
+ assert.match(operations,/companyLogoPath\(row\.company,rows\)/);
+ assert.match(operations,/paper-logo-placeholder/);
+ assert.doesNotMatch(operations,/paper-logo-placeholder">\{brand\}/);
+});
+test('all company registers keep correct official name in fallback footer',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const register=ui.slice(ui.indexOf('function printModuleRegister(){'),ui.indexOf('function template(){'));
+ assert.match(register,/companyOfficialName\(company,rows\)/);
+ assert.match(register,/companyLogoPath\(company,rows\)/);
+ assert.match(register,/safe\(companyName\)\+' \| إدارة شؤون الموظفين'/);
+ assert.doesNotMatch(register,/contact\|\|'شركة مسكن الكيان للمقاولات/);
+});
