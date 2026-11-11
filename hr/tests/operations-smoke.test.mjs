@@ -996,3 +996,18 @@ test('Excel contract import catches duplicates, invalid dates and protects again
  assert.match(ui,/Export Excel/);
  assert.match(ui,/رقم العقد: \{c\.contract_no\}/);
 });
+
+test('contract XLSX importer supports Excel namespace-prefixed worksheet XML',async()=>{
+ const {buildContractsXlsx,parseContractsXlsx}=await import('../lib/client-contracts-xlsx.mjs');
+ const {unzipSync,zipSync,strFromU8,strToU8}=await import('fflate');
+ const values=[['مسكن الكيان','0005','عميل','مشروع','مدير','أعمال تكييف','2026-11-11','2026-11-12','2027-01-01','25000','15','','','','','','','','']];
+ const archive=unzipSync(buildContractsXlsx(values));
+ const path='xl/worksheets/sheet1.xml';
+ let xml=strFromU8(archive[path]);
+ xml=xml.replace(/<(\\/?)(worksheet|sheetViews|sheetView|sheetData|row|c|v|is|t|cols|col|autoFilter)(?=[\\s>])/g,'<'+String.fromCharCode(36)+'1x:'+String.fromCharCode(36)+'2');
+ // The SpreadsheetML XML declaration need not declare prefixes for our data-only reader.
+ archive[path]=strToU8(xml);
+ const imported=parseContractsXlsx(zipSync(archive));
+ assert.equal(imported.errors.length,0);
+ assert.equal(imported.rows[0].contract_no,'0005');
+});
