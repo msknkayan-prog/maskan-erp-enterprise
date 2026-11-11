@@ -1131,3 +1131,18 @@ test('contract attachments have explicit save replace and soft-delete with audit
  for(const marker of ['حفظ العقد / المرفق بعد الإرفاق','تعديل / استبدال','مسح المرفق','saveAttachedContract','deleteAttachedContract','replaceDocumentId'])assert.ok(ui.includes(marker),marker);
  for(const marker of ['delete_document','deleted_at IS NULL','replaces_document_id','client_contract_document_removed','client_contract_file_replaced','validMime'])assert.ok(api.includes(marker),marker);
 });
+
+test('AI extraction is visible next to the payment table and save section',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ const table=ui.indexOf('جدول الاستحقاقات —');
+ const ai=ui.indexOf('id="finance-ai-contract-upload"');
+ const manual=ui.indexOf('إضافة دفعة تعاقدية (الحد الأعلى 10)');
+ assert.ok(table>=0&&ai>table&&manual>ai,'AI panel must follow table and precede manual form');
+ for(const marker of ['فتح نافذة AI وحفظ الدفعات','cf-ai-save-panel','aiStatus.message',"fetch('/api/client-contract-ai'"])assert.ok(ui.includes(marker),marker);
+ assert.ok(css.includes('.cf-ai-save-panel'));
+});
+test('AI Gateway diagnostics are authenticated and proxy compatible',()=>{
+ const route=readFileSync(new URL('../app/api/client-contract-ai/route.ts',import.meta.url),'utf8');
+ for(const marker of ['export async function GET(req:Request)','VERCEL_OIDC_TOKEN','permittedOrigins','forwardedHost','requires_review:true'])assert.ok(route.includes(marker),marker);
+});
