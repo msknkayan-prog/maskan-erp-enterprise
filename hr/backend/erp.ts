@@ -200,7 +200,19 @@ if(mod==='projects'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 const data={...(previous||{}),...normalize(mod,body)};
 if(mod==='projects'&&old)data.code=String(previous.code||old.code||'');
 
-if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previous.salary??previous.total_monthly_salary)===Number(data.salary))for(const key of ['basic','housing','transport'])if(previous[key]!==undefined)data[key]=previous[key];if(mod==='employees'){data._review_flags=[...(!data.hire_date?['تاريخ التعيين يحتاج استكمال']:[]),...(data.company==='غير محددة'?['الشركة تحتاج مراجعة']:[])];}if(mod==='warnings'&&data.warning_type!=='notice'&&!Number(data.sequence)){data.sequence=({first:1,second:2,final:3} as any)[data.warning_type];}if(!visible(u,{module:mod,company:body.company,data},(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(mod==='projects'&&String(data.manager_email||'').trim()){
+if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previous.salary??previous.total_monthly_salary)===Number(data.salary))for(const key of ['basic','housing','transport'])if(previous[key]!==undefined)data[key]=previous[key];if(mod==='employees'){data._review_flags=[...(!data.hire_date?['تاريخ التعيين يحتاج استكمال']:[]),...(data.company==='غير محددة'?['الشركة تحتاج مراجعة']:[])];}if(mod==='warnings'&&data.warning_type!=='notice'&&!Number(data.sequence)){data.sequence=({first:1,second:2,final:3} as any)[data.warning_type];}if(!visible(u,{module:mod,company:body.company,data},(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(mod==='project_managers'){
+ if(!['admin','hr'].includes(u.role))throw Error('403');
+ data.email=String(data.email||'').trim().toLowerCase();
+ const member=await db.prepare('SELECT email,role,is_active,companies FROM members WHERE lower(email)=?').bind(data.email).first<any>();
+ if(!member||member.role!=='project_manager'||member.is_active===false)throw Error('يجب ربط بيانات المدير بحساب نشط بصلاحية مدير مشروع');
+ if(member.companies&&member.companies!=='*'){
+  let valid=false;try{valid=JSON.parse(member.companies).includes(body.company)}catch{}
+  if(!valid)throw Error('حساب المدير لا يملك صلاحية الشركة المحددة');
+ }
+ const records=(await db.prepare("SELECT id,company,data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results;
+ if(records.some((r:any)=>r.id!==old?.id&&String(JSON.parse(r.data).email||'').trim().toLowerCase()===data.email))throw Error('مدير المشروع مسجل مسبقًا لدى الشركة؛ عدّل سجله الموجود');
+}
+if(mod==='projects'&&String(data.manager_email||'').trim()){
  const managerEmail=String(data.manager_email).trim().toLowerCase();
  const manager=await db.prepare('SELECT role,is_active,companies FROM members WHERE email=?').bind(managerEmail).first<any>();
  if(!manager||manager.role!=='project_manager'||manager.is_active===false)throw Error('اختر مدير مشروع يمتلك حساب دخول نشط بصلاحية مدير مشروع');
@@ -209,7 +221,23 @@ if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previo
   try{authorized=JSON.parse(manager.companies).includes(body.company)}catch{}
   if(!authorized)throw Error('مدير المشروع لا يمتلك صلاحية الشركة المحددة؛ عدّل نطاق حسابه أولًا');
  }
+ const managerRecord=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
+ if(!managerRecord)throw Error('سجّل بيانات مدير المشروع أولًا في دليل مدراء المشاريع للشركة');
+ data.manager_name=managerRecord.name;
+ data.manager_phone=managerRecord.phone||'';
  data.manager_email=managerEmail;
+}
+if(mod==='employees'&&data.project_id){
+ const project=await db.prepare("SELECT data,company FROM records WHERE module='projects' AND id=?").bind(data.project_id).first<any>();
+ if(project){
+  const details=JSON.parse(project.data);
+  const managerEmail=String(details.manager_email||'').trim().toLowerCase();
+  if(managerEmail){
+   const manager=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
+   data.manager=manager?.name||details.manager_name||'';
+   data.manager_email=managerEmail;
+  }else{data.manager='';data.manager_email='';}
+ }
 }
 const transferringEmployee=mod==='employees'&&Boolean(old)&&old.company!==body.company;
 let linkedAccount=false;
