@@ -1092,7 +1092,7 @@ test('AI payment extraction is prominent before manual entry and needs explicit 
  const tab=ui.indexOf("{tab==='installments'&&");
  const manual=ui.indexOf('إضافة دفعة تعاقدية');
  assert.ok(tab>0&&manual>tab);
- const ai=ui.indexOf('استخراج بنود الدفعات من العقد بالذكاء الاصطناعي');
+ const ai=ui.indexOf('استخراج الدفعات من العقد بالذكاء الاصطناعي');
  assert.ok(ai>tab&&ai<manual,'AI CTA appears above manual form');
  for(const marker of ['extractFromContract','aiDocumentId','aiContractFile','uploadDocument(aiContractFile','تأكيد وحفظ بنود الدفعات المعتمدة','approveAISchedule','requires_review'])assert.ok(ui.includes(marker)||marker==='requires_review',marker);
  assert.match(css,/\.cf-ai-import-grid/);
@@ -1139,10 +1139,18 @@ test('AI extraction is visible next to the payment table and save section',()=>{
  const ai=ui.indexOf('id="finance-ai-contract-upload"');
  const manual=ui.indexOf('إضافة دفعة تعاقدية (الحد الأعلى 10)');
  assert.ok(table>=0&&ai>table&&manual>ai,'AI panel must follow table and precede manual form');
- for(const marker of ['فتح نافذة AI وحفظ الدفعات','cf-ai-save-panel','aiStatus.message',"fetch('/api/client-contract-ai'"])assert.ok(ui.includes(marker),marker);
+ for(const marker of ['رقم البند','cf-ai-save-panel','aiStatus.message',"fetch('/api/client-contract-ai'"])assert.ok(ui.includes(marker),marker);
  assert.ok(css.includes('.cf-ai-save-panel'));
 });
 test('AI Gateway diagnostics are authenticated and proxy compatible',()=>{
  const route=readFileSync(new URL('../app/api/client-contract-ai/route.ts',import.meta.url),'utf8');
  for(const marker of ['export async function GET(req:Request)','VERCEL_OIDC_TOKEN','permittedOrigins','forwardedHost','requires_review:true'])assert.ok(route.includes(marker),marker);
+});
+
+test('Compact AI review displays ten numbered placeholders filled by extracted installments',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ for(const token of ['cf-ai-compact-controls','cf-ai-payment-table','Array.from({length:10}','{i+1}','cf-ai-empty-slot','تأكيد وحفظ بنود الدفعات المعتمدة'])assert.ok(ui.includes(token),token);
+ assert.ok(css.includes('.cf-ai-compact-controls'));
+ assert.ok(css.includes('.cf-ai-payment-table'));
 });
