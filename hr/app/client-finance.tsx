@@ -32,6 +32,7 @@ export default function ClientFinance({user,company,profiles,companyList,project
  const [contractEditOpen,setContractEditOpen]=useState(false),[editContract,setEditContract]=useState(blank),[approvalEdit,setApprovalEdit]=useState(null);
  const [search,setSearch]=useState(''),[showArchived,setShowArchived]=useState(false);
  const [documentLink,setDocumentLink]=useState({document_type:'contract',adjustment_id:'',claim_id:'',receipt_id:''}),[initialContractFile,setInitialContractFile]=useState(null);
+ const [pendingDocumentFile,setPendingDocumentFile]=useState(null),[replaceDocumentId,setReplaceDocumentId]=useState('');
  const [importPreview,setImportPreview]=useState(null),[importOpen,setImportOpen]=useState(false);
  const [aiPreview,setAiPreview]=useState(null),[aiBusy,setAiBusy]=useState(false);
  const [aiDocumentId,setAiDocumentId]=useState(''),[aiContractFile,setAiContractFile]=useState(null);
@@ -67,7 +68,7 @@ export default function ClientFinance({user,company,profiles,companyList,project
  if(!file||!contractId||!canEdit)return false;
  if(file.size>8388608)throw Error('الملف يتجاوز 8 ميجابايت');
  const params=new URLSearchParams({action:'upload',contract_id:contractId,name:file.name,document_type:link.document_type||'contract'});
- for(const key of ['adjustment_id','claim_id','receipt_id'])if(link[key])params.set(key,link[key]);
+ for(const key of ['adjustment_id','claim_id','receipt_id','replaces_document_id'])if(link[key])params.set(key,link[key]);
  const r=await fetch('/api/client-finance?'+params,{method:'POST',headers:{'Content-Type':file.type||'application/octet-stream'},body:file});
  const j=await r.json();if(!r.ok)throw Error(j.error||'تعذر إرفاق المستند');
  return j;
@@ -120,11 +121,23 @@ const register=async e=>{e.preventDefault();const result=await execute({action:'
  const addAdjust=async e=>{e.preventDefault();if(await execute({action:'add_adjustment',contract_id:selected,...adjustment},'تم تسجيل ملحق العقد')){setAdjustment(a0)}};
  const recordClientApproval=async e=>{e.preventDefault();if(await execute({action:'record_claim_client_approval',contract_id:selected,...approvalEdit},'تم حفظ تاريخ اعتماد العميل'))setApprovalEdit(null)};
  const addReceipt=async e=>{e.preventDefault();if(await execute({action:'add_receipt',contract_id:selected,...receipt},'تم تسجيل استلام المبلغ وتحديث المستحق المتبقي')){setReceipt(r0)}};
- const upload=async e=>{
- const file=e.target.files?.[0];if(!file||!current||!canEdit)return;
- setBusy(true);setError('');try{const document=await uploadDocument(file,current.id,documentLink);setNotice('تم حفظ المرفق وربطه بالعقد والسجل المحدد');await reload();if(document?.id&&['contract','contract_appendix'].includes(documentLink.document_type))await analyzeContractAI(document.id,current.id);}
- catch(err){setError(err.message)}finally{setBusy(false);e.target.value=''}
- };
+ const saveAttachedContract=async()=>{
+ if(!pendingDocumentFile||!current||!canEdit){setError('اختر ملفًا للحفظ أولًا');return;}
+ setBusy(true);setError('');
+ try{
+  const file=await uploadDocument(pendingDocumentFile,current.id,{...documentLink,replaces_document_id:replaceDocumentId||undefined});
+  setPendingDocumentFile(null);setReplaceDocumentId('');
+  setNotice('تم حفظ الملف '+(replaceDocumentId?'واستبدال النسخة السابقة.':'وربطه بالعقد.')+' ويمكن فتحه من سجل المرفقات.');
+  await reload();
+  // AI extraction is an explicit separate action to avoid auto-running on every replacement.
+ }catch(err){setError(err.message)}finally{setBusy(false)}
+};
+const deleteAttachedContract=async(doc)=>{
+ if(!canEdit||!current)return;
+ if(!window.confirm('مسح المرفق '+doc.name+' من القائمة؟ سيُحتفظ بسجل العملية لأغراض المراجعة، ولن يُحذف العقد نفسه.'))return;
+ const result=await execute({action:'delete_document',contract_id:current.id,document_id:doc.id},'تم مسح المرفق من قائمة الملفات النشطة مع حفظ سجل التدقيق');
+ if(result&&replaceDocumentId===doc.id){setReplaceDocumentId('');setPendingDocumentFile(null);}
+};
  const downloadExcel=(filename,values)=>{
   const xlsx=buildContractsXlsx(values);
   const url=URL.createObjectURL(new Blob([xlsx],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
@@ -342,9 +355,12 @@ const register=async e=>{e.preventDefault();const result=await execute({action:'
     {['extra','deduction'].includes(documentLink.document_type)&&<label>الملحق أو الخصم المرتبط<select required value={documentLink.adjustment_id} onChange={e=>setDocumentLink({...documentLink,adjustment_id:e.target.value})}><option value="">اختر الملحق</option>{items('adjustments').filter(a=>a.kind===documentLink.document_type).map(a=><option key={a.id} value={a.id}>{a.description} · {money(a.amount_ex_vat)} ر.س</option>)}</select></label>}
     {documentLink.document_type==='claim'&&<label>المطالبة المرتبطة<select required value={documentLink.claim_id} onChange={e=>setDocumentLink({...documentLink,claim_id:e.target.value})}><option value="">اختر المطالبة</option>{items('claims').map(cl=><option key={cl.id} value={cl.id}>{cl.claim_no}</option>)}</select></label>}
     {documentLink.document_type==='receipt'&&<label>الدفعة المستلمة<select required value={documentLink.receipt_id} onChange={e=>setDocumentLink({...documentLink,receipt_id:e.target.value})}><option value="">اختر الدفعة</option>{items('receipts').map(r=><option key={r.id} value={r.id}>{r.paid_at} · {money(r.amount_inc_vat)} ر.س</option>)}</select></label>}
-    <label className="cf-full">إرفاق الملف<input type="file" accept=".pdf,.png,.jpg,.jpeg" disabled={busy||(['extra','deduction'].includes(documentLink.document_type)&&!documentLink.adjustment_id)||(documentLink.document_type==='claim'&&!documentLink.claim_id)||(documentLink.document_type==='receipt'&&!documentLink.receipt_id)} onChange={upload}/></label>
+    <label>استبدال مرفق محفوظ (اختياري)<select value={replaceDocumentId} onChange={e=>{const d=items('documents').find(x=>x.id===e.target.value);setReplaceDocumentId(e.target.value);if(d)setDocumentLink({document_type:d.document_type,adjustment_id:d.adjustment_id||'',claim_id:d.claim_id||'',receipt_id:d.receipt_id||''})}}><option value="">حفظ مرفق جديد</option>{items('documents').map(x=><option key={x.id} value={x.id}>{x.name} — {documentLabels[x.document_type]||'مستند'}</option>)}</select></label>
+    <label className="cf-full">إرفاق الملف<input type="file" accept=".pdf,.png,.jpg,.jpeg" disabled={busy||(['extra','deduction'].includes(documentLink.document_type)&&!documentLink.adjustment_id)||(documentLink.document_type==='claim'&&!documentLink.claim_id)||(documentLink.document_type==='receipt'&&!documentLink.receipt_id)} onChange={e=>setPendingDocumentFile(e.target.files?.[0]||null)}/></label>
+    <button type="button" className="cf-primary" disabled={busy||!pendingDocumentFile} onClick={saveAttachedContract}>حفظ العقد / المرفق بعد الإرفاق</button>
+    <small className="cf-full">يمكن اختيار مستند سابق لاستبداله. تُسجل عمليات الحفظ والاستبدال والمسح لأغراض المراجعة.</small>
    </div>}
-   <div className="cf-table"><table><thead><tr><th>نوع المرفق</th><th>اسم الملف</th><th>السجل المرتبط</th><th>تاريخ الرفع</th><th>بواسطة</th><th>المرفق</th><th>طباعة</th></tr></thead><tbody>{items('documents').map(x=><tr key={x.id}><td>{documentLabels[x.document_type]||'العقد الأساسي'}</td><td>{x.name}{canEdit&&['contract','contract_appendix'].includes(x.document_type)&&<button type="button" disabled={aiBusy} onClick={()=>analyzeContractAI(x.id,current.id)}>تحليل بنود العقد AI</button>}</td><td>{x.adjustment_id?items('adjustments').find(a=>a.id===x.adjustment_id)?.description||'ملحق':x.claim_id?items('claims').find(a=>a.id===x.claim_id)?.claim_no||'مطالبة':x.receipt_id?items('receipts').find(a=>a.id===x.receipt_id)?.reference||'دفعة':'العقد'}</td><td>{String(x.created_at).slice(0,10)}</td><td>{x.uploaded_by}</td><td><a href={'/api/client-finance?download='+encodeURIComponent(x.id)} target="_blank" rel="noopener noreferrer">فتح / تنزيل</a></td><td><button type="button" onClick={()=>printFinanceRegister('documents',x)}>طباعة البيان</button></td></tr>)}</tbody></table></div>
+   <div className="cf-table"><table><thead><tr><th>نوع المرفق</th><th>اسم الملف</th><th>السجل المرتبط</th><th>تاريخ الرفع</th><th>بواسطة</th><th>المرفق</th><th>طباعة</th><th>التعديل والمسح</th></tr></thead><tbody>{items('documents').map(x=><tr key={x.id}><td>{documentLabels[x.document_type]||'العقد الأساسي'}</td><td>{x.name}{canEdit&&['contract','contract_appendix'].includes(x.document_type)&&<button type="button" disabled={aiBusy} onClick={()=>analyzeContractAI(x.id,current.id)}>تحليل بنود العقد AI</button>}</td><td>{x.adjustment_id?items('adjustments').find(a=>a.id===x.adjustment_id)?.description||'ملحق':x.claim_id?items('claims').find(a=>a.id===x.claim_id)?.claim_no||'مطالبة':x.receipt_id?items('receipts').find(a=>a.id===x.receipt_id)?.reference||'دفعة':'العقد'}</td><td>{String(x.created_at).slice(0,10)}</td><td>{x.uploaded_by}</td><td><a href={'/api/client-finance?download='+encodeURIComponent(x.id)} target="_blank" rel="noopener noreferrer">فتح / تنزيل</a></td><td><button type="button" onClick={()=>printFinanceRegister('documents',x)}>طباعة البيان</button></td><td>{canEdit&&<><button type="button" onClick={()=>{setReplaceDocumentId(x.id);setDocumentLink({document_type:x.document_type,adjustment_id:x.adjustment_id||'',claim_id:x.claim_id||'',receipt_id:x.receipt_id||''})}}>تعديل / استبدال</button><button type="button" disabled={busy} onClick={()=>deleteAttachedContract(x)}>مسح المرفق</button></>}</td></tr>)}</tbody></table></div>
   </>}
  </>:<div className="cf-empty">اختر عقدًا لعرض الاستحقاقات والدفعات والمطالبات والمرفقات.</div>}</div></div>
  {importOpen&&<div className="cf-overlay" role="presentation"><div className="cf-modal" role="dialog" aria-modal="true" aria-label="استيراد عقود العملاء من Excel">
