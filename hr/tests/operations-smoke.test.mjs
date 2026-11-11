@@ -601,7 +601,7 @@ test('the deployed shared visibility rule restricts managers to their assigned p
  assert.equal(visible(u,p1,rows),true);
  assert.equal(visible(u,p2,rows),false);
  assert.equal(visible({...u,email:'unknown@example.test'},r1,rows),false);
- assert.equal(visible({...u,projects:'[]'},r1,rows),true);
+ assert.equal(visible({...u,projects:'[]'},r1,rows),false);
  assert.equal(visible({...u,companies:'["شركة البلد المتحدة"]'},r1,rows),false);
 });
 
