@@ -1029,3 +1029,12 @@ test('contract duration, signed date, record printing and categorized attachment
  assert.match(api,/b\.signed_date\|\|c\.signed_date/);
  assert.match(api,/client_documents\(id,contract_id,name,mime,size,blob_key,uploaded_by,document_type,adjustment_id,claim_id,receipt_id\)/);
 });
+
+test('finance print and attachment quick actions are present and scoped to the selected contract',()=>{
+ const ui=readFileSync(new URL('../app/client-finance.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/client-finance.ts',import.meta.url),'utf8');
+ for(const title of ['إرفاق العقد','إرفاق مستند الخصم/الملحق','طباعة سجل المرفقات','طباعة بيانات العقد','طباعة الدفعة','طباعة سند الدفعة','طباعة الملحق','مدة تنفيذ المشروع تلقائيًا'])assert.ok(ui.includes(title),title);
+ assert.match(backend,/SELECT kind FROM client_adjustments WHERE id=\? AND contract_id=\?/);
+ assert.match(backend,/SELECT id FROM client_claims WHERE id=\? AND contract_id=\?/);
+ assert.match(backend,/SELECT id FROM client_receipts WHERE id=\? AND contract_id=\?/);
+});
