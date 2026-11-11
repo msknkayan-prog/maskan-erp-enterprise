@@ -5,6 +5,7 @@ import {employeeRegisterFields,employeeRegisterValue} from '../lib/employee-regi
 import {LayoutDashboard,Users,Building2,FileText,Wallet,ShoppingCart,CalendarDays,TriangleAlert,ChartNoAxesCombined,Search,Plus,ArrowUpLeft,Cloud,ChevronLeft,Download,Upload,X,Check,ShieldCheck,LogOut,RefreshCw,ArrowRight,MapPin} from 'lucide-react';
 import {companies,canonicalCompany,companyDisplayName,modules,states,annualLeave,canRead,canWrite,workflow,enumOptions,relationModules,operationalModules,saudiDate,fixedLeaveDays,leaveEndDate,permission,permissionChoice,permittedRead,permittedWrite} from '../lib/modules.mjs';
 import {Attendance,Migration,Attachments,RecordPaper,RecordHistory} from './operations';
+import {companyLogoPath,companyOfficialName} from '../lib/company-brand.mjs';
 import {readXlsx,workbookBytes} from '../lib/sheets.mjs';
 const icons={users:Users,building:Building2,file:FileText,wallet:Wallet,cart:ShoppingCart,calendar:CalendarDays,alert:TriangleAlert,chart:ChartNoAxesCombined};
 const money=n=>Number(n||0).toLocaleString('ar-SA',{maximumFractionDigits:2});
@@ -75,6 +76,21 @@ async function generateMemberPassword(){
  }catch(error){notify(error.message||'تعذر توليد كلمة المرور')}finally{setMemberBusy(false)}
 }
 async function sendMemberPasswordLink(email,username){if(!username){notify('أدخل اسم مستخدم واحفظه أولًا لتفعيل رابط كلمة المرور');return;}if(!window.confirm('إرسال رابط آمن لتعيين كلمة المرور إلى '+email+'؟'))return;setMemberBusy(true);try{const result=await post({action:'send_password_link',email});notify(result.method==='invitation'?'تم طلب إرسال دعوة إنشاء الحساب وكلمة المرور':'تم طلب إرسال رابط تغيير كلمة المرور')}catch(e){notify(e.message||'تعذر إرسال الرابط')}finally{setMemberBusy(false)}}
+async function uploadCompanyLogo(file){
+ if(!file||!edit?.id||module!=='company_profiles')return;
+ if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>1024*1024){notify('ارفع شعار PNG أو JPG أو WebP بحجم لا يتجاوز 1 ميجابايت');return}
+ if(user?.role!=='admin'){notify('رفع الشعار متاح للمدير العام فقط');return}
+ setSaving(true);
+ try{
+  const form=new FormData();form.append('record',edit.id);form.append('file',file);
+  const response=await fetch('/api/files',{method:'POST',body:form});
+  const uploaded=await response.json();
+  if(!response.ok||!uploaded.id)throw Error(uploaded.error||'تعذر رفع الشعار');
+  await post({action:'set_company_logo',record_id:edit.id,file_id:uploaded.id,revision:edit.revision});
+  await refresh();setEdit(null);notify('تم تحديث شعار الشركة في جميع نماذجها القابلة للطباعة');
+ }catch(e){notify(e.message||'تعذر حفظ الشعار')}
+ finally{setSaving(false)}
+}
 async function post(body){const r=await fetch('/api/erp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error);return d}
 async function save(e){e.preventDefault();if(module==='employees'&&employeeReadOnly){notify('انتقل إلى وضع التعديل أولًا');return;}
  if(module==='employees'&&edit.dual_source_id){
@@ -323,10 +339,12 @@ function cyclePrint(){
  const tr=(cells,cls='')=>'<tr class="'+cls+'">'+cells.map(v=>'<td>'+safe(v)+'</td>').join('')+'</tr>';
  const detail=lines.map((r,i)=>{const d=r.data;return tr([i+1,r.company,d.employee_number,d.employee_name,(['inactive','موقوف','غير نشط'].includes(String(d.employment_status)))?'غير نشط':'نشط',money(d.basic),money(d.housing),money(d.transport),money(d.salary),money(Number(d.bonus||0)+Number(d.extra_allowance||0)),money(d.overtime_hours),money(d.overtime),money(Number(d.absence_deduction||0)+Number(d.advance_deduction||0)+Number(d.deductions||0)),money(d.net),money(d.cash_amount),money(d.bank_amount),d.split_confirmed?'مراجع':'غير مراجع'])}).join('');
  const totalRow=tr(['الإجمالي','','',lines.length+' موظف','',money(total('basic')),money(total('housing')),money(total('transport')),money(total('salary')),money(total('bonus')+total('extra_allowance')),money(total('overtime_hours')),money(total('overtime')),money(total('absence_deduction')+total('advance_deduction')+total('deductions')),money(total('net')),money(total('cash_amount')),money(total('bank_amount')),''],'total');
- const logosrc=safe(window.location.origin+'/maskan-logo.jpg');
+ const printableLogo=title==='جميع الشركات'?'':companyLogoPath(title,rows);
+ const logosrc=printableLogo?safe(window.location.origin+printableLogo):'';
+ const printableCompanyName=title==='جميع الشركات'?'مسير رواتب جميع الشركات':companyOfficialName(title,rows);
  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>مسير رواتب ${safe(title)} - ${safe(payrollMonth)}</title><style>
  @page{size:A3 landscape;margin:10mm}body{font:11px Tajawal,Tahoma,Arial,sans-serif;color:#23332e;padding:8px;direction:rtl}header{display:grid;grid-template-columns:1fr 105px 1.4fr;gap:20px;align-items:center;border-top:1px solid #e7e1d4;margin-bottom:15px;padding:12px 0}header img{width:105px;height:90px;object-fit:contain}header .brand{text-align:center;border-bottom:2px solid #b3a06a;padding-bottom:8px}header .reg{text-align:center;border-bottom:2px solid #b3a06a;padding-bottom:8px}h1{font-size:19px;margin:4px 0}p{margin:6px 0}table{border-collapse:collapse;width:100%;font-size:9px;table-layout:auto}th,td{border:1px solid #b9aa88;padding:6px 4px;text-align:center;white-space:normal}th{background:#eee7d6}tr:nth-child(even){background:#fbfaf6}.total{background:#e8dec3;font-weight:bold}.sign{display:flex;justify-content:space-around;gap:20px;margin-top:34px}.sign>div{border-top:1px solid #8a8a8a;padding-top:9px;flex:1;text-align:center;min-height:35px}footer{font-size:10px;margin-top:12px}button{padding:9px 16px;background:#b39247;border:0}@media print{button{display:none}}
- </style></head><body><header><div class="reg">سجل تجاري: ${safe(title==='مسكن الكيان'?'7028881634':'—')}</div><img src="${logosrc}" alt="شعار مسكن الكيان"/><div class="brand"><strong style="font-size:18px">شركة مسكن الكيان للمقاولات</strong><p style="font-size:11px;font-weight:bold">MASKAN ALKAYAN CONTRACTING CO.</p></div></header><h1 style="text-align:center">مسير الرواتب الشهري</h1><div style="display:flex;justify-content:space-between;border:1px solid #777;padding:10px;margin:10px 0"><span>الشركة: ${safe(title)}</span><span>الشهر: ${safe(payrollMonth)}</span><span>عدد الموظفين: ${lines.length}</span></div><p>حالة الاعتماد: ${safe(cycleBatches.map(b=>b.company+': '+(cycleStatus[b.status]||b.status)).join(' | '))}</p>
+ </style></head><body><header><div class="reg">سجل تجاري: ${safe(title==='مسكن الكيان'?'7028881634':'—')}</div>${logosrc?'<img src="${logosrc}" alt="شعار الشركة"/>:''}<div class="brand"><strong style="font-size:18px">${safe(printableCompanyName)}</strong><p style="font-size:11px;font-weight:bold">${safe(title)}</p></div></header><h1 style="text-align:center">مسير الرواتب الشهري</h1><div style="display:flex;justify-content:space-between;border:1px solid #777;padding:10px;margin:10px 0"><span>الشركة: ${safe(title)}</span><span>الشهر: ${safe(payrollMonth)}</span><span>عدد الموظفين: ${lines.length}</span></div><p>حالة الاعتماد: ${safe(cycleBatches.map(b=>b.company+': '+(cycleStatus[b.status]||b.status)).join(' | '))}</p>
  <table><thead><tr>${header.map(h=>'<th>'+safe(h)+'</th>').join('')}</tr></thead><tbody>${detail}${totalRow}</tbody></table>
  <div class="sign"><div>إعداد مساعد الإدارة</div><div>مراجعة مدراء المشاريع</div><div>اعتماد إدارة المشاريع</div><div>مراجعة وصرف المالية</div></div>
  <footer>هذه طباعة من سجل المنصة في تاريخ ${safe(new Date().toLocaleString('ar-SA'))}. لا تُعد دليلًا على صرف المبالغ ما لم تكن حالة المسير «تم الصرف».</footer>
@@ -339,12 +357,13 @@ function cycleReceipt(row){
  const d=row.data||{};
  const safe=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
  const val=(name,value)=>'<tr><th>'+safe(name)+'</th><td>'+safe(value)+'</td></tr>';
- const logoUrl=safe(window.location.origin+'/maskan-logo.jpg');
+ const receiptLogo=companyLogoPath(b.company,rows);
+ const logoUrl=receiptLogo?safe(window.location.origin+receiptLogo):'';
  const receipt='SAL-'+b.data.month.replace('-','')+'-'+String(d.employee_number||row.id).replace(/[^a-zA-Z0-9-]/g,'');
  const html=`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>سند استلام راتب ${safe(receipt)}</title><style>
  @page{size:A4;margin:16mm}body{font-family:Tajawal,Tahoma,Arial,sans-serif;color:#183b33;padding:12px;direction:rtl}header{text-align:center;border-bottom:3px solid #b89756;padding-bottom:16px;margin-bottom:22px}header img{width:85px;height:75px;object-fit:contain}
  h1{font-size:23px;margin:10px}h2{font-size:17px}table{border-collapse:collapse;width:100%;margin:18px 0}th,td{border:1px solid #d3ccb8;padding:10px;text-align:right}th{width:40%;background:#f4efe2}.foot{border-top:1px solid #d2c6a9;margin-top:25px;padding-top:15px;display:grid;grid-template-columns:1fr 1fr;gap:22px}.sign{border-bottom:1px dotted #888;height:48px;margin-top:18px}.note{background:#faf5e9;padding:12px}button{padding:10px 20px;background:#ad8a42;border:0;cursor:pointer}@media print{button{display:none}}
- </style></head><body><header><img src="${logoUrl}" alt="الشعار"><h2>${safe(b.company)}</h2><h1>سند استلام راتب شهري</h1><p>سند رقم: ${safe(receipt)} | شهر: ${safe(b.data.month)}</p></header>
+ </style></head><body><header>${logoUrl?'<img src="${logoUrl}" alt="شعار الشركة">:''}<h2>${safe(companyOfficialName(b.company,rows))}</h2><h1>سند استلام راتب شهري</h1><p>سند رقم: ${safe(receipt)} | شهر: ${safe(b.data.month)}</p></header>
  <table>${val('اسم الموظف',d.employee_name)}${val('الرقم الوظيفي',d.employee_number)}${val('الشركة',b.company)}${val('الراتب الأساسي',money(d.basic)+' ريال')}${val('بدل السكن',money(d.housing)+' ريال')}${val('بدل النقل',money(d.transport)+' ريال')}${val('عدد الساعات الإضافية',money(d.overtime_hours)+' ساعة')}${val('قيمة الساعات الإضافية',money(d.overtime)+' ريال')}${val('إجمالي الاستحقاق الصافي',money(d.net)+' ريال')}${val('المبلغ المستلم نقدًا',money(d.cash_amount)+' ريال')}${val('المبلغ المحول بنكيًا',money(d.bank_amount)+' ريال')}${val('مرجع إثبات الصرف',b.data.payment_reference)}${val('تاريخ الصرف',new Date(b.data.paid_at).toLocaleDateString('ar-SA'))}</table>
  <p class="note">أقر أنا الموظف الموضحة بياناته أعلاه باستلام مبالغ راتب الشهر حسب طريقتَي الصرف الموضحتين، مع مراعاة مطابقة التحويل البنكي لكشف البنك الفعلي.</p>
  <div class="foot">${['الموظف المستلم','المسؤول المباشر / مدير المشروع','شؤون الموظفين','المدير المخوّل'].map(n=>'<div><strong>'+n+'</strong><div class="sign"></div>الاسم: ...........................<p>التاريخ: ........................</p></div>').join('')}</div>
@@ -418,7 +437,7 @@ function printModuleRegister(){
  const safe=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
  const chosenCompany=company||'جميع الشركات';
  const profile=rows.find(r=>r.module==='company_profiles'&&r.company===company);
- const companyName=company==='مسكن الكيان'?'شركة مسكن الكيان للمقاولات':(profile?.data.name||chosenCompany);
+ const companyName=company?companyOfficialName(company,rows):chosenCompany;
  const fields=module==='employees'?tableFields:fieldsFor;
  const limited=fields.slice(0,8);
  const tableHeaders=['م','الشركة',...limited.map(f=>f.label),'الحالة'];
@@ -427,10 +446,11 @@ function printModuleRegister(){
  const tableRows=list.map((row,index)=>'<tr>'+cells({row,index}).map(value=>td(value)).join('')+'</tr>').join('');
  const emptyBody='<tr><td colspan="'+tableHeaders.length+'" class="empty-state">لا توجد سجلات مسجلة ضمن الشركة أو الفلاتر المحددة. هذا نموذج استعراض فارغ وليس مستندًا معتمدًا.</td></tr>';
  const contact=[profile?.data.phone,profile?.data.mobile,profile?.data.email,profile?.data.website,profile?.data.address].filter(Boolean).map(safe).join(' | ');
- const logo=safe(window.location.origin+'/maskan-logo.jpg');
+ const registerLogoPath=company?companyLogoPath(company,rows):'';
+ const logo=registerLogoPath?safe(window.location.origin+registerLogoPath):'';
  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${safe(spec.label)} - ${safe(chosenCompany)}</title><style>
  @page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{font:12px Tahoma,Arial,sans-serif;color:#272821;direction:rtl;margin:0;padding:12px}header{display:grid;grid-template-columns:1fr 120px 1.4fr;gap:20px;align-items:center;padding:12px 0 16px;border-top:1px solid #e7e1d4}header img{width:120px;height:105px;object-fit:contain}header .brand{text-align:center;border-bottom:2px solid #b3a06a;padding-bottom:11px}header .brand strong{display:block;font-size:19px}header .brand small{display:block;font:700 12px Arial,sans-serif;margin-top:8px}header .registration{border-bottom:2px solid #b3a06a;padding-bottom:12px;text-align:center}h1{text-align:center;font-size:22px;margin:20px 0 6px}h2{text-align:center;font-size:13px;color:#957839;margin:0 0 18px}.info{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid #555;background:#fff;margin-bottom:15px;gap:0}.info span{padding:11px;text-align:center;border-left:1px solid #555;font-weight:700}.info span:last-child{border-left:0}table{width:100%;border-collapse:collapse;table-layout:auto}th,td{border:1px solid #8e8c80;padding:8px 6px;text-align:right;overflow-wrap:anywhere;font-size:11px}th{background:#eae3d0;color:#282820;font-weight:bold}tr{break-inside:avoid}tbody tr:nth-child(even){background:#fcfaf5}.empty-state{text-align:center;height:80px;color:#796d56}.approval-title{margin-top:28px;border:1px solid #777;background:#fff;padding:10px;text-align:center;font-weight:700}.approval{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #777;border-top:0}.approval>div{min-height:125px;padding:12px;border-left:1px solid #777}.approval>div:last-child{border-left:0}.approval p{margin-top:18px;border-bottom:1px dotted #888;width:90%}footer{border-top:2px solid #ad985f;margin-top:24px;padding:12px;text-align:center;font-size:10px}.notice{font-size:10px;color:#797265;margin-top:10px;text-align:center}button{background:#b9964b;color:#1e1b13;border:0;padding:10px 15px;margin:20px 0;cursor:pointer}@media print{button{display:none}body{padding:0}th{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
- </style></head><body><header><div class="registration">سجل تجاري: ${safe(profile?.data.commercial_registration||(company==='مسكن الكيان'?'7028881634':'—'))}</div><img src="${logo}" alt="شعار الشركة"><div class="brand"><strong>${safe(companyName)}</strong><small>${company==='مسكن الكيان'?'MASKAN ALKAYAN CONTRACTING CO.':safe(companyName)}</small></div></header><div class="party" style="display:flex;justify-content:space-between;margin:13px 0;font-weight:bold"><span>السادة: ${safe(companyName)}</span><span>المحترمون</span></div><h1>${safe(spec.label)}</h1><h2>${safe(spec.singular)} | سجل النماذج</h2><div class="info"><span>الشركة: ${safe(chosenCompany)}</span><span>عدد السجلات: ${list.length}</span><span>تاريخ الإصدار: ${safe(new Date().toLocaleDateString('ar-SA'))}</span></div><table><thead><tr>${tableHeaders.map(h=>td(h,'th')).join('')}</tr></thead><tbody>${tableRows||emptyBody}</tbody></table><div class="approval-title">الاعتماد والتوقيع / APPROVAL & SIGNATURE</div><div class="approval">${['إعداد شؤون الموظفين','مدير المشروع','الجهة المختصة','الاعتماد'].map(t=>'<div><b>'+safe(t)+'</b><p>الاسم:</p><p>التوقيع:</p></div>').join('')}</div><div class="notice">الاعتمادات الورقية لا تغيّر حالة اعتماد السجلات الإلكترونية. لا يُعد هذا التقرير دليلًا على الصرف.</div><footer>${contact||'شركة مسكن الكيان للمقاولات | شؤون الموظفين'}</footer><button onclick="window.print()">طباعة / حفظ PDF</button></body></html>`;
+ </style></head><body><header><div class="registration">سجل تجاري: ${safe(profile?.data.commercial_registration||(company==='مسكن الكيان'?'7028881634':'—'))}</div>${logo?'<img src="${logo}" alt="شعار الشركة">:''}<div class="brand"><strong>${safe(companyName)}</strong><small>${company==='مسكن الكيان'?'MASKAN ALKAYAN CONTRACTING CO.':safe(companyName)}</small></div></header><div class="party" style="display:flex;justify-content:space-between;margin:13px 0;font-weight:bold"><span>السادة: ${safe(companyName)}</span><span>المحترمون</span></div><h1>${safe(spec.label)}</h1><h2>${safe(spec.singular)} | سجل النماذج</h2><div class="info"><span>الشركة: ${safe(chosenCompany)}</span><span>عدد السجلات: ${list.length}</span><span>تاريخ الإصدار: ${safe(new Date().toLocaleDateString('ar-SA'))}</span></div><table><thead><tr>${tableHeaders.map(h=>td(h,'th')).join('')}</tr></thead><tbody>${tableRows||emptyBody}</tbody></table><div class="approval-title">الاعتماد والتوقيع / APPROVAL & SIGNATURE</div><div class="approval">${['إعداد شؤون الموظفين','مدير المشروع','الجهة المختصة','الاعتماد'].map(t=>'<div><b>'+safe(t)+'</b><p>الاسم:</p><p>التوقيع:</p></div>').join('')}</div><div class="notice">الاعتمادات الورقية لا تغيّر حالة اعتماد السجلات الإلكترونية. لا يُعد هذا التقرير دليلًا على الصرف.</div><footer>${contact||'شركة مسكن الكيان للمقاولات | شؤون الموظفين'}</footer><button onclick="window.print()">طباعة / حفظ PDF</button></body></html>`;
  const win=window.open('','_blank');if(!win){notify('اسمح بالنوافذ المنبثقة لفتح قالب الطباعة الرسمي');return;}
  win.document.open();win.document.write(html);win.document.close();
 }
@@ -709,7 +729,14 @@ relationModules[f.type]?<select required={f.required} value={edit.data[f.key]||'
   }
  }else if(module==='leave'&&f.key==='start')applyLeaveField(f.key,e.target.value);
  else setEdit({...edit,data:{...edit.data,[f.key]:e.target.value}});
- }}/>}</label>)}</div></fieldset>{module==='employees'&&<div className="employee-payout-summary" aria-live="polite">
+ }}/>}</label>)}</div></fieldset>{module==='company_profiles'&&<section className="employee-payout-summary no-print" style={{marginTop:12}}>
+ <strong>هوية الشركة وشعار النماذج</strong>
+ <p>يُستخدم الشعار الخاص بهذه الشركة تلقائيًا في الإجازات والسلف والتعيين والمخالصات وسائر نماذج الطباعة.</p>
+ {companyLogoPath(edit.company,rows)?<img src={edit.data.logo_file_id?'/api/files?id='+encodeURIComponent(edit.data.logo_file_id)+'&logo=1':companyLogoPath(edit.company,rows)} alt={'شعار '+edit.company} style={{width:115,height:85,objectFit:'contain'}}/>:<p>لم يُرفع شعار لهذه الشركة بعد؛ لن يُستخدم شعار شركة أخرى.</p>}
+ {edit.id&&user?.role==='admin'?<label>رفع الشعار المعتمد (PNG / JPG / WebP – 1 MB)
+ <input type="file" accept="image/png,image/jpeg,image/webp" disabled={saving} onChange={e=>{const file=e.target.files?.[0];if(file)uploadCompanyLogo(file)}}/>
+ </label>:<small>احفظ بيانات هوية الشركة أولًا، ثم افتح السجل لرفع الشعار. الرفع متاح للمدير العام.</small>}
+ </section>}{module==='employees'&&<div className="employee-payout-summary" aria-live="polite">
  <strong>توزيع الراتب الشهري</strong>
  <div className="employee-payout-grid">
   <span>صافي الراتب المرجعي <b>{money(edit.data.salary)} ر.س</b></span>
