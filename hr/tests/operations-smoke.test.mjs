@@ -897,3 +897,10 @@ test('unified letterheads use horizontally aligned full-width name next to compa
  assert.match(ui,/class="brand-block"/);
  assert.match(ui,/grid-template-columns:170px minmax\(0,1fr\)/);
 });
+
+test('project manager scope defaults do not affect creation of HR, finance and other accounts',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/\[memberProject,setMemberProject\]=useState\('\*'\)/);
+ assert.match(ui,/setMemberProject\(role==='project_manager'\?'selected':'\*'\)/);
+ assert.match(ui,/setMemberSelectedProjects\(\[\]\)/);
+});
