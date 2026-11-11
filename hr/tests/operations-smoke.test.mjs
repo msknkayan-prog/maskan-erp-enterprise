@@ -767,3 +767,12 @@ test('project assignment and employee request details use project manager direct
  assert.match(erp,/details\.project_manager=\{name:dir\.name/);
  assert.match(erp,/UPDATE records SET status=\?,data=\?,revision=revision\+1/);
 });
+
+test('HR directory choices expose only active project manager identities without credentials',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(erp,/if\(mod==='project_manager_choices'\)/);
+ assert.match(erp,/SELECT email,username,display_name,role,is_active,companies FROM members WHERE role='project_manager' AND is_active=true/);
+ assert.match(erp,/\['admin','hr','projects_director'\]\.includes\(u\.role\)/);
+ assert.match(ui,/user\?\.role==='admin'\?'members':'project_manager_choices'/);
+});
