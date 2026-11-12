@@ -470,7 +470,7 @@ test('employee second-company registration preserves original company and requir
 test('existing company transfer remains separate from second-company creation',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/سبب نقل أو تصحيح شركة الموظف/);
- assert.match(ui,/setEdit\(\{\.\.\.edit,company:nextCompany,transfer_reason:reason\.trim\(\),data:\{\.\.\.edit\.data,project_id:''\}\}\)/);
+ assert.match(ui,/transfer_reason:reason\.trim\(\),data:\{\.\.\.edit\.data,project_id:'',direct_manager_id:''/);
  assert.match(ui,/notes:\[previousNotes,note\]/);
  const normalized=normalize('employees',{company:'رياح الاعمار',data:{name:'موظف تجريبي بالشركة الثانية',code:'TEST-SECOND-220',salary:6000,bank_amount:2500,sponsorship:'yes'}});
  assert.equal(normalized.basic,3900);
