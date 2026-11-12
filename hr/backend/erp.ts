@@ -153,6 +153,69 @@ if(body.action==='update_member'){
  }
  return json({ok:true,requires_relogin:email!==oldEmail});
 }
+if(body.action==='onboard_project_manager'){
+ if(u.role!=='admin')throw Error('403');
+ const email=String(body.email||'').trim().toLowerCase();
+ const name=String(body.name||'').trim();
+ const phone=String(body.phone||'').trim();
+ const username=String(body.username||'').trim().replace(/\\s+/g,' ').toLowerCase();
+ const ids=body.project_ids;
+ if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||name.length<3||name.length>160)throw Error('الاسم والبريد الإلكتروني مطلوبان وبصيغة صحيحة');
+ if(username&&!/^[\\p{L}][\\p{L}\\p{N} ._-]{2,63}$/u.test(username))throw Error('اسم المستخدم غير صالح');
+ if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some((id:any)=>typeof id!=='string')||new Set(ids).size!==ids.length)throw Error('حدد مشاريع غير مكررة لمدير المشروع');
+ const allProjects=(await db.prepare("SELECT id,company,data,revision FROM records WHERE module='projects'").all()).results;
+ const selected=ids.map((id:string)=>allProjects.find((p:any)=>p.id===id));
+ if(selected.some((p:any)=>!p))throw Error('أحد المشاريع المحددة غير موجود');
+ const existing=await db.prepare('SELECT * FROM members WHERE lower(email)=?').bind(email).first<any>();
+ if(existing&&(existing.role!=='project_manager'||existing.is_active===false))throw Error('البريد مرتبط بحساب ليس مدير مشروع نشطًا');
+ const allowedCompanies=[...new Set(selected.map((p:any)=>p.company))];
+ for(const p of selected){
+  const data=JSON.parse(p.data||'{}');
+  const assigned=String(data.manager_email||'').trim().toLowerCase();
+  if(assigned&&assigned!==email&&!body.confirm_reassign)throw Error('المشروع '+(data.name||p.id)+' مرتبط بمدير آخر؛ يلزم تأكيد إعادة التكليف');
+ }
+ const currentScope=existing?.companies==='*'?'*':(()=>{try{return JSON.parse(existing?.companies||'[]')}catch{return []}})();
+ const nextCompanies=currentScope==='*'?'*':[...new Set([...(Array.isArray(currentScope)?currentScope:[]),...allowedCompanies])];
+ const currentProjects=existing?.projects==='*'?'*':(()=>{try{return JSON.parse(existing?.projects||'[]')}catch{return []}})();
+ const nextProjects=currentProjects==='*'?'*':[...new Set([...(Array.isArray(currentProjects)?currentProjects:[]),...ids])];
+ const duplicateDirectory=(await db.prepare("SELECT id,company,data FROM records WHERE module='project_managers'").all()).results;
+ const commands:any[]=[];
+ if(!existing){
+  if(!username)throw Error('اسم مستخدم مطلوب لإنشاء حساب مدير المشروع');
+  const clash=await db.prepare('SELECT email FROM members WHERE lower(username)=?').bind(username).first();
+  if(clash)throw Error('اسم المستخدم مستخدم بالفعل');
+  commands.push(db.prepare('INSERT INTO members(email,role,employee_id,companies,projects,permissions,username,contact_email) VALUES(?,?,?,?,?,?,?,?)')
+   .bind(email,'project_manager',null,JSON.stringify(allowedCompanies),JSON.stringify(ids),'{}',username,email));
+ }else{
+  if(username&&username!==existing.username){
+   const clash=await db.prepare('SELECT email FROM members WHERE lower(username)=? AND lower(email)<>?').bind(username,email).first();
+   if(clash)throw Error('اسم المستخدم مستخدم بالفعل');
+  }
+  commands.push(db.prepare('UPDATE members SET companies=?,projects=?,username=? WHERE email=? AND role=\'project_manager\' AND is_active=true')
+    .bind(nextCompanies==='*'?'*':JSON.stringify(nextCompanies),nextProjects==='*'?'*':JSON.stringify(nextProjects),username||existing.username,email));
+ }
+ for(const co of allowedCompanies){
+  const recorded=duplicateDirectory.find((r:any)=>r.company===co&&String(JSON.parse(r.data||'{}').email||'').trim().toLowerCase()===email);
+  if(recorded){
+   const d=JSON.parse(recorded.data);
+   commands.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='project_managers'")
+    .bind(JSON.stringify({...d,name,email,phone:phone||d.phone||''}),now,mutation,recorded.id));
+  }else{
+   commands.push(db.prepare("INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation) VALUES(?,'project_managers',?,?,?,'draft',1,?,?,?,?)")
+    .bind(crypto.randomUUID(),co,null,JSON.stringify({name,email,phone,job:'مدير مشروع'}),u.email,now,now,mutation));
+  }
+ }
+ for(const project of selected){
+  const data=JSON.parse(project.data||'{}');
+  commands.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='projects' AND revision=?")
+   .bind(JSON.stringify({...data,manager_email:email,manager_name:name,manager_phone:phone}),now,mutation,project.id,project.revision));
+ }
+ commands.push(db.prepare('INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)')
+  .bind(crypto.randomUUID(),u.email,email,'project_manager_onboarding',now,JSON.stringify({project_ids:ids,companies:allowedCompanies,existing_account:!!existing})));
+ const applied=await db.batch(commands);
+ if(applied.slice(0,-1).some((result:any)=>result?.meta?.changes!==1))throw Error('تغير أحد المشاريع أثناء الربط؛ أعد تحديث البيانات');
+ return json({ok:true,email,username:username||existing?.username||'',created:!existing,projects:ids.length});
+}
 if(body.action==='member'){if(u.role!=='admin')throw Error('403');const email=String(body.email||'').trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!['hr','administrative_assistant','finance','administrative_manager','project_manager','projects_director','employee'].includes(body.role))throw Error('بيانات المستخدم غير صالحة');const username=String(body.username||'').trim().replace(/\s+/g,' ').toLowerCase();if(username&&(!/^[\p{L}][\p{L}\p{N} ._-]{2,63}$/u.test(username)||username.includes('  ')))throw Error('اسم المستخدم من 3 إلى 64 حرفًا ويقبل الحروف العربية والإنجليزية والمسافات');if(body.permissions&&(typeof body.permissions!=='object'||Array.isArray(body.permissions)||Object.entries(body.permissions).some(([k,v])=>typeof v!=='boolean'||!/^([a-z_]+):(view|edit|approve)$/.test(k))))throw Error('صلاحيات غير صالحة');if(body.projects!=='*'&&body.projects!==undefined&&(!Array.isArray(body.projects)||body.projects.some((id:any)=>typeof id!=='string')))throw Error('نطاق مشاريع غير صالح');
 if(body.role==='project_manager'&&body.projects!=='*'){
  if(!Array.isArray(body.projects)||!body.projects.length)throw Error('حدد مشروعًا واحدًا على الأقل لمدير المشروع');
