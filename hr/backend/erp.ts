@@ -15,6 +15,40 @@ export async function GET(req:Request){try{const u=await identity();const db=env
   return !userScope||!managerScope||userScope.some((company:string)=>managerScope.includes(company));
  })});
 }
+if(mod==='integrity_report'){
+ if(u.role!=='admin')throw Error('403');
+ const records=(await db.prepare("SELECT id,module,company,code,data FROM records WHERE module IN ('projects','employees','project_managers','leave','advances','payroll','payroll_batches')").all()).results.map((r:any)=>({...r,data:JSON.parse(r.data||'{}')})).filter((r:any)=>!r.data._deleted);
+ const projects=records.filter((r:any)=>r.module==='projects');
+ const employees=records.filter((r:any)=>r.module==='employees'&&!r.data._archived);
+ const directory=records.filter((r:any)=>r.module==='project_managers');
+ const requests=records.filter((r:any)=>['leave','advances'].includes(r.module));
+ const payrolls=records.filter((r:any)=>r.module==='payroll');
+ const batches=records.filter((r:any)=>r.module==='payroll_batches');
+ const issues:any[]=[];
+ const add=(type:string,record:any,message:string)=>{if(issues.length<500)issues.push({type,record_id:record.id,module:record.module,company:record.company,code:record.data.code||record.code||'',name:record.data.name||'',message})};
+ for(const e of employees){
+  if(!e.data.project_id)continue;
+  const p=projects.find((x:any)=>x.id===e.data.project_id);
+  if(!p){add('missing_project',e,'الموظف مرتبط بمشروع غير موجود');continue}
+  if(p.company!==e.company&&!(Array.isArray(p.data._shared_companies)&&p.data._shared_companies.includes(e.company)))add('company_mismatch',e,'شركة الموظف غير مرتبطة بشركة المشروع');
+  const manager=String(p.data.manager_email||'').trim().toLowerCase();
+  if(!manager)add('unassigned_manager',e,'لا يوجد مدير معتمد للمشروع');
+  else if(String(e.data.manager_email||'').trim().toLowerCase()!==manager)add('manager_mismatch',e,'المدير المباشر للموظف لا يطابق مدير المشروع');
+ }
+ for(const p of projects){
+  const manager=String(p.data.manager_email||'').trim().toLowerCase();
+  if(!manager)continue;
+  if(!directory.some((d:any)=>d.company===p.company&&String(d.data.email||'').trim().toLowerCase()===manager))add('missing_manager_directory',p,'مدير المشروع غير مسجل في دليل الشركة');
+ }
+ for(const r of requests){
+  const employee=employees.find((x:any)=>x.id===r.data.employee_id&&x.company===r.company);
+  if(!employee)add('missing_request_employee',r,'طلب مرتبط بموظف غير موجود أو مؤرشف');
+ }
+ for(const p of payrolls){
+  if(!batches.some((b:any)=>b.id===p.data.batch_id&&b.company===p.company))add('missing_payroll_batch',p,'سطر راتب غير مرتبط بمسير شهري موجود');
+ }
+ return json({ok:true,generated_at:now,counts:{projects:projects.length,employees:employees.length,directory:directory.length,requests:requests.length,payroll:payrolls.length,batches:batches.length},issues,issue_count:issues.length,truncated:issues.length===500});
+}
 if(mod==='members'){if(u.role!=='admin')throw Error('403');return json({rows:(await db.prepare('SELECT m.*, EXISTS(SELECT 1 FROM auth.users a WHERE lower(a.email)=lower(m.email)) AS auth_ready, EXISTS(SELECT 1 FROM auth.users a WHERE lower(a.email)=lower(m.email) AND a.email_confirmed_at IS NOT NULL) AS auth_confirmed FROM members m ORDER BY m.email').all()).results});}
 const all=(await db.prepare('SELECT * FROM records ORDER BY updated_at DESC LIMIT 10000').all()).results.map(parse);const rows=all.filter((r:any)=>!r.data?._deleted&&(modules as any)[r.module]&&permittedRead(u,r.module)&&visible(u,r,all)).map((r:any)=>{if(!['project_manager','projects_director'].includes(u.role))return r;if(r.module==='employees')return {...r,data:{name:r.data.name,code:r.data.code,job:r.data.job,project_id:r.data.project_id}};if(r.data?.employee_snapshot){const {employee_snapshot,...safeData}=r.data;return {...r,data:safeData};}return r;});return json({user:{name:u.displayName,email:u.email,role:u.role,employee_id:u.employee_id,companies:u.companies,projects:u.projects,permissions:u.permissions},rows,companies});}catch(e:any){return json({error:e.message==='401'?'يرجى تسجيل الدخول':e.message==='403'?'الحساب غير مخوّل':'تعذر قراءة البيانات'},['401','403'].includes(e.message)?Number(e.message):500);}}
 export async function POST(req:Request){try{// Same-origin CSRF checks occur at the Next.js proxy before forwarding.
