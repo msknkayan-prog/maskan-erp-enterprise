@@ -677,7 +677,7 @@ test('pending requests center lists active request types with filters and exclud
  assert.match(ui,/module==='pending_requests'/);
  assert.match(ui,/الطلبات قيد الإجراء/);
  assert.match(ui,/pendingRequestTypes=\['leave','advances','payroll_batches','resignations','returns','terminations','leave_dues','settlements','warnings','appointments'\]/);
- assert.match(ui,/pendingStages=\['draft','returned','project_manager','projects_director','hr','finance'\]/);
+ assert.match(ui,/pendingStages=\['draft','returned','project_manager','projects_director','hr','finance','manager_review','projects_review','finance_review'\]/);
  assert.match(ui,/accessiblePendingTypes=pendingRequestTypes\.filter\(k=>user&&permittedRead\(user,k\)\)/);
  assert.match(ui,/\(!company\|\|r\.company===company\)/);
  assert.match(ui,/pendingType,setPendingType/);
