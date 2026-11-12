@@ -1199,3 +1199,17 @@ test('contract dashboard exposes operational readiness checks and routes to miss
  assert.match(ui,/Math\.abs\(unscheduled\)<\.01/);
  assert.match(css,/\.cf-readiness-grid/);
 });
+
+test('draft leave request deletion is audited and restricted to authorized HR/admin',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ for(const marker of ['deleteDraftRequest','حذف الطلب','delete_draft_request','revision:row.revision'])assert.ok(ui.includes(marker),marker);
+ for(const marker of ["body.action==='delete_draft_request'","old.status!=='draft'","_deleted_at:now","draft_request_deleted","status='draft' AND revision=?"])assert.ok(backend.includes(marker),marker);
+ assert.match(backend,/!r.data\?\._deleted/);
+});
+test('live records search matches rendered leave employee names and Arabic digits',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ for(const marker of ['companyDisplayName(r.company)','employee?.data?.name','enumOptions[f.type].find','relationModules[f.type]','searchWords.every','البحث في السجلات','مسح البحث'])assert.ok(ui.includes(marker),marker);
+ assert.match(ui,/\[٠-٩\]/);
+ assert.match(ui,/\[۰-۹\]/);
+});
