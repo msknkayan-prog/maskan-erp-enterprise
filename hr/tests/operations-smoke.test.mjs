@@ -1384,3 +1384,15 @@ test('manager assignment supports one director for multiple projects with employ
  assert.match(backend,/for\(const employee of syncEmployees\.filter/);
  assert.match(backend,/employees_linked:syncEmployees\.length/);
 });
+
+test('project manager form uses searched authorized name and department with server validation',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/aria-label="فلترة أسماء مدراء المشاريع"/);
+ assert.match(ui,/aria-label="اختيار اسم مدير المشروع من القائمة"/);
+ assert.match(ui,/aria-label="اختيار الإدارة والقسم من القائمة"/);
+ assert.match(ui,/aria-label="بريد حساب المدير المحدد"/);
+ assert.match(erp,/const canonicalName=String\(/);
+ assert.match(erp,/يجب اختيار اسم المدير من القائمة المعتمدة/);
+ assert.match(erp,/registeredDepartments\.has\(department\)/);
+});
