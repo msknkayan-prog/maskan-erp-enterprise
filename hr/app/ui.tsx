@@ -642,24 +642,25 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    if(!candidates.has(key))candidates.set(key,{name,email,company:manager.company,phone:manager.data?.phone||''});
   }
   const choices=[...candidates.values()].sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+  const keyOf=m=>m.company+'|'+(m.email||normalizeSearch(m.name));
   const found=choices.filter(m=>!managerSetup.managerSearch||normalizeSearch([m.name,m.email,m.company].join(' ')).includes(normalizeSearch(managerSetup.managerSearch)));
-  const selected=choices.find(m=>m.email&&m.email===managerSetup.email&&(!managerSetup.employeeId||rows.find(e=>e.id===managerSetup.employeeId)?.company===m.company));
+  const selected=choices.find(m=>keyOf(m)===(managerSetup.choiceKey||''));
   return <div style={{display:'grid',gap:7}}>
    <label>المدير المباشر المعيّن مسبقًا
     <input type="search" aria-label="فلترة المدراء المباشرين" placeholder="بحث بالاسم أو البريد" value={managerSetup.managerSearch||''} onChange={e=>setManagerSetup(p=>({...p,managerSearch:e.target.value}))}/>
-    <select aria-label="اختيار المدير المباشر لتعيينه مدير مشروع" value={selected?selected.company+'|'+selected.email:''} onChange={e=>{
-      const m=choices.find(x=>x.company+'|'+x.email===e.target.value);
-      const employee=m&&staff.find(x=>String(x.data?.email||'').trim().toLowerCase()===m.email&&x.company===m.company);
-      const account=m&&members.find(x=>String(x.email||'').trim().toLowerCase()===m.email);
+    <select aria-label="اختيار المدير المباشر لتعيينه مدير مشروع" value={selected?keyOf(selected):''} onChange={e=>{
+      const m=choices.find(x=>keyOf(x)===e.target.value);
+      const employee=m?.email&&staff.find(x=>String(x.data?.email||'').trim().toLowerCase()===m.email&&x.company===m.company&&normalizeSearch(x.data?.name||'')===normalizeSearch(m.name));
+      const account=m?.email&&members.find(x=>String(x.email||'').trim().toLowerCase()===m.email);
       const identity=employee?.data||{};
-      setManagerSetup(p=>({...p,employeeId:employee?.id||'',name:identity.name||m?.name||'',email:m?.email||'',phone:m?.phone||identity.phone||'',username:account?.username||('pm_'+String(identity.code||'').replace(/[^0-9a-zA-Z]/g,''))||'',ids:[],showDetails:false,selectedCompany:m?.company||'',managerSearch:''}));
+      setManagerSetup(p=>({...p,choiceKey:m?keyOf(m):'',employeeId:employee?.id||'',name:identity.name||m?.name||'',email:m?.email||'',phone:m?.phone||identity.phone||'',username:account?.username||'',ids:[],showDetails:!m?.email,selectedCompany:m?.company||'',managerSearch:''}));
     }}>
      <option value="">اختر من قائمة المدراء المباشرين…</option>
-     {found.map(m=><option key={m.company+'|'+m.email+'|'+m.name} value={m.company+'|'+m.email} disabled={!m.email}>{m.name} — {companyDisplayName(m.company)}{!m.email?' (يلزم استكمال البريد)':''}</option>)}
-     {selected&&!found.some(m=>m.email===selected.email&&m.company===selected.company)&&<option value={selected.company+'|'+selected.email}>{selected.name} — {companyDisplayName(selected.company)}</option>}
+     {found.map(m=><option key={keyOf(m)} value={keyOf(m)}>{m.name} — {companyDisplayName(m.company)}{!m.email?' · يتطلب إضافة بريد':''}</option>)}
+     {selected&&!found.some(m=>keyOf(m)===keyOf(selected))&&<option value={keyOf(selected)}>{selected.name} — {companyDisplayName(selected.company)}</option>}
     </select>
    </label>
-   <small>{found.length} مدير مطابق · {choices.length} مدير مسجل. يتطلب الربط بريد دخول صالحًا.</small>
+   <small>{found.length} مدير مطابق من {choices.length} · يمكن اختيار المدير بلا بريد واستكمال بيانات دخوله من الأسفل.</small>
   </div>;
  })()}
  {managerSetup.email&&!managerSetup.showDetails&&<div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',background:'#f7f2e7',padding:10,borderRadius:8,fontSize:13}}>
@@ -672,10 +673,10 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <select value={managerSetup.employeeId||''} onChange={e=>{
   const employee=rows.find(r=>r.module==='employees'&&r.id===e.target.value);
   const d=employee?.data||{};const email=String(d.email||'').trim().toLowerCase();const account=members.find(m=>String(m.email||'').toLowerCase()===email);
-  setManagerSetup(p=>({...p,employeeId:employee?.id||'',name:d.name||'',email,phone:d.phone||'',username:account?.username||('pm_'+String(d.code||'').replace(/[^0-9a-zA-Z]/g,''))||'',ids:[],selectedCompany:employee?.company||''}));
+  setManagerSetup(p=>({...p,choiceKey:'',employeeId:employee?.id||'',name:d.name||'',email,phone:d.phone||'',username:account?.username||'',ids:[],selectedCompany:employee?.company||''}));
  }}><option value="">مدير مستقل غير مرتبط بسجل موظف</option>{rows.filter(r=>r.module==='employees'&&!r.data?._archived&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(r.data?.employment_status||r.data?.employee_status||'').trim())&&(!company||r.company===company)).map(r=><option value={r.id} key={r.id}>{r.data?.name} — {r.data?.code||r.code} — {companyDisplayName(r.company)}</option>)}</select></label>
  <label>مدير مشروع لديه حساب سابق
- <select disabled={!!managerSetup.employeeId} value={members.some(m=>m.email===managerSetup.email&&m.role==='project_manager')?managerSetup.email:'new'} onChange={e=>{const email=e.target.value;const account=members.find(x=>x.email===email);const directory=rows.find(r=>r.module==='project_managers'&&r.data?.email===email);setManagerSetup(p=>({...p,employeeId:'',email:account?.email||'',name:directory?.data?.name||account?.display_name||'',username:account?.username||'',phone:directory?.data?.phone||'',ids:[]}))}}><option value="new">+ مدير مشروع جديد</option>{members.filter(m=>m.role==='project_manager'&&m.is_active!==false).map(m=><option value={m.email} key={m.email}>{rows.find(r=>r.module==='project_managers'&&r.data?.email===m.email)?.data?.name||m.display_name||m.username||m.email}</option>)}</select></label>
+ <select disabled={!!managerSetup.employeeId} value={members.some(m=>m.email===managerSetup.email&&m.role==='project_manager')?managerSetup.email:'new'} onChange={e=>{const email=e.target.value;const account=members.find(x=>x.email===email);const directory=rows.find(r=>r.module==='project_managers'&&r.data?.email===email);setManagerSetup(p=>({...p,choiceKey:'',employeeId:'',email:account?.email||'',name:directory?.data?.name||account?.display_name||'',username:account?.username||'',phone:directory?.data?.phone||'',ids:[]}))}}><option value="new">+ مدير مشروع جديد</option>{members.filter(m=>m.role==='project_manager'&&m.is_active!==false).map(m=><option value={m.email} key={m.email}>{rows.find(r=>r.module==='project_managers'&&r.data?.email===m.email)?.data?.name||m.display_name||m.username||m.email}</option>)}</select></label>
  <div className="form-grid">
  <label>اسم المدير<input required readOnly={!!managerSetup.employeeId} minLength={3} value={managerSetup.name} onChange={e=>setManagerSetup(p=>({...p,name:e.target.value}))}/></label>
  <label>البريد الإلكتروني<input required type="email" dir="ltr" value={managerSetup.email} onChange={e=>setManagerSetup(p=>({...p,email:e.target.value,ids:[]}))}/></label>
