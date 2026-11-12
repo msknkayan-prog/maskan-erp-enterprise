@@ -1327,3 +1327,30 @@ test('project manager can view payroll employees only from projects assigned to 
  assert.equal(visible({...u,projects:JSON.stringify(['p2'])},person('e1','p1'),all),false);
  assert.equal(visible(u,{id:'b1',module:'payroll_batches',company:'مسكن الكيان',data:{month:'2026-11'}},all),true);
 });
+
+test('existing employee can be chosen as project manager and linked to scoped approvals',()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/اختيار أحد الموظفين لتعيينه مدير مشروع/);
+ assert.match(ui,/aria-label="اختيار موظف مدير مشروع"/);
+ assert.match(ui,/employee_id:managerSetup\.employeeId\|\|null/);
+ assert.match(ui,/setManagerSetup\(\{employeeId:employee\.id/);
+ assert.match(backend,/if\(body\.action==='onboard_project_manager'\)/);
+ assert.match(backend,/employeeRow=await db\.prepare/);
+ assert.match(backend,/الموظف مرتبط بحساب دخول آخر/);
+ assert.match(backend,/employee_id=\?,companies=\?,projects=\?,username=\?/);
+ assert.match(backend,/project_manager_account:email,is_project_manager:true/);
+ assert.match(backend,/manager_email:email,manager_name:name/);
+ assert.match(backend,/project_manager_onboarding/);
+});
+test('manager payroll header visibility depends on assigned employee project',async()=>{
+ const {visible}=await import('../lib/modules.mjs');
+ const projects=[{id:'p1',company:'مسكن الكيان',module:'projects',data:{manager_email:'a@test.example'}},{id:'p2',company:'مسكن الكيان',module:'projects',data:{manager_email:'b@test.example'}}];
+ const payrolls=[{id:'r1',company:'مسكن الكيان',module:'payroll',data:{batch_id:'b1',project_id:'p1',employee_id:'e1'}},{id:'r2',company:'مسكن الكيان',module:'payroll',data:{batch_id:'b2',project_id:'p2',employee_id:'e2'}}];
+ const batches=[{id:'b1',company:'مسكن الكيان',module:'payroll_batches',data:{}},{id:'b2',company:'مسكن الكيان',module:'payroll_batches',data:{}}];
+ const records=[...projects,...payrolls,...batches];
+ const user={role:'project_manager',email:'a@test.example',companies:'*',projects:'["p1"]'};
+ assert.equal(visible(user,batches[0],records),true);
+ assert.equal(visible(user,batches[1],records),false);
+ assert.equal(visible(user,payrolls[1],records),false);
+});
