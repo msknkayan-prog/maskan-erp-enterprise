@@ -404,20 +404,26 @@ if(mod==='employees'&&data.direct_manager_id){
 }
 if(mod==='employees'&&data.project_id){
  const project=await db.prepare("SELECT data,company FROM records WHERE module='projects' AND id=?").bind(data.project_id).first<any>();
- if(project){
-  const details=JSON.parse(project.data);
-  const managerEmail=String(details.manager_email||'').trim().toLowerCase();
-  if(managerEmail){
-   const manager=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
-   if(!data.direct_manager_id){
-    data.manager=manager?.name||details.manager_name||data.manager||'';
-    data.manager_email=managerEmail;
-   }
-  }else{
-   // The original employee roster is the authority for managers until an
-   // actual login is assigned. Never erase imported manager names on edit.
-   if(!data.direct_manager_id){data.manager=details.manager_name||data.manager||'';data.manager_email='';}
-  }
+ if(!project)throw Error('مشروع الموظف غير موجود');
+ const details=JSON.parse(project.data);
+ if(project.company!==body.company&&!(Array.isArray(details._shared_companies)&&details._shared_companies.includes(body.company)))throw Error('المشروع لا يتبع شركة الموظف');
+ const managerEmail=String(details.manager_email||'').trim().toLowerCase();
+ if(managerEmail){
+  const managerRow=(await db.prepare("SELECT id,data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results.find((r:any)=>String(JSON.parse(r.data).email||'').trim().toLowerCase()===managerEmail);
+  if(!managerRow)throw Error('سجل مدير المشروع غير موجود في شركة الموظف');
+  const manager=JSON.parse(managerRow.data);
+  // Only the project owner sets both direct and project manager; employee edits never transfer a project.
+  data.direct_manager_id=managerRow.id;
+  data.manager=String(manager.name||details.manager_name||'');
+  data.manager_email=managerEmail;
+  data.manager_phone=String(manager.phone||details.manager_phone||'');
+  data.supervisor_account=managerEmail;
+ }else if(data.direct_manager_id){
+  throw Error('عيّن المدير المسؤول في سجل المشروع قبل ربط مدير مباشر بالموظف');
+ }else{
+  data.manager_email='';
+  data.manager_phone='';
+  data.supervisor_account='';
  }
 }
 const transferringEmployee=mod==='employees'&&Boolean(old)&&old.company!==body.company;
@@ -468,6 +474,7 @@ if(mod!=='employees'&&['leave','advances','warnings','resignations','returns','t
    if(managerEmail){
     data.project_id=employee.project_id;
     data.project_manager={name:manager?.name||projectDetails.manager_name||'',email:managerEmail,phone:manager?.phone||'',project_name:projectDetails.name||''};
+    data.direct_manager={name:data.project_manager.name,email:managerEmail,phone:data.project_manager.phone,directory_id:snapshot.direct_manager_id};
    }
   }
  }
