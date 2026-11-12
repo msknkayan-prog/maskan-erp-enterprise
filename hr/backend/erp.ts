@@ -109,9 +109,16 @@ if(body.action==='update_member'){
  if(body.projects!=='*'&&(!Array.isArray(body.projects)||body.projects.some(id=>typeof id!=='string')))throw Error('نطاق المشاريع غير صالح');
  if(body.role==='project_manager'&&body.projects!=='*'){
  if(!Array.isArray(body.projects)||!body.projects.length)throw Error('حدد مشروعًا واحدًا على الأقل لمدير المشروع');
- const projectRows=(await db.prepare("SELECT id,company FROM records WHERE module='projects'").all()).results;
- const allowedCompanies=body.companies==='*'?null:body.companies;
- if(body.projects.some((id:string)=>!projectRows.some((r:any)=>r.id===id&&(!allowedCompanies||allowedCompanies.includes(r.company)))))throw Error('المشاريع المختارة لا تتبع الشركات المسموح بها أو لم تعد موجودة');
+ if(new Set(body.projects).size!==body.projects.length)throw Error('لا يجوز تكرار نفس المشروع ضمن صلاحيات مدير المشروع');
+ const projectRows=(await db.prepare("SELECT id,company,data FROM records WHERE module='projects'").all()).results;
+ const allowedCompanies=body.companies==='*'||body.companies===undefined?null:body.companies;
+ if(body.projects.some((id:string)=>!projectRows.some((r:any)=>{
+  if(r.id!==id)return false;
+  const d=JSON.parse(r.data||'{}');
+  const shared=Array.isArray(d._shared_companies)?d._shared_companies:[];
+  const allowed=!allowedCompanies||allowedCompanies.includes(r.company)||allowedCompanies.some((c:string)=>shared.includes(c));
+  return allowed&&String(d.manager_email||'').trim().toLowerCase()===email;
+ })))throw Error('يمكن منح المدير صلاحية المشاريع المعيّن مديرًا لها فقط، وضمن شركاته المسموحة');
 }
 
  if(email!==oldEmail&&await db.prepare('SELECT email FROM members WHERE email=?').bind(email).first())throw Error('البريد الجديد مسجل لمستخدم آخر');
@@ -149,9 +156,16 @@ if(body.action==='update_member'){
 if(body.action==='member'){if(u.role!=='admin')throw Error('403');const email=String(body.email||'').trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!['hr','administrative_assistant','finance','administrative_manager','project_manager','projects_director','employee'].includes(body.role))throw Error('بيانات المستخدم غير صالحة');const username=String(body.username||'').trim().replace(/\s+/g,' ').toLowerCase();if(username&&(!/^[\p{L}][\p{L}\p{N} ._-]{2,63}$/u.test(username)||username.includes('  ')))throw Error('اسم المستخدم من 3 إلى 64 حرفًا ويقبل الحروف العربية والإنجليزية والمسافات');if(body.permissions&&(typeof body.permissions!=='object'||Array.isArray(body.permissions)||Object.entries(body.permissions).some(([k,v])=>typeof v!=='boolean'||!/^([a-z_]+):(view|edit|approve)$/.test(k))))throw Error('صلاحيات غير صالحة');if(body.projects!=='*'&&body.projects!==undefined&&(!Array.isArray(body.projects)||body.projects.some((id:any)=>typeof id!=='string')))throw Error('نطاق مشاريع غير صالح');
 if(body.role==='project_manager'&&body.projects!=='*'){
  if(!Array.isArray(body.projects)||!body.projects.length)throw Error('حدد مشروعًا واحدًا على الأقل لمدير المشروع');
- const projectRows=(await db.prepare("SELECT id,company FROM records WHERE module='projects'").all()).results;
- const allowedCompanies=body.companies==='*'?null:body.companies;
- if(body.projects.some((id:string)=>!projectRows.some((r:any)=>r.id===id&&(!allowedCompanies||allowedCompanies.includes(r.company)))))throw Error('المشاريع المختارة لا تتبع الشركات المسموح بها أو لم تعد موجودة');
+ if(new Set(body.projects).size!==body.projects.length)throw Error('لا يجوز تكرار نفس المشروع ضمن صلاحيات مدير المشروع');
+ const projectRows=(await db.prepare("SELECT id,company,data FROM records WHERE module='projects'").all()).results;
+ const allowedCompanies=body.companies==='*'||body.companies===undefined?null:body.companies;
+ if(body.projects.some((id:string)=>!projectRows.some((r:any)=>{
+  if(r.id!==id)return false;
+  const d=JSON.parse(r.data||'{}');
+  const shared=Array.isArray(d._shared_companies)?d._shared_companies:[];
+  const allowed=!allowedCompanies||allowedCompanies.includes(r.company)||allowedCompanies.some((c:string)=>shared.includes(c));
+  return allowed&&String(d.manager_email||'').trim().toLowerCase()===email;
+ })))throw Error('يمكن منح المدير صلاحية المشاريع المعيّن مديرًا لها فقط، وضمن شركاته المسموحة');
 }
 if(body.companies!=='*'&&body.companies!==undefined&&(!Array.isArray(body.companies)||body.companies.some((c:any)=>!companies.includes(c))))throw Error('نطاق شركات غير صالح');const contactEmail=String(body.contact_email||email).trim().toLowerCase();
 if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail))throw Error('بريد التواصل غير صالح');
