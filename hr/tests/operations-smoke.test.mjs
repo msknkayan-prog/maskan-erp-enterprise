@@ -1357,3 +1357,17 @@ test('manager payroll header visibility depends on assigned employee project',as
  assert.equal(visible(user,batches[1],records),false);
  assert.equal(visible(user,payrolls[1],records),false);
 });
+
+test('direct manager and project manager use the same canonical project assignment',()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(backend,/data\.direct_manager_id=managerRow\.id/);
+ assert.match(backend,/data\.manager_email=managerEmail/);
+ assert.match(backend,/data\.supervisor_account=managerEmail/);
+ assert.match(backend,/data\.direct_manager=\{name:data\.project_manager\.name,email:managerEmail/);
+ assert.match(ui,/const projectManagerEmail=String\(chosenProject\?\.data\?\.manager_email/);
+ assert.match(ui,/const linkedManager=available\.find/);
+ assert.match(ui,/value=\{linkedManager\?\.id\|\|''\}/);
+ assert.match(ui,/direct_manager_id:manager\?\.id\|\|''/);
+ assert.match(ui,/direct_name:projectManager\?\.data\.name\|\|project\.data\.manager_name/);
+});
