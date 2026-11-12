@@ -1268,3 +1268,12 @@ test('leave and advance forms show calculated return, ticket and installment pre
  const backend=readFileSync(new URL('../backend/modules.mjs',import.meta.url),'utf8');
  for(const marker of ['leaveNextDate','ticket_eligibility','installment_amount','final_installment'])assert.ok(backend.includes(marker),marker);
 });
+
+test('leave request grid and editor show days, accrued entitlement and projected remaining balance',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ for(const token of ['عدد أيام الإجازة','الرصيد المستحق','الرصيد المتبقي بعد الطلب','leaveBalanceFor','leave-balance-summary','المستحق حتى اليوم','المتوقع بعد اعتماد الطلب','المسودات لا تخصم'])assert.ok(ui.includes(token),token);
+ assert.match(ui,/x.status==='approved'/);
+ assert.match(ui,/alreadyApproved/);
+ assert.match(css,/\.leave-balance-summary/);
+});
