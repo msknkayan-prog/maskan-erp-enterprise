@@ -1235,3 +1235,36 @@ test('leave UI allows adding/removing holiday dates and displays automatic net d
  for(const marker of ['addLeaveHolidayDate','leaveChargedDays','leaveCalendarDays','إضافة يوم عطلة','أيام الإجازة المحتسبة','leave-holiday-tags','holiday_policy'])assert.ok(ui.includes(marker),marker);
  assert.match(ui,/f\.key==='days'\|\|f\.key==='end'/);
 });
+
+test('leave expected return and ticket eligibility are derived safely',async()=>{
+ const {normalize,leaveNextDate}=await import('../lib/modules.mjs');
+ assert.equal(leaveNextDate('2026-11-15'),'2026-11-16');
+ assert.equal(leaveNextDate('2026-12-31'),'2027-01-01');
+ assert.equal(leaveNextDate('2026-02-30'),'');
+ const payload={company:'مسكن الكيان',data:{employee_id:'test',leave_type:'annual',start:'2026-11-12',end:'2026-11-15',days:4,holiday_policy:'include',ticket:'yes',ticket_due_date:'2026-12-01',expected_return:'2025-01-01'}};
+ const out=normalize('leave',payload);
+ assert.equal(out.expected_return,'2026-11-16');
+ assert.equal(out.ticket,'yes');
+ assert.equal(out.ticket_due_date,'2026-12-01');
+ const no=normalize('leave',{...payload,data:{...payload.data,ticket:'no',ticket_due_date:'2026-12-01'}});
+ assert.equal(no.ticket_due_date,'');
+ assert.equal(normalize('leave',{...payload,data:{...payload.data,ticket:'نعم'}}).ticket,'yes');
+ assert.throws(()=>normalize('leave',{...payload,data:{...payload.data,ticket:'unknown'}}),/استحقاق تذكرة/);
+});
+test('advance installment amount is exact to halalas and invalid plans are rejected',async()=>{
+ const {normalize}=await import('../lib/modules.mjs');
+ const payload={company:'مسكن الكيان',data:{employee_id:'test',amount:1000,date:'2026-11-12',installments:3,first_month:'2026-12',notes:'ظرف طارئ'}};
+ const out=normalize('advances',payload);
+ assert.equal(out.installment_amount,333.33);
+ assert.equal(out.final_installment,333.34);
+ assert.equal(Math.round((out.installment_amount*2+out.final_installment)*100),100000);
+ assert.throws(()=>normalize('advances',{...payload,data:{...payload.data,installments:61}}),/عدد أقساط/);
+ assert.throws(()=>normalize('advances',{...payload,data:{...payload.data,first_month:'2026-10'}}),/شهر أول قسط/);
+ assert.throws(()=>normalize('advances',{...payload,data:{...payload.data,installments:3,first_month:''}}),/حدد شهر/);
+});
+test('leave and advance forms show calculated return, ticket and installment preview',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ for(const marker of ['expected_return','ticket_due_date','ticket','leaveNextDate','المباشرة المتوقعة','القسط الدوري','القسط الأخير'])assert.ok(ui.includes(marker),marker);
+ const backend=readFileSync(new URL('../backend/modules.mjs',import.meta.url),'utf8');
+ for(const marker of ['leaveNextDate','ticket_eligibility','installment_amount','final_installment'])assert.ok(backend.includes(marker),marker);
+});
