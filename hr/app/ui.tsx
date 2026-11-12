@@ -117,7 +117,20 @@ async function uploadCompanyLogo(file){
  finally{setSaving(false)}
 }
 async function post(body){const r=await fetch('/api/erp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error);return d}
-async function save(e){e.preventDefault();if(module==='employees'&&employeeReadOnly){notify('انتقل إلى وضع التعديل أولًا');return;}
+async function deleteDraftRequest(row){
+  if(!row||row.status!=='draft'||!['leave','advances','resignations','warnings'].includes(row.module))return;
+  if(!['admin','hr'].includes(user?.role)||!permittedWrite(user||{},row.module)||!permission(user||{},row.module,'edit')){notify('ليس لديك صلاحية حذف الطلبات');return;}
+  if(!window.confirm('هل تؤكد حذف الطلب المسودة؟ سيختفي من السجل مع الاحتفاظ بسجل العملية للمراجعة. لا يمكن حذف الطلب المعتمد بهذه الطريقة.'))return;
+  setSaving(true);
+  try{
+   await post({action:'delete_draft_request',module:row.module,id:row.id,revision:row.revision});
+   if(edit?.id===row.id)setEdit(null);
+   notify('تم حذف الطلب المسودة من السجل بنجاح');
+   await refresh();
+  }catch(err){notify(err.message||'تعذر حذف الطلب');}
+  finally{setSaving(false);}
+ }
+ async function save(e){e.preventDefault();if(module==='employees'&&employeeReadOnly){notify('انتقل إلى وضع التعديل أولًا');return;}
  if(module==='employees'&&edit.dual_source_id){
  if(!companies.includes(edit.company)||edit.company===edit.dual_source_company){notify('اختر شركة ثانية مختلفة عن الشركة الأصلية');return;}
  if(rows.some(r=>r.module==='employees'&&r.company===edit.company&&!r.data?._archived&&String(r.data?.identity||'').trim()&&String(r.data.identity).trim()===String(edit.data.identity||'').trim())){notify('يوجد سجل موظف بنفس الهوية في الشركة المختارة؛ افتحه بدل تكراره');return;}
@@ -619,7 +632,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <button type="button" onClick={()=>openEmployee(row,true)}>عرض</button>
  {permittedWrite(user||{},'employees')&&<button type="button" onClick={()=>openEmployee(row,false)}>تعديل</button>}
  {permittedWrite(user||{},'employees')&&['admin','hr'].includes(user?.role)&&<button type="button" disabled={saving} onClick={()=>archiveEmployee(row,Boolean(row.data?._archived))}>{row.data?._archived?'استعادة الموظف':'حذف'}</button>}
- </>:<button onClick={()=>setEdit({...row,data:{...row.data}})}>{row.status==='draft'&&(permittedWrite(user||{},module))?'فتح / تعديل':'عرض'}</button>}{module==='advances'&&row.status==='approved'&&['admin','finance'].includes(user?.role)&&<button disabled={saving} onClick={()=>disburse(row)}>توثيق صرف السلفة</button>}{approvable&&<button disabled={saving} onClick={()=>transition(row)}>{row.status==='draft'?'إرسال للاعتماد':'اعتماد المرحلة'}</button>}{approvable&&row.status!=='draft'&&<button disabled={saving} onClick={()=>{const note=window.prompt('سبب الإعادة للمراجعة');if(note)transition(row,'return',note)}}>إعادة للمراجعة</button>}{approvable&&row.status!=='draft'&&<button disabled={saving} onClick={()=>{const note=window.prompt('سبب الرفض');if(note)transition(row,'reject',note)}}>رفض</button>}</div></td></tr>})}</tbody></table></div>}</section>}{module!=='payroll'&&<div className="footnote">{module==='leave'?'المتبقي = المتراكم منذ التعيين + تسوية الرصيد الافتتاحي − الإجازات المعتمدة. راجع الافتتاحي لمنع تكرار الاستحقاق.':module==='payroll'?'صافي الراتب = الأجر الشهري + المكافآت − الخصميات المدخلة. هذا سجل مستحقات ولا ينفذ دفعًا بنكيًا.':'التعديل متاح للمسودات. تسلسل الاعتماد: مدير المشروع ← إدارة المشاريع ← شؤون الموظفين ← الإدارة المالية.'}</div>}</>}
+ </>:<button onClick={()=>setEdit({...row,data:{...row.data}})}>{row.status==='draft'&&(permittedWrite(user||{},module))?'فتح / تعديل':'عرض'}</button>{row.status==='draft'&&['leave','advances','resignations','warnings'].includes(module)&&['admin','hr'].includes(user?.role)&&permittedWrite(user||{},module)&&permission(user||{},module,'edit')&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteDraftRequest(row)}>حذف الطلب</button>}}{module==='advances'&&row.status==='approved'&&['admin','finance'].includes(user?.role)&&<button disabled={saving} onClick={()=>disburse(row)}>توثيق صرف السلفة</button>}{approvable&&<button disabled={saving} onClick={()=>transition(row)}>{row.status==='draft'?'إرسال للاعتماد':'اعتماد المرحلة'}</button>}{approvable&&row.status!=='draft'&&<button disabled={saving} onClick={()=>{const note=window.prompt('سبب الإعادة للمراجعة');if(note)transition(row,'return',note)}}>إعادة للمراجعة</button>}{approvable&&row.status!=='draft'&&<button disabled={saving} onClick={()=>{const note=window.prompt('سبب الرفض');if(note)transition(row,'reject',note)}}>رفض</button>}</div></td></tr>})}</tbody></table></div>}</section>}{module!=='payroll'&&<div className="footnote">{module==='leave'?'المتبقي = المتراكم منذ التعيين + تسوية الرصيد الافتتاحي − الإجازات المعتمدة. راجع الافتتاحي لمنع تكرار الاستحقاق.':module==='payroll'?'صافي الراتب = الأجر الشهري + المكافآت − الخصميات المدخلة. هذا سجل مستحقات ولا ينفذ دفعًا بنكيًا.':'التعديل متاح للمسودات. تسلسل الاعتماد: مدير المشروع ← إدارة المشاريع ← شؤون الموظفين ← الإدارة المالية.'}</div>}</>}
 {module==='client_finance'&&clientFinanceAuthorized&&<ClientFinance user={user} company={company} profiles={rows} companyList={companies} projectManagers={rows.filter(r=>r.module==='project_managers').map(r=>r.data?.name||r.data?.display_name).filter(Boolean)}/>}
 {module==='attendance'&&<Attendance rows={rows} user={user} company={company} notify={notify}/>}
 {module==='migration'&&user?.role==='admin'&&<Migration notify={notify} onDone={refresh}/>}
