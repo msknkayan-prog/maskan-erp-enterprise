@@ -1233,7 +1233,7 @@ test('leave day count updates from both dates and selected holiday policy',async
 test('leave UI allows adding/removing holiday dates and displays automatic net day count',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  for(const marker of ['addLeaveHolidayDate','leaveChargedDays','leaveCalendarDays','إضافة يوم عطلة','أيام الإجازة المحتسبة','leave-holiday-tags','holiday_policy'])assert.ok(ui.includes(marker),marker);
- assert.match(ui,/f\.key==='days'\|\|f\.key==='end'/);
+ assert.match(ui,/f\.key==='days'\|\|f\.key==='expected_return'\|\|f\.key==='end'/);
 });
 
 test('leave expected return and ticket eligibility are derived safely',async()=>{
