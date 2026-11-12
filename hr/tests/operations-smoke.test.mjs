@@ -1396,3 +1396,30 @@ test('project manager form uses searched authorized name and department with ser
  assert.match(erp,/يجب اختيار اسم المدير من القائمة المعتمدة/);
  assert.match(erp,/registeredDepartments\.has\(department\)/);
 });
+
+test('invalid and cross-company scopes fail closed without crashing modules',async()=>{
+ const {visible}=await import('../lib/modules.mjs');
+ const projects=[
+  {id:'p-a',module:'projects',company:'Alpha',data:{manager_email:'manager@example.test'}},
+  {id:'p-b',module:'projects',company:'Beta',data:{manager_email:'manager@example.test'}}
+ ];
+ const manager={role:'project_manager',email:'manager@example.test',companies:'["Alpha"]',projects:'["p-a"]'};
+ assert.equal(visible(manager,projects[0],projects),true);
+ assert.equal(visible(manager,projects[1],projects),false);
+ const directory={id:'d-b',module:'project_managers',company:'Beta',data:{email:'manager@example.test'}};
+ assert.equal(visible(manager,directory,[...projects,directory]),false);
+ assert.equal(visible({...manager,projects:'not-json'},projects[0],projects),false);
+ assert.equal(visible({...manager,companies:'not-json'},projects[0],projects),false);
+ assert.equal(visible({...manager,projects:'{}'},projects[0],projects),false);
+ assert.equal(visible({...manager,projects:'[]'},projects[0],projects),false);
+});
+test('admin integrity report is read-only and scans linked HR modules',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(erp,/if\(mod==='integrity_report'\)/);
+ assert.match(erp,/if\(u.role!=='admin'\)throw Error\('403'\)/);
+ for(const type of ['missing_project','company_mismatch','manager_mismatch','missing_manager_directory','missing_request_employee','missing_payroll_batch'])assert.ok(erp.includes(type),type);
+ assert.match(ui,/module=integrity_report/);
+ assert.match(ui,/الفحص التشغيلي وترابط البيانات/);
+ assert.match(ui,/integrityReport\.issues/);
+});
