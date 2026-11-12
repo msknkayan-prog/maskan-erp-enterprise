@@ -780,7 +780,7 @@ test('HR directory choices expose only active project manager identities without
 test('employee editing preserves project manager names even before a project login is provisioned',()=>{
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- assert.match(erp,/data\.manager=details\.manager_name\|\|data\.manager\|\|''/);
+ assert.match(erp,/data\.manager=String\(manager\.name\|\|details\.manager_name\|\|''\)/);
  assert.match(erp,/data\.manager_email='';/);
  assert.match(ui,/directRow\?\.data\.name\|\|employeeData\.manager/);
 });
