@@ -32,7 +32,7 @@ if(module==='leave'){
  const nextReturn=leaveNextDate(out.end);
  if(!nextReturn)throw Error('تاريخ نهاية الإجازة غير صالح');
  out.expected_return=nextReturn;
- const ticket=String(out.ticket||'').trim().toLowerCase();
+ const ticket=String(out.ticket||'no').trim().toLowerCase();
  if(ticket==='نعم'||ticket==='yes')out.ticket='yes';
  else if(ticket==='لا'||ticket==='no')out.ticket='no';
  if(!['yes','no'].includes(out.ticket))throw Error('حدد استحقاق تذكرة السفر بنعم أو لا');
