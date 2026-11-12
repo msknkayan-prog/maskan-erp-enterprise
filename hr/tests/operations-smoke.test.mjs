@@ -703,7 +703,7 @@ test('project filter provides clickable immediate search results and retains cor
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/role="listbox" aria-label="نتائج البحث عن المشاريع"/);
  assert.match(ui,/role="option" aria-selected=\{edit\.data\.project_id===r\.id\}/);
- assert.match(ui,/onClick=\{\(\)=>\{setEdit\(\{\.\.\.edit,data:\{\.\.\.edit\.data,project_id:r\.id\}\}\);setEmployeeProjectSearch\(''\)\}\}/);
+ assert.match(ui,/project_id:r\.id,direct_manager_id:manager\?\.id\|\|''/);
  assert.match(ui,/r\.company===edit\.company/);
  assert.match(ui,/r\.data\.project_number/);
  assert.match(ui,/المشروع المحدد:/);
