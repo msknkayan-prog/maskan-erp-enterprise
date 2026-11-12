@@ -16,7 +16,17 @@ const db=env.DB;
 async function batchOf(id){const b=await db.prepare("SELECT * FROM records WHERE id=? AND module='payroll_batches'").bind(id).first();if(!b)throw Error('المسير غير موجود');return parse(b);}
 const isPrep=u=>['admin','administrative_assistant'].includes(u.role);
 const isManager=u=>['admin','project_manager'].includes(u.role);
-const canManageProject=(u,project)=>u.role==='admin'||(u.role==='project_manager'&&(u.projects==='*'||(project&&(()=>{try{return JSON.parse(u.projects||'[]').includes(project)}catch{return false}})())));
+const canManageProject=async(u,project,company)=>{
+ if(u.role==='admin')return true;
+ if(u.role!=='project_manager'||!project||!allowed(u,company))return false;
+ if(u.projects!=='*'){
+  try{if(!JSON.parse(u.projects||'[]').includes(project))return false}catch{return false}
+ }
+ const row=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(project).first();
+ if(!row)return false;
+ const data=JSON.parse(row.data);
+ return (row.company===company||Array.isArray(data._shared_companies)&&data._shared_companies.includes(company))&&String(data.manager_email||'').trim().toLowerCase()===String(u.email||'').trim().toLowerCase();
+};
 const isFinance=u=>['admin','finance'].includes(u.role);
 const isProjectsDirector=u=>['admin','projects_director'].includes(u.role);
 const nowIso=()=>new Date().toISOString();
@@ -177,7 +187,7 @@ export async function POST(req){
    if(managerEditing){
      const linked=await db.prepare("SELECT data FROM records WHERE id=? AND module='employees'").bind(employee.data.employee_id||'').first();
      const projectId=employee.data.project_id||(linked?JSON.parse(linked.data).project_id:'');
-     if(!canManageProject(u,projectId))return err('الموظف خارج مشاريع مدير المشروع المخوّل',403);
+     if(!await canManageProject(u,projectId,batch.company))return err('الموظف خارج مشاريع مدير المشروع المخوّل',403);
    }
    const input=body.data||{},old=employee.data;
    const basic=amount(input.basic,'الراتب الأساسي');
@@ -232,9 +242,19 @@ export async function POST(req){
   }else if(!modern&&action==='finance_approve'){
    if(!isFinance(u)||batch.status!=='finance_review')return err('المراجعة المالية ليست ضمن صلاحيتك أو المرحلة',403);
   }else if(action==='managers_approve'){
-   if(!modern||!isManager(u)||batch.status!=='manager_review')return err('مرحلة مدراء المشاريع فقط',403);
+   if(!modern||!['admin','projects_director'].includes(u.role)||batch.status!=='manager_review')return err('يكتمل تسليم المسير لإدارة المشاريع من المدير العام أو إدارة المشاريع بعد مراجعة مدراء المشاريع',403);
    const included=monthly.filter(r=>!r.data.excluded);
    if(!included.length||included.some(r=>!r.data.manager_reviewed))throw Error('لم تكتمل مراجعة مدراء المشاريع لجميع الموظفين');
+   const employees=(await db.prepare("SELECT id,data FROM records WHERE module='employees' AND company=?").bind(batch.company).all()).results;
+   const projects=(await db.prepare("SELECT id,company,data FROM records WHERE module='projects'").all()).results;
+   for(const row of included){
+    const employee=employees.find(e=>e.id===row.data.employee_id);
+    const projectId=String(row.data.project_id||employee&&JSON.parse(employee.data).project_id||'');
+    const assigned=projects.find(p=>p.id===projectId);
+    if(!assigned)throw Error('المسير يتضمن موظفًا دون مشروع مسجل: '+row.data.employee_name);
+    const managerEmail=String(JSON.parse(assigned.data).manager_email||'').toLowerCase();
+    if(!managerEmail||String(row.data.manager_reviewed_by||'').toLowerCase()!==managerEmail&&row.data.manager_reviewed_by!==u.email&&u.role!=='admin')throw Error('تحتاج مراجعة موظف من مدير مشروعه المخوّل: '+row.data.employee_name);
+   }
    // Each manager may review only their assigned projects; final handoff requires every included row marked reviewed.
   }else if(action==='projects_approve'){
    if(!isProjectsDirector(u)||batch.status!=='projects_review')return err('اعتماد إدارة المشاريع ليس ضمن صلاحياتك أو المرحلة الحالية',403);
