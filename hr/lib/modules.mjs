@@ -4,7 +4,7 @@ export const canonicalCompany=(value)=>{const name=String(value||'').trim().repl
 const f=(key,label,type='text',required=false)=>({key,label,type,required});
 export const modules={
  employees:{label:'الموظفون',singular:'موظف',icon:'users',group:'شؤون الموظفين',fields:[f('name','اسم الموظف','text',true),f('code','الرقم الوظيفي','text',true),f('job','المسمى الوظيفي'),f('department','القسم'),f('project_id','المشروع','project'),f('email','البريد الإلكتروني','email'),f('employment_status','حالة الموظف','employment'),f('nationality','الجنسية'),f('identity','الهوية / الإقامة'),f('phone','الجوال'),f('home_phone','هاتف البلد الأم'),f('hire_date','تاريخ التعيين','date'),f('salary','الأجر الشهري الإجمالي','number',true),f('basic','الراتب الأساسي','number'),f('bank_amount','التحويل البنكي الشهري','number'),f('cash_amount','المبلغ كاش (محسوب تلقائيًا)','number'),f('sponsorship','حالة الكفالة','sponsorship',true),f('opening_leave','تسوية رصيد الإجازة','number'),f('bank','اسم البنك'),f('iban','الآيبان'),f('annual_days','الاستحقاق السنوي لغير المكفولين','number'),f('iqama_expiry','انتهاء الإقامة','date'),f('contract_expiry','انتهاء العقد','date'),f('manager','المدير المباشر'),f('payment_method','طريقة الصرف','method'),f('supervisor_account','رقم حساب المدير المباشر'),f('last_leave_request','آخر طلب إجازة معتمد'),f('notes','ملاحظات','textarea')]},
- leave:{label:'الإجازات',singular:'طلب إجازة',icon:'calendar',group:'شؤون الموظفين',fields:[f('employee_id','الموظف','employee',true),f('leave_type','نوع الإجازة','leave_type'),f('contact_phone','هاتف التواصل أثناء الإجازة'),f('replacement','الموظف البديل'),f('request_date','تاريخ طلب الإجازة','date'),f('last_work_day','آخر يوم عمل قبل الإجازة','date'),f('last_return','آخر مباشرة بعد إجازة','date'),f('conduct','تقييم السلوك'),f('ticket','استحقاق تذكرة السفر'),f('other_reason','توضيح الأسباب الأخرى'),f('start','من تاريخ','date',true),f('end','إلى تاريخ','date',true),f('holiday_policy','احتساب أيام العطلة','holiday_policy'),f('holiday_dates','تواريخ العطلات الواقعة داخل الإجازة'),f('days','عدد الأيام','number',true),f('notes','الملاحظات','textarea')]},
+ leave:{label:'الإجازات',singular:'طلب إجازة',icon:'calendar',group:'شؤون الموظفين',fields:[f('employee_id','الموظف','employee',true),f('leave_type','نوع الإجازة','leave_type'),f('contact_phone','هاتف التواصل أثناء الإجازة'),f('replacement','الموظف البديل'),f('request_date','تاريخ طلب الإجازة','date'),f('last_work_day','آخر يوم عمل قبل الإجازة','date'),f('last_return','تاريخ آخر مباشرة سابقة','date'),f('conduct','تقييم السلوك'),f('ticket','استحقاق تذكرة السفر','ticket_eligibility'),f('ticket_due_date','تاريخ استحقاق التذكرة','date'),f('other_reason','توضيح الأسباب الأخرى'),f('start','من تاريخ','date',true),f('end','إلى تاريخ','date',true),f('expected_return','تاريخ المباشرة المتوقع بعد الإجازة','date'),f('holiday_policy','احتساب أيام العطلة','holiday_policy'),f('holiday_dates','تواريخ العطلات الواقعة داخل الإجازة'),f('days','عدد الأيام','number',true),f('notes','الملاحظات','textarea')]},
  advances:{label:'السلف',singular:'طلب سلفة',icon:'wallet',group:'شؤون الموظفين',fields:[f('employee_id','الموظف','employee',true),f('amount','قيمة السلفة','number',true),f('date','التاريخ','date',true),f('installments','عدد الأقساط','number'),f('first_month','شهر أول قسط','month'),f('notes','سبب السلفة','textarea',true)]},
  warnings:{label:'الإنذارات',singular:'إنذار',icon:'alert',group:'شؤون الموظفين',fields:[f('employee_id','الموظف','employee',true),f('warning_type','نوع الإنذار','warning_type'),f('sequence','رقم الإنذار','number'),f('required_action','الإجراء المطلوب'),f('name','موضوع الإنذار','text',true),f('date','التاريخ','date',true),f('notes','تفاصيل الإنذار','textarea',true)]},
  payroll_batches:{label:'المسيرات الشهرية',singular:'مسير شهري',icon:'chart',group:'المالية',fields:[f('month','الشهر'),f('employee_count','عدد الموظفين','number')]},
@@ -29,6 +29,14 @@ const numValue=v=>Number(v||0);
 export function normalize(module,input){const spec=modules[module];if(!spec)throw Error('نافذة غير معروفة');if(!companies.includes(input.company))throw Error('حدد الشركة');const out={};for(const field of spec.fields){let v=String(input.data?.[field.key]??'').trim();if(v.length>4000)throw Error('بيانات طويلة');if(enumOptions[field.type]&&v&&!enumOptions[field.type].some(o=>o[0]===v))throw Error('اختيار غير صالح: '+field.label);if(field.required&&!v)throw Error('أكمل '+field.label);if(field.type==='number'){let n=Number(v||0);if(!Number.isFinite(n)||Math.abs(n)>1e9||(n<0&&field.key!=='opening_leave'))throw Error('قيمة غير صالحة: '+field.label);out[field.key]=n;}else{if(field.type==='email'&&v&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))throw Error('بريد إلكتروني غير صحيح');if(field.type==='coordinate'&&v){let n=Number(v),limit=field.key==='latitude'?90:180;if(!Number.isFinite(n)||Math.abs(n)>limit)throw Error('إحداثيات غير صحيحة');}if(['date','month'].includes(field.type)&&v){const re=field.type==='month'?/^\d{4}-(0[1-9]|1[0-2])$/:/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/;if(!re.test(v)||(field.type==='date'&&(isNaN(Date.parse(v))||new Date(v).toISOString().slice(0,10)!==v)))throw Error('تاريخ غير صالح');}out[field.key]=v;}}
 if(module==='employees'&&/^(?:مراقب|مشرف)(?:\s*[-–/]\s*(?:مراقب|مشرف))?$/.test(String(out.job||'').trim()))out.job='مشرف';
 if(module==='leave'){
+ const nextReturn=leaveNextDate(out.end);
+ if(!nextReturn)throw Error('تاريخ نهاية الإجازة غير صالح');
+ out.expected_return=nextReturn;
+ const ticket=String(out.ticket||'').trim().toLowerCase();
+ if(ticket==='نعم'||ticket==='yes')out.ticket='yes';
+ else if(ticket==='لا'||ticket==='no')out.ticket='no';
+ if(!['yes','no'].includes(out.ticket))throw Error('حدد استحقاق تذكرة السفر بنعم أو لا');
+ if(out.ticket==='no')out.ticket_due_date='';
  const fixed=fixedLeaveDays(out.leave_type);
  const calendar=leaveCalendarDays(out.start,out.end);
  const holidays=parseLeaveHolidayDates(out.holiday_dates,out.start,out.end);
@@ -42,7 +50,17 @@ if(module==='leave'){
  if(fixed!==null&&(out.days!==fixed||out.end!==leaveEndDate(out.start,fixed)))throw Error('مدة الإجازة الخاصة يجب أن تطابق النوع المحدد وتاريخ البداية');
  if(out.end<out.start||out.days<=0||out.days>Math.floor((Date.parse(out.end)-Date.parse(out.start))/86400000)+1)throw Error('راجع فترة الإجازة وأيامها');
  if(fixed!==null)out.balance_deducted=false;
-}if(module==='employees'){const extra=input.data?.extra_fields;if(extra&&typeof extra==='object'&&!Array.isArray(extra)){if(Object.keys(extra).length>100)throw Error('حقول إضافية كثيرة');out.extra_fields=Object.fromEntries(Object.entries(extra).map(([k,v])=>{if(k.length>120||String(v).length>1000||['__proto__','constructor','prototype'].includes(k))throw Error('حقل إضافي غير صالح');return [k,String(v)]}));}if(!['yes','no','unknown'].includes(out.sponsorship))throw Error('حالة الكفالة غير صحيحة');if(out.hire_date>saudiDate())throw Error('تاريخ التعيين في المستقبل');let cents=Math.round(out.salary*100);
+ }if(module==='advances'){
+  if(out.installments){
+   if(!Number.isInteger(out.installments)||out.installments<1||out.installments>60)throw Error('عدد أقساط السلفة يجب أن يكون بين 1 و60');
+   if(!out.first_month)throw Error('حدد شهر بداية استقطاع أقساط السلفة');
+   if(out.first_month<out.date.slice(0,7))throw Error('شهر أول قسط لا يمكن أن يسبق شهر طلب السلفة');
+  }else if(out.first_month)throw Error('حدد عدد الأقساط قبل شهر أول قسط');
+  const cents=Math.round(out.amount*100);
+  const regularCents=out.installments?Math.floor(cents/out.installments):0;
+  out.installment_amount=regularCents/100;
+  out.final_installment=out.installments?(cents-regularCents*(out.installments-1))/100:0;
+ }if(module==='employees'){const extra=input.data?.extra_fields;if(extra&&typeof extra==='object'&&!Array.isArray(extra)){if(Object.keys(extra).length>100)throw Error('حقول إضافية كثيرة');out.extra_fields=Object.fromEntries(Object.entries(extra).map(([k,v])=>{if(k.length>120||String(v).length>1000||['__proto__','constructor','prototype'].includes(k))throw Error('حقل إضافي غير صالح');return [k,String(v)]}));}if(!['yes','no','unknown'].includes(out.sponsorship))throw Error('حالة الكفالة غير صحيحة');if(out.hire_date>saudiDate())throw Error('تاريخ التعيين في المستقبل');let cents=Math.round(out.salary*100);
 const changedFromBasic=input.salary_edit_source==='basic';
 if(changedFromBasic){
  const basicCents=Math.round(Number(input.data?.basic??0)*100);
@@ -62,13 +80,20 @@ if(bankCents>cents)throw Error('التحويل البنكي لا يجوز أن �
 out.bank_amount=bankCents/100;out.cash_amount=(cents-bankCents)/100;}
 if(module==='settlements'){const sum=['wages_amount','leave_amount','ticket_amount','service_amount','other_amount'].reduce((n,k)=>n+numValue(out[k]),0);if(sum>0)out.amount=Math.round(sum*100)/100;}if(module==='payroll'&&!['bank','cash','mixed'].includes(out.method))throw Error('حدد طريقة الصرف');if(['payments','contracts','purchases','advances'].includes(module)&&out.amount<=0)throw Error('المبلغ يجب أن يكون أكبر من صفر');return out;}
 export const operationalModules=['employees','projects','project_managers','appointments','warnings','returns','terminations','company_profiles'];
-export const enumOptions={sponsorship:[['yes','على الكفالة'],['no','خارج الكفالة'],['unknown','غير محدد']],method:[['bank','تحويل بنكي'],['cash','كاش'],['mixed','كاش وتحويل بنكي']],employment:[['active','نشط'],['inactive','غير نشط'],['on_leave','في إجازة'],['needs_review','بحاجة مراجعة']],holiday_policy:[['include','احتساب العطلة ضمن أيام الإجازة'],['exclude','استبعاد العطلة من الرصيد المخصوم']],leave_type:[['annual','سنوية'],['sick','مرضية'],['unpaid','بدون راتب'],['emergency','طارئة'],['bereavement','إجازة وفاة – 5 أيام'],['wife_childbirth','إجازة وضع الزوجة – شهران (60 يومًا)'],['marriage','إجازة زواج – 5 أيام'],['newborn','إجازة مولود – 3 أيام'],['other','أخرى']],warning_type:[['first','إنذار أول'],['second','إنذار ثان'],['final','إنذار نهائي'],['notice','تنبيه']],case_status:[['draft','قيد التجهيز'],['completed','مكتمل التسجيل'],['cancelled','ملغي']]};
+export const enumOptions={sponsorship:[['yes','على الكفالة'],['no','خارج الكفالة'],['unknown','غير محدد']],method:[['bank','تحويل بنكي'],['cash','كاش'],['mixed','كاش وتحويل بنكي']],employment:[['active','نشط'],['inactive','غير نشط'],['on_leave','في إجازة'],['needs_review','بحاجة مراجعة']],ticket_eligibility:[['yes','نعم'],['no','لا']],holiday_policy:[['include','احتساب العطلة ضمن أيام الإجازة'],['exclude','استبعاد العطلة من الرصيد المخصوم']],leave_type:[['annual','سنوية'],['sick','مرضية'],['unpaid','بدون راتب'],['emergency','طارئة'],['bereavement','إجازة وفاة – 5 أيام'],['wife_childbirth','إجازة وضع الزوجة – شهران (60 يومًا)'],['marriage','إجازة زواج – 5 أيام'],['newborn','إجازة مولود – 3 أيام'],['other','أخرى']],warning_type:[['first','إنذار أول'],['second','إنذار ثان'],['final','إنذار نهائي'],['notice','تنبيه']],case_status:[['draft','قيد التجهيز'],['completed','مكتمل التسجيل'],['cancelled','ملغي']]};
 export const specialLeaveDays=Object.freeze({bereavement:5,wife_childbirth:60,marriage:5,newborn:3});
 export const fixedLeaveDays=type=>specialLeaveDays[type]||null;
 export function leaveEndDate(start,days){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(start||''))||!Number.isInteger(Number(days))||Number(days)<1)return '';
  const date=new Date(start+'T00:00:00Z');if(Number.isNaN(date.getTime())||date.toISOString().slice(0,10)!==start)return '';
  date.setUTCDate(date.getUTCDate()+Number(days)-1);return date.toISOString().slice(0,10);
+}
+export function leaveNextDate(end){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(String(end||'')))return '';
+ const date=new Date(end+'T00:00:00Z');
+ if(Number.isNaN(date.getTime())||date.toISOString().slice(0,10)!==end)return '';
+ date.setUTCDate(date.getUTCDate()+1);
+ return date.toISOString().slice(0,10);
 }
 export function leaveCalendarDays(start,end){
  const re=/^\d{4}-\d{2}-\d{2}$/;
