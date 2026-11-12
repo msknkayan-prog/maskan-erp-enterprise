@@ -167,8 +167,9 @@ if(body.action==='assign_project_manager'){
   let companyScope:any=[];try{companyScope=JSON.parse(manager.companies||'[]')}catch{}
   if(!Array.isArray(companyScope)||!companyScope.includes(project.company))throw Error('المدير غير مخوّل لشركة المشروع');
  }
- const directory=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(project.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((d:any)=>String(d.email||'').trim().toLowerCase()===email);
- if(!directory)throw Error('أضف المدير إلى دليل مدراء المشاريع لهذه الشركة أولًا');
+ const directoryRow=(await db.prepare("SELECT id,data FROM records WHERE module='project_managers' AND company=?").bind(project.company).all()).results.find((r:any)=>String(JSON.parse(r.data||'{}').email||'').trim().toLowerCase()===email);
+ if(!directoryRow)throw Error('أضف المدير إلى دليل مدراء المشاريع لهذه الشركة أولًا');
+ const directory=JSON.parse(directoryRow.data);
  const prior=JSON.parse(project.data||'{}');
  const previousManager=String(prior.manager_email||'').trim().toLowerCase();
  if(previousManager===email)return json({ok:true,unchanged:true});
@@ -189,11 +190,22 @@ if(body.action==='assign_project_manager'){
    if(Array.isArray(oldScope)&&oldScope.includes(projectId))statements.push(db.prepare("UPDATE members SET projects=? WHERE lower(email)=? AND role='project_manager'").bind(JSON.stringify(oldScope.filter((id:string)=>id!==projectId)),previousManager));
   }
  }
+ const affected=(await db.prepare("SELECT id,company,data,revision FROM records WHERE module='employees' AND company=?").bind(project.company).all()).results.filter((r:any)=>{
+  const d=JSON.parse(r.data||'{}');
+  return !d._archived&&String(d.project_id||'')===projectId;
+ });
+ if(affected.length>1500)throw Error('عدد الموظفين في المشروع كبير؛ راجع إدارة المشاريع قبل إعادة التعيين');
+ for(const employee of affected){
+  const d=JSON.parse(employee.data||'{}');
+  const updatedEmployee={...d,manager:String(directory.name||''),manager_email:email,manager_phone:String(directory.phone||''),supervisor_account:email,direct_manager_id:directoryRow.id};
+  statements.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
+   .bind(JSON.stringify(updatedEmployee),now,mutation,employee.id,employee.revision));
+ }
  statements.push(db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)")
-  .bind(crypto.randomUUID(),u.email,projectId,'assign_project_manager',now,JSON.stringify({company:project.company,from:previousManager||null,to:email})));
+  .bind(crypto.randomUUID(),u.email,projectId,'assign_project_manager',now,JSON.stringify({company:project.company,from:previousManager||null,to:email,employees_linked:affected.length})));
  const result=await db.batch(statements);
  if(result.slice(0,-1).some((item:any)=>item?.meta?.changes!==1))throw Error('تعذر تحديث المشروع أو الصلاحيات؛ أعد تحديث الصفحة');
- return json({ok:true,manager_name:updated.manager_name,project_id:projectId});
+ return json({ok:true,manager_name:updated.manager_name,project_id:projectId,employees_linked:affected.length});
 }
 if(body.action==='onboard_project_manager'){
  if(u.role!=='admin')throw Error('403');
