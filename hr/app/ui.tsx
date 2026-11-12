@@ -76,7 +76,7 @@ async function saveManagerSetup(e){
  if(!managerSetup.ids.length)return notify('اختر مشروعًا واحدًا على الأقل');
  setManagerSetupBusy(true);
  try{
-  const result=await post({action:'onboard_project_manager',name:managerSetup.name,email:managerSetup.email,phone:managerSetup.phone,username:managerSetup.username,project_ids:managerSetup.ids});
+  const result=await post({action:'onboard_project_manager',name:managerSetup.name,email:managerSetup.email,phone:managerSetup.phone,username:managerSetup.username,project_ids:managerSetup.ids,employee_id:managerSetup.employeeId||null});
   let msg='تم ربط المدير بـ '+result.projects+' مشروع وتحديث حسابه وصلاحياته';
   try{
    const invitation=await post({action:'send_password_link',email:result.email});
@@ -602,23 +602,35 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {module==='project_managers'&&user?.role==='admin'&&<section className="panel" dir="rtl" style={{padding:16,marginBottom:12}}>
  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
  <div><h3 style={{margin:0}}>ربط مدراء المشاريع وإنشاء حسابات الدخول</h3><small>اختر مديرًا موجودًا أو أضف اسمًا جديدًا، ثم حدد مشاريعه. كل مشروع يرتبط بمدير واحد فقط.</small></div>
- <button className="primary" type="button" onClick={()=>setManagerSetup({name:'',email:'',username:'',phone:'',ids:[]})}><Plus size={16}/> إضافة مدير وربطه بالمشاريع</button></div>
+ <button className="primary" type="button" onClick={()=>setManagerSetup({employeeId:'',name:'',email:'',username:'',phone:'',ids:[]})}><Plus size={16}/> إضافة مدير وربطه بالمشاريع</button></div>
  </section>}
  {module==='project_managers'&&managerSetup&&<div className="modal-backdrop"><section className="modal" dir="rtl" style={{width:'min(94vw,760px)',maxHeight:'90vh',overflowY:'auto'}}>
  <div className="modal-head"><h2>إضافة مدير مشروع وربطه بالمشاريع</h2><button type="button" disabled={managerSetupBusy} onClick={()=>setManagerSetup(null)} aria-label="إغلاق"><X/></button></div>
  <form onSubmit={saveManagerSetup} style={{display:'grid',gap:14}}>
+ <label>اختيار أحد الموظفين لتعيينه مدير مشروع
+ <select value={managerSetup.employeeId||''} onChange={e=>{
+  const employee=rows.find(r=>r.module==='employees'&&r.id===e.target.value);
+  const d=employee?.data||{};
+  const email=String(d.email||'').trim().toLowerCase();
+  const account=members.find(m=>m.email?.toLowerCase()===email);
+  setManagerSetup(p=>({...p,employeeId:employee?.id||'',name:d.name||'',email,phone:d.phone||'',username:account?.username||('pm_'+String(d.code||'').replace(/[^0-9a-zA-Z]/g,''))||'',ids:[]}));
+ }}>
+ <option value="">اختيار مدير مستقل (غير مرتبط بسجل موظف)</option>
+ {rows.filter(r=>r.module==='employees'&&!r.data?._archived&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(r.data?.employment_status||r.data?.employee_status||'').trim())&&(!company||r.company===company)).map(r=><option key={r.id} value={r.id}>{r.data?.name||'بدون اسم'} — {r.data?.code||r.code} — {companyDisplayName(r.company)}</option>)}
+ </select>
+ <small>عند اختيار موظف، تُسحب بياناته مباشرة ويُربط نفس السجل بحساب مدير المشروع. يمكن استكمال البريد واسم الدخول إذا كانا غير مسجلين.</small></label>
  <label>اختيار مدير مشروع مسجل أو إضافة مدير جديد
- <select value={members.some(m=>m.email===managerSetup.email&&m.role==='project_manager')?managerSetup.email:'new'} onChange={e=>{const email=e.target.value;const m=members.find(x=>x.email===email);const directory=rows.find(r=>r.module==='project_managers'&&r.data?.email===email);setManagerSetup(p=>({...p,email:m?.email||'',name:directory?.data?.name||m?.display_name||'',username:m?.username||'',phone:directory?.data?.phone||'',ids:[]}))}}>
+ <select disabled={!!managerSetup.employeeId} value={members.some(m=>m.email===managerSetup.email&&m.role==='project_manager')?managerSetup.email:'new'} onChange={e=>{const email=e.target.value;const m=members.find(x=>x.email===email);const directory=rows.find(r=>r.module==='project_managers'&&r.data?.email===email);setManagerSetup(p=>({...p,employeeId:'',email:m?.email||'',name:directory?.data?.name||m?.display_name||'',username:m?.username||'',phone:directory?.data?.phone||'',ids:[]}))}}>
  <option value="new">+ مدير مشروع جديد</option>{members.filter(m=>m.role==='project_manager'&&m.is_active!==false).map(m=><option value={m.email} key={m.email}>{rows.find(r=>r.module==='project_managers'&&r.data?.email===m.email)?.data?.name||m.display_name||m.username||m.email} — {m.email}</option>)}</select></label>
  <div className="form-grid">
- <label>اسم مدير المشروع<input required minLength={3} value={managerSetup.name} onChange={e=>setManagerSetup(p=>({...p,name:e.target.value}))}/></label>
+ <label>اسم مدير المشروع<input required readOnly={!!managerSetup.employeeId} minLength={3} value={managerSetup.name} onChange={e=>setManagerSetup(p=>({...p,name:e.target.value}))}/></label>
  <label>البريد الإلكتروني للدخول<input required type="email" dir="ltr" value={managerSetup.email} onChange={e=>setManagerSetup(p=>({...p,email:e.target.value,ids:[]}))}/></label>
  <label>اسم المستخدم<input required={!members.some(m=>m.email===managerSetup.email)} value={managerSetup.username} onChange={e=>setManagerSetup(p=>({...p,username:e.target.value}))}/></label>
  <label>رقم الهاتف<input type="tel" dir="ltr" value={managerSetup.phone} onChange={e=>setManagerSetup(p=>({...p,phone:e.target.value}))}/></label>
  </div>
  <fieldset><legend>اختيار المشاريع وربطها بالمدير</legend>
  <div style={{maxHeight:235,overflowY:'auto',display:'grid',gap:8}}>
- {rows.filter(r=>r.module==='projects'&&(!company||r.company===company)).filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i).map(r=>{const assigned=String(r.data?.manager_email||'').trim().toLowerCase();const other=assigned&&assigned!==managerSetup.email.trim().toLowerCase();return <label key={r.id} style={{display:'flex',gap:10,alignItems:'center',opacity:other ? 0.6 : 1}}><input type="checkbox" disabled={other} checked={managerSetup.ids.includes(r.id)} onChange={e=>setManagerSetup(p=>({...p,ids:e.target.checked?[...p.ids,r.id]:p.ids.filter(id=>id!==r.id)}))}/><span>{r.data?.name||r.code} — {companyDisplayName(r.company)} <small>{other?'مرتبط بمدير آخر؛ غيّر التكليف من سجل المشاريع':assigned?'مرتبط بهذا المدير':'متاح للربط'}</small></span></label>})}
+ {rows.filter(r=>r.module==='projects'&&(!company||r.company===company)).filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i).map(r=>{const assigned=String(r.data?.manager_email||'').trim().toLowerCase();const other=assigned&&assigned!==managerSetup.email.trim().toLowerCase();const wrongCompany=!!managerSetup.employeeId&&rows.find(e=>e.id===managerSetup.employeeId)?.company!==r.company;return <label key={r.id} style={{display:'flex',gap:10,alignItems:'center',opacity:other||wrongCompany ? 0.6 : 1}}><input type="checkbox" disabled={!!other||wrongCompany} checked={managerSetup.ids.includes(r.id)} onChange={e=>setManagerSetup(p=>({...p,ids:e.target.checked?[...p.ids,r.id]:p.ids.filter(id=>id!==r.id)}))}/><span>{r.data?.name||r.code} — {companyDisplayName(r.company)} <small>{wrongCompany?'المشروع تابع لشركة أخرى':other?'مرتبط بمدير آخر؛ غيّر التكليف من سجل المشاريع':assigned?'مرتبط بهذا المدير':'متاح للربط'}</small></span></label>})}
  </div><small>المشاريع المرتبطة بمدير آخر لا يمكن اختيارها هنا. لا تُنشأ صلاحيات عامة لجميع المشاريع.</small></fieldset>
  <div style={{display:'flex',gap:10,flexWrap:'wrap'}}><button className="primary" type="submit" disabled={managerSetupBusy||!managerSetup.ids.length}>{managerSetupBusy?'جارٍ الحفظ…':'حفظ المدير وربط المشاريع وإنشاء حساب الدخول'}</button><button type="button" disabled={managerSetupBusy} onClick={()=>setManagerSetup(null)}>إلغاء</button></div>
  </form></section></div>}
