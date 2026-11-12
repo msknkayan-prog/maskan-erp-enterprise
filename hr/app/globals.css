@@ -983,3 +983,11 @@ body{line-height:1.55}
 .leave-holidays-control small{color:#79684b;line-height:1.6}
 .leave-days-preview{padding:11px 14px;background:#f7f0e0;border:1px solid #c9ae72;border-radius:8px;font-size:13px;line-height:1.8;margin-top:10px;color:#5b431b}
 @media(max-width:650px){.leave-holiday-add{flex-direction:column;align-items:stretch}}
+
+/* Leave entitlement panel in new/edit request */
+.leave-balance-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;padding:13px 15px;margin-top:12px;background:#fff9eb;border:1px solid #d7b979;border-radius:9px;font-size:13px}
+.leave-balance-summary>strong{grid-column:1/-1;color:#4b3a16;font-size:14px}
+.leave-balance-summary span{color:#5e523a}
+.leave-balance-summary b{color:#2e3529}
+.leave-balance-summary small{grid-column:1/-1;color:#776b52}
+@media(max-width:650px){.leave-balance-summary{grid-template-columns:1fr}}
