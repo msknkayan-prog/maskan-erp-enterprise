@@ -437,13 +437,25 @@ if(mod==='projects'&&old)data.code=String(previous.code||old.code||'');
 if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previous.salary??previous.total_monthly_salary)===Number(data.salary))for(const key of ['basic','housing','transport'])if(previous[key]!==undefined)data[key]=previous[key];if(mod==='employees'){data._review_flags=[...(!data.hire_date?['تاريخ التعيين يحتاج استكمال']:[]),...(data.company==='غير محددة'?['الشركة تحتاج مراجعة']:[])];}if(mod==='warnings'&&data.warning_type!=='notice'&&!Number(data.sequence)){data.sequence=({first:1,second:2,final:3} as any)[data.warning_type];}if(!visible(u,{module:mod,company:body.company,data},(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(mod==='project_managers'){
  if(!['admin','hr'].includes(u.role))throw Error('403');
  data.email=String(data.email||'').trim().toLowerCase();
- const member=await db.prepare('SELECT email,role,is_active,companies FROM members WHERE lower(email)=?').bind(data.email).first<any>();
+ const member=await db.prepare('SELECT email,role,is_active,companies,display_name,username FROM members WHERE lower(email)=?').bind(data.email).first<any>();
  if(!member||member.role!=='project_manager'||member.is_active===false)throw Error('يجب ربط بيانات المدير بحساب نشط بصلاحية مدير مشروع');
  if(member.companies&&member.companies!=='*'){
   let valid=false;try{valid=JSON.parse(member.companies).includes(body.company)}catch{}
   if(!valid)throw Error('حساب المدير لا يملك صلاحية الشركة المحددة');
  }
  const records=(await db.prepare("SELECT id,company,data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results;
+ const employees=(await db.prepare("SELECT data FROM records WHERE module='employees' AND company=?").bind(body.company).all()).results.map((r:any)=>JSON.parse(r.data||'{}')).filter((e:any)=>!e._archived);
+ const currentEntry=records.find((r:any)=>r.id===old?.id);
+ const matchingEmployee=employees.find((e:any)=>String(e.email||'').trim().toLowerCase()===data.email);
+ const managedEmployee=employees.find((e:any)=>String(e.manager_email||'').trim().toLowerCase()===data.email);
+ const recordData=currentEntry?JSON.parse(currentEntry.data||'{}'):null;
+ const canonicalName=String(recordData?.name||matchingEmployee?.name||managedEmployee?.manager||member.display_name||member.username||data.email).trim();
+ if(!canonicalName||String(data.name||'').trim()!==canonicalName)throw Error('يجب اختيار اسم المدير من القائمة المعتمدة، ولا يمكن إدخال اسم مختلف');
+ const department=String(data.department||'').trim();
+ const registeredDepartments=new Set([...employees.map((e:any)=>String(e.department||'').trim()),...records.map((r:any)=>String(JSON.parse(r.data||'{}').department||'').trim()),'إدارة المشاريع'].filter(Boolean));
+ if(!department||!registeredDepartments.has(department))throw Error('اختر الإدارة أو القسم من القائمة المسجلة');
+ data.name=canonicalName;data.department=department;
+ data.job=String(recordData?.job||matchingEmployee?.job||data.job||'مدير مشاريع');
  if(records.some((r:any)=>r.id!==old?.id&&String(JSON.parse(r.data).email||'').trim().toLowerCase()===data.email))throw Error('مدير المشروع مسجل مسبقًا لدى الشركة؛ عدّل سجله الموجود');
 }
 if(mod==='projects'&&String(data.manager_email||'').trim()){
