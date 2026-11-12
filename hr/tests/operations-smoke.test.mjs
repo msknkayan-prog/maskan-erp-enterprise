@@ -666,7 +666,7 @@ test('leave editor recalculates duration and end date on type and start date cha
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/function applyLeaveField\(key,value\)/);
  assert.match(ui,/next\.days=String\(days\);next\.end=leaveEndDate\(next\.start,days\)/);
- assert.match(ui,/module==='leave'&&f\.key==='leave_type'\?applyLeaveField/);
+ assert.match(ui,/module==='leave'&&\['leave_type','holiday_policy'\]\.includes\(f\.key\)\?applyLeaveField/);
  assert.match(ui,/module==='leave'&&\['start','end'\]\.includes\(f\.key\)\)applyLeaveField/);
  assert.match(ui,/fixedLeaveDays\(edit\.data\.leave_type\)!==null/);
  assert.match(ui,/لا تخصم من رصيد الإجازة السنوية/);
