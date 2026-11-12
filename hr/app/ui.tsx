@@ -495,7 +495,7 @@ const managerDirectoryForRequest=(record,companyName)=>{
  const directRef=employeeData.direct_manager_id||record?.data?.employee_snapshot?.direct_manager_id;
  const directRow=rows.find(r=>r.id===directRef&&r.company===companyName&&r.module==='project_managers');
  const projectId=record?.data?.project_id||employeeData.project_id;
- const project=rows.find(r=>r.id===projectId&&r.module==='projects'&&r.company===companyName);
+ const project=rows.find(r=>r.id===projectId&&r.module==='projects'&&(r.company===companyName||Array.isArray(r.data?._shared_companies)&&r.data._shared_companies.includes(companyName)));
  if(!project)return {project:'غير محدد',name:'',email:'',phone:'',direct_name:directRow?.data.name||employeeData.manager||'',direct_email:directRow?.data.email||employeeData.manager_email||''};
  const projectManager=rows.find(r=>r.module==='project_managers'&&r.company===companyName&&String(r.data.email||'').toLowerCase()===String(project.data.manager_email||'').toLowerCase());
  return {project:project.data.name||'',name:projectManager?.data.name||project.data.manager_name||'',email:project.data.manager_email||'',phone:projectManager?.data.phone||project.data.manager_phone||'',direct_name:directRow?.data.name||employeeData.manager||'',direct_email:directRow?.data.email||employeeData.manager_email||''};
