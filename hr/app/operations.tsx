@@ -24,6 +24,8 @@ export function RecordPaper({row,spec,rows,display}){
  const docNo=row.data?.reference||row.data?.document_no||row.code||row.id?.slice(0,8)||'سجل جديد';
  const docDate=row.data.date||row.data.created_at||(row.created_at?String(row.created_at).slice(0,10):'—');
  const signatureLabels=row.module==='payroll'?['إعداد شؤون الموظفين','اعتماد مدير إدارة المشاريع','مراجعة الإدارة المالية']:['إعداد شؤون الموظفين','مدير المشروع','الجهة المختصة','الاعتماد'];
+ const directManager=row.data?.direct_manager||row.data?.employee_snapshot&&{name:row.data.employee_snapshot.manager||'',email:row.data.employee_snapshot.manager_email||'',phone:row.data.employee_snapshot.manager_phone||''};
+ const projectManager=row.data?.project_manager;
  const amount=v=>Number(v||0).toLocaleString('ar-SA',{maximumFractionDigits:2})+' ر.س';
  return <article className="record-paper maskan-standard-paper" dir="rtl">
   <div className="paper-letterhead">
@@ -39,6 +41,8 @@ export function RecordPaper({row,spec,rows,display}){
    <tr><td>{docNo}</td><td>{docDate}</td><td>{spec.label}</td><td>{row.status||'—'}</td></tr>
    <tr><th colSpan={2}>الشركة / Company</th><td colSpan={3}>{brand}</td></tr>
    {employee&&row.module!=='employees'&&<tr><th colSpan={2}>اسم الموظف / Employee</th><td colSpan={2}>{employee.data.name||'—'}</td><td>{employee.data.code||'—'}</td></tr>}
+    {employee&&row.module!=='employees'&&directManager&&<tr><th colSpan={2}>المدير المباشر / Direct Manager</th><td colSpan={2}>{directManager.name||'—'}</td><td>{directManager.phone||directManager.email||'—'}</td></tr>}
+    {projectManager&&row.module!=='employees'&&<tr><th colSpan={2}>مدير المشروع المعتمد / Project Manager</th><td colSpan={2}>{projectManager.name||'—'}</td><td>{projectManager.email||'—'}</td></tr>}
   </tbody></table>
   <table className="paper-data-table"><thead><tr><th>البيان / Description</th><th>التفاصيل / Details</th></tr></thead><tbody>
    {spec.fields.map(f=><tr key={f.key}><th>{f.label}</th><td>{display(row,f)}</td></tr>)}
@@ -46,7 +50,8 @@ export function RecordPaper({row,spec,rows,display}){
    {row.module==='payroll'&&[['basic','الراتب الأساسي'],['housing','بدل السكن'],['transport','بدل النقل'],['overtime_hours','عدد الساعات الإضافية'],['overtime','قيمة الساعات الإضافية'],['net','صافي الاستحقاق']].map(([k,label])=><tr key={k}><th>{label}</th><td>{k==='overtime_hours'?Number(row.data[k]||0).toLocaleString('ar-SA')+' ساعة':amount(row.data[k])}</td></tr>)}
    {['settlements','leave_dues'].includes(row.module)&&<tr className="paper-total"><th>صافي المستحقات / Net Amount</th><td>{amount(row.data.net)}</td></tr>}
   </tbody></table>
-  <div className="paper-approval-heading">الاعتماد والتوقيع / APPROVAL & SIGNATURE</div>
+  {['leave','advances'].includes(row.module)&&<div className="paper-approval-heading">التسلسل: إعداد الطلب ← مدير المشروع ← إدارة المشاريع ← شؤون الموظفين ← المالية</div>}
+   <div className="paper-approval-heading">الاعتماد والتوقيع / APPROVAL & SIGNATURE</div>
   <div className="paper-signatures">{signatureLabels.map(label=><div key={label}><b>{label}</b><div className="paper-approval-line"><span>الاسم</span></div><div className="paper-approval-line"><span>التوقيع</span></div><div className="paper-approval-line"><span>الختم / التاريخ</span></div></div>)}</div>
   <p className="paper-note">هذا النموذج صادر من منصة شؤون الموظفين. الاعتمادات الإلكترونية وسجل القرارات المعتمدة محفوظة في النظام، ولا يُعد هذا النموذج وحده إثباتًا للصرف.</p>
   <div className="paper-footer">{[profile?.data.phone,profile?.data.mobile,profile?.data.email,profile?.data.website,profile?.data.address].filter(Boolean).join(' · ')||brand+' | إدارة شؤون الموظفين'}</div>
