@@ -619,36 +619,82 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <div><h3 style={{margin:0}}>ربط مدراء المشاريع وإنشاء حسابات الدخول</h3><small>اختر مديرًا موجودًا أو أضف اسمًا جديدًا، ثم حدد مشاريعه. كل مشروع يرتبط بمدير واحد فقط.</small></div>
  <button className="primary" type="button" onClick={()=>setManagerSetup({employeeId:'',name:'',email:'',username:'',phone:'',ids:[]})}><Plus size={16}/> إضافة مدير وربطه بالمشاريع</button></div>
  </section>}
- {module==='project_managers'&&managerSetup&&<div className="modal-backdrop"><section className="modal" dir="rtl" style={{width:'min(94vw,760px)',maxHeight:'90vh',overflowY:'auto'}}>
- <div className="modal-head"><h2>إضافة مدير مشروع وربطه بالمشاريع</h2><button type="button" disabled={managerSetupBusy} onClick={()=>setManagerSetup(null)} aria-label="إغلاق"><X/></button></div>
- <form onSubmit={saveManagerSetup} style={{display:'grid',gap:14}}>
+ {module==='project_managers'&&managerSetup&&<div className="modal-backdrop" role="presentation"><section className="modal" dir="rtl" role="dialog" aria-modal="true" aria-label="ربط مدير مباشر بالمشاريع" style={{width:'min(94vw,620px)',maxHeight:'88vh',overflowY:'auto',padding:20}}>
+ <div className="modal-head"><div><h2 style={{marginBottom:3}}>تعيين مدير مشروع</h2><small>اختر المدير المباشر المسجل مسبقًا، ثم حدد مشاريعه</small></div><button type="button" disabled={managerSetupBusy} onClick={()=>setManagerSetup(null)} aria-label="إغلاق"><X/></button></div>
+ <form onSubmit={saveManagerSetup} style={{display:'grid',gap:11}}>
+ {(()=>{const directory=rows.filter(r=>r.module==='project_managers'&&(!company||r.company===company));
+  const staff=rows.filter(r=>r.module==='employees'&&(!company||r.company===company)&&!r.data?._archived);
+  const candidates=new Map();
+  for(const employee of staff){
+   const ref=directory.find(d=>d.id===employee.data?.direct_manager_id);
+   const email=String(ref?.data?.email||employee.data?.manager_email||'').trim().toLowerCase();
+   const name=String(ref?.data?.name||employee.data?.manager||'').trim();
+   if(!name)continue;
+   const key=employee.company+'|'+(email||normalizeSearch(name));
+   if(!candidates.has(key))candidates.set(key,{name,email,company:employee.company,phone:ref?.data?.phone||employee.data?.manager_phone||''});
+  }
+  // Retain directory entries already assigned as direct managers even if no employee still references them.
+  for(const manager of directory){
+   const email=String(manager.data?.email||'').trim().toLowerCase();
+   const name=String(manager.data?.name||'').trim();
+   if(!name||!email)continue;
+   const key=manager.company+'|'+email;
+   if(!candidates.has(key))candidates.set(key,{name,email,company:manager.company,phone:manager.data?.phone||''});
+  }
+  const choices=[...candidates.values()].sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+  const found=choices.filter(m=>!managerSetup.managerSearch||normalizeSearch([m.name,m.email,m.company].join(' ')).includes(normalizeSearch(managerSetup.managerSearch)));
+  const selected=choices.find(m=>m.email&&m.email===managerSetup.email&&(!managerSetup.employeeId||rows.find(e=>e.id===managerSetup.employeeId)?.company===m.company));
+  return <div style={{display:'grid',gap:7}}>
+   <label>المدير المباشر المعيّن مسبقًا
+    <input type="search" aria-label="فلترة المدراء المباشرين" placeholder="بحث بالاسم أو البريد" value={managerSetup.managerSearch||''} onChange={e=>setManagerSetup(p=>({...p,managerSearch:e.target.value}))}/>
+    <select aria-label="اختيار المدير المباشر لتعيينه مدير مشروع" value={selected?selected.company+'|'+selected.email:''} onChange={e=>{
+      const m=choices.find(x=>x.company+'|'+x.email===e.target.value);
+      const employee=m&&staff.find(x=>String(x.data?.email||'').trim().toLowerCase()===m.email&&x.company===m.company);
+      const account=m&&members.find(x=>String(x.email||'').trim().toLowerCase()===m.email);
+      const identity=employee?.data||{};
+      setManagerSetup(p=>({...p,employeeId:employee?.id||'',name:identity.name||m?.name||'',email:m?.email||'',phone:m?.phone||identity.phone||'',username:account?.username||('pm_'+String(identity.code||'').replace(/[^0-9a-zA-Z]/g,''))||'',ids:[],showDetails:false,selectedCompany:m?.company||'',managerSearch:''}));
+    }}>
+     <option value="">اختر من قائمة المدراء المباشرين…</option>
+     {found.map(m=><option key={m.company+'|'+m.email+'|'+m.name} value={m.company+'|'+m.email} disabled={!m.email}>{m.name} — {companyDisplayName(m.company)}{!m.email?' (يلزم استكمال البريد)':''}</option>)}
+     {selected&&!found.some(m=>m.email===selected.email&&m.company===selected.company)&&<option value={selected.company+'|'+selected.email}>{selected.name} — {companyDisplayName(selected.company)}</option>}
+    </select>
+   </label>
+   <small>{found.length} مدير مطابق · {choices.length} مدير مسجل. يتطلب الربط بريد دخول صالحًا.</small>
+  </div>;
+ })()}
+ {managerSetup.email&&!managerSetup.showDetails&&<div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',background:'#f7f2e7',padding:10,borderRadius:8,fontSize:13}}>
+ <span><b>{managerSetup.name}</b> · <span dir="ltr">{managerSetup.email}</span></span>
+ <button type="button" onClick={()=>setManagerSetup(p=>({...p,showDetails:true}))}>مراجعة بيانات الحساب</button>
+ </div>}
+ <button type="button" style={{justifySelf:'start',fontSize:12}} onClick={()=>setManagerSetup(p=>({...p,showDetails:!p.showDetails}))}>{managerSetup.showDetails?'إخفاء البيانات الإضافية':'إضافة مدير جديد أو استكمال بيانات الدخول'}</button>
+ {managerSetup.showDetails&&<div style={{display:'grid',gap:9,padding:10,border:'1px solid #e6d5b6',borderRadius:8}}>
  <label>اختيار أحد الموظفين لتعيينه مدير مشروع
  <select value={managerSetup.employeeId||''} onChange={e=>{
   const employee=rows.find(r=>r.module==='employees'&&r.id===e.target.value);
-  const d=employee?.data||{};
-  const email=String(d.email||'').trim().toLowerCase();
-  const account=members.find(m=>m.email?.toLowerCase()===email);
-  setManagerSetup(p=>({...p,employeeId:employee?.id||'',name:d.name||'',email,phone:d.phone||'',username:account?.username||('pm_'+String(d.code||'').replace(/[^0-9a-zA-Z]/g,''))||'',ids:[]}));
- }}>
- <option value="">اختيار مدير مستقل (غير مرتبط بسجل موظف)</option>
- {rows.filter(r=>r.module==='employees'&&!r.data?._archived&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(r.data?.employment_status||r.data?.employee_status||'').trim())&&(!company||r.company===company)).map(r=><option key={r.id} value={r.id}>{r.data?.name||'بدون اسم'} — {r.data?.code||r.code} — {companyDisplayName(r.company)}</option>)}
- </select>
- <small>عند اختيار موظف، تُسحب بياناته مباشرة ويُربط نفس السجل بحساب مدير المشروع. يمكن استكمال البريد واسم الدخول إذا كانا غير مسجلين.</small></label>
- <label>اختيار مدير مشروع مسجل أو إضافة مدير جديد
- <select disabled={!!managerSetup.employeeId} value={members.some(m=>m.email===managerSetup.email&&m.role==='project_manager')?managerSetup.email:'new'} onChange={e=>{const email=e.target.value;const m=members.find(x=>x.email===email);const directory=rows.find(r=>r.module==='project_managers'&&r.data?.email===email);setManagerSetup(p=>({...p,employeeId:'',email:m?.email||'',name:directory?.data?.name||m?.display_name||'',username:m?.username||'',phone:directory?.data?.phone||'',ids:[]}))}}>
- <option value="new">+ مدير مشروع جديد</option>{members.filter(m=>m.role==='project_manager'&&m.is_active!==false).map(m=><option value={m.email} key={m.email}>{rows.find(r=>r.module==='project_managers'&&r.data?.email===m.email)?.data?.name||m.display_name||m.username||m.email} — {m.email}</option>)}</select></label>
+  const d=employee?.data||{};const email=String(d.email||'').trim().toLowerCase();const account=members.find(m=>String(m.email||'').toLowerCase()===email);
+  setManagerSetup(p=>({...p,employeeId:employee?.id||'',name:d.name||'',email,phone:d.phone||'',username:account?.username||('pm_'+String(d.code||'').replace(/[^0-9a-zA-Z]/g,''))||'',ids:[],selectedCompany:employee?.company||''}));
+ }}><option value="">مدير مستقل غير مرتبط بسجل موظف</option>{rows.filter(r=>r.module==='employees'&&!r.data?._archived&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(r.data?.employment_status||r.data?.employee_status||'').trim())&&(!company||r.company===company)).map(r=><option value={r.id} key={r.id}>{r.data?.name} — {r.data?.code||r.code} — {companyDisplayName(r.company)}</option>)}</select></label>
+ <label>مدير مشروع لديه حساب سابق
+ <select disabled={!!managerSetup.employeeId} value={members.some(m=>m.email===managerSetup.email&&m.role==='project_manager')?managerSetup.email:'new'} onChange={e=>{const email=e.target.value;const account=members.find(x=>x.email===email);const directory=rows.find(r=>r.module==='project_managers'&&r.data?.email===email);setManagerSetup(p=>({...p,employeeId:'',email:account?.email||'',name:directory?.data?.name||account?.display_name||'',username:account?.username||'',phone:directory?.data?.phone||'',ids:[]}))}}><option value="new">+ مدير مشروع جديد</option>{members.filter(m=>m.role==='project_manager'&&m.is_active!==false).map(m=><option value={m.email} key={m.email}>{rows.find(r=>r.module==='project_managers'&&r.data?.email===m.email)?.data?.name||m.display_name||m.username||m.email}</option>)}</select></label>
  <div className="form-grid">
- <label>اسم مدير المشروع<input required readOnly={!!managerSetup.employeeId} minLength={3} value={managerSetup.name} onChange={e=>setManagerSetup(p=>({...p,name:e.target.value}))}/></label>
- <label>البريد الإلكتروني للدخول<input required type="email" dir="ltr" value={managerSetup.email} onChange={e=>setManagerSetup(p=>({...p,email:e.target.value,ids:[]}))}/></label>
+ <label>اسم المدير<input required readOnly={!!managerSetup.employeeId} minLength={3} value={managerSetup.name} onChange={e=>setManagerSetup(p=>({...p,name:e.target.value}))}/></label>
+ <label>البريد الإلكتروني<input required type="email" dir="ltr" value={managerSetup.email} onChange={e=>setManagerSetup(p=>({...p,email:e.target.value,ids:[]}))}/></label>
  <label>اسم المستخدم<input required={!members.some(m=>m.email===managerSetup.email)} value={managerSetup.username} onChange={e=>setManagerSetup(p=>({...p,username:e.target.value}))}/></label>
  <label>رقم الهاتف<input type="tel" dir="ltr" value={managerSetup.phone} onChange={e=>setManagerSetup(p=>({...p,phone:e.target.value}))}/></label>
- </div>
- <fieldset><legend>اختيار المشاريع وربطها بالمدير</legend>
- <div style={{maxHeight:235,overflowY:'auto',display:'grid',gap:8}}>
- {rows.filter(r=>r.module==='projects'&&(!company||r.company===company)).filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i).map(r=>{const assigned=String(r.data?.manager_email||'').trim().toLowerCase();const other=assigned&&assigned!==managerSetup.email.trim().toLowerCase();const wrongCompany=!!managerSetup.employeeId&&rows.find(e=>e.id===managerSetup.employeeId)?.company!==r.company;return <label key={r.id} style={{display:'flex',gap:10,alignItems:'center',opacity:other||wrongCompany ? 0.6 : 1}}><input type="checkbox" disabled={!!other||wrongCompany} checked={managerSetup.ids.includes(r.id)} onChange={e=>setManagerSetup(p=>({...p,ids:e.target.checked?[...p.ids,r.id]:p.ids.filter(id=>id!==r.id)}))}/><span>{r.data?.name||r.code} — {companyDisplayName(r.company)} <small>{wrongCompany?'المشروع تابع لشركة أخرى':other?'مرتبط بمدير آخر؛ غيّر التكليف من سجل المشاريع':assigned?'مرتبط بهذا المدير':'متاح للربط'}</small></span></label>})}
- </div><small>المشاريع المرتبطة بمدير آخر لا يمكن اختيارها هنا. لا تُنشأ صلاحيات عامة لجميع المشاريع.</small></fieldset>
- <div style={{display:'flex',gap:10,flexWrap:'wrap'}}><button className="primary" type="submit" disabled={managerSetupBusy||!managerSetup.ids.length}>{managerSetupBusy?'جارٍ الحفظ…':'حفظ المدير وربط المشاريع وإنشاء حساب الدخول'}</button><button type="button" disabled={managerSetupBusy} onClick={()=>setManagerSetup(null)}>إلغاء</button></div>
- </form></section></div>}
+ </div></div>}
+ <fieldset style={{padding:10}}><legend>المشاريع المتاحة للتعيين</legend>
+ <input type="search" aria-label="فلترة مشاريع المدير" placeholder="بحث باسم المشروع أو رمزه" value={managerSetup.projectSearch||''} onChange={e=>setManagerSetup(p=>({...p,projectSearch:e.target.value}))}/>
+ <div style={{maxHeight:165,overflowY:'auto',display:'grid',gap:5,marginTop:8}}>
+ {rows.filter(r=>r.module==='projects'&&(!company||r.company===company)&&(!managerSetup.selectedCompany||r.company===managerSetup.selectedCompany)).filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i).filter(r=>!managerSetup.projectSearch||normalizeSearch([r.data?.name,r.data?.code,r.code].join(' ')).includes(normalizeSearch(managerSetup.projectSearch))).map(r=>{
+  const assigned=String(r.data?.manager_email||'').trim().toLowerCase();const other=assigned&&assigned!==String(managerSetup.email||'').trim().toLowerCase();
+  const wrongCompany=!!managerSetup.employeeId&&rows.find(e=>e.id===managerSetup.employeeId)?.company!==r.company;
+  return <label key={r.id} style={{display:'flex',alignItems:'center',gap:8,opacity:other||wrongCompany?0.55:1,fontSize:13}}><input type="checkbox" disabled={!!other||wrongCompany||!managerSetup.email} checked={managerSetup.ids.includes(r.id)} onChange={e=>setManagerSetup(p=>({...p,ids:e.target.checked?[...p.ids,r.id]:p.ids.filter(id=>id!==r.id)}))}/><span>{r.data?.name||r.code} <small>{other?'مرتبط بمدير آخر':assigned?'معيّن مسبقًا':'متاح للربط'}</small></span></label>;
+ })}
+ </div><small>يمكن ربط أكثر من مشروع، ولا يمكن نقل مشاريع مدير آخر من هذه النافذة.</small></fieldset>
+ <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',justifyContent:'flex-start'}}>
+ <button className="primary" type="submit" disabled={managerSetupBusy||!managerSetup.ids.length||!managerSetup.email||!managerSetup.name||(!managerSetup.username&&!members.some(m=>m.email===managerSetup.email))}>{managerSetupBusy?'جارٍ الحفظ…':'حفظ وتعيين المدير'}</button>
+ <button type="button" disabled={managerSetupBusy} onClick={()=>setManagerSetup(null)}>إلغاء</button>
+ </div></form></section></div>}
  {module==='pending_requests'&&<section className="panel" dir="rtl" style={{padding:20}}>
  <div className="panel-head"><div><h2>الطلبات قيد الإجراء</h2><span>قائمة موحّدة للطلبات غير المكتملة ضمن صلاحيات حسابك والشركات المتاحة له</span></div><span className="members-count">{pendingRequestRows.length} طلب</span></div>
  <div className="form-grid" style={{margin:'16px 0'}}>
