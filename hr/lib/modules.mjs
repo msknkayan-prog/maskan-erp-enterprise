@@ -130,7 +130,19 @@ export function visible(user,row,all=[]){
  const isPayroll=['payroll','payroll_batches'].includes(row.module);
  const project=isPayroll?null:row.module==='projects'?row.id:row.data?.project_id||all.find(r=>r.id===row.data?.employee_id)?.data?.project_id;
  if(user.role==='project_manager'){
-  if(row.module==='payroll_batches')return true; // Shared company/month header only; employee-level payroll details are scoped below.
+  if(row.module==='payroll_batches'){
+   return all.some(pay=>{
+    if(pay.module!=='payroll'||pay.data?.batch_id!==row.id||pay.data?.excluded)return false;
+    const projectId=String(pay.data?.project_id||all.find(e=>e.module==='employees'&&e.id===pay.data?.employee_id)?.data?.project_id||'');
+    if(!projectId)return false;
+    if(user.projects&&user.projects!=='*'){
+     let ids=[];try{ids=JSON.parse(user.projects)}catch{return false}
+     if(!Array.isArray(ids)||!ids.includes(projectId))return false;
+    }
+    const assigned=all.find(p=>p.module==='projects'&&p.id===projectId);
+    return !!assigned&&String(assigned.data?.manager_email||'').trim().toLowerCase()===String(user.email||'').trim().toLowerCase()&&(assigned.company===row.company||Array.isArray(assigned.data?._shared_companies)&&assigned.data._shared_companies.includes(row.company));
+   });
+  }
   if(row.module==='payroll'){
    const projectId=String(row.data?.project_id||all.find(r=>r.id===row.data?.employee_id&&r.module==='employees')?.data?.project_id||'');
    if(!projectId)return false;
@@ -146,7 +158,7 @@ export function visible(user,row,all=[]){
   // A manager must be both assigned to the project and inside the explicit access scope.
   if(user.projects&&user.projects!=='*'&&(!Array.isArray(JSON.parse(user.projects))||!JSON.parse(user.projects).includes(project)))return false;
   const assigned=all.find(r=>r.module==='projects'&&r.id===project);
-  return Boolean(assigned&&String(assigned.data?.manager_email||'').trim().toLowerCase()===String(user.email||'').trim().toLowerCase());
+  return Boolean(assigned&&String(assigned.data?.manager_email||'').trim().toLowerCase()===String(user.email||'').trim().toLowerCase()&&(assigned.company===row.company||Array.isArray(assigned.data?._shared_companies)&&assigned.data._shared_companies.includes(row.company)));
  }
  if(user.projects&&user.projects!=='*'&&!isPayroll&&(!project||!JSON.parse(user.projects).includes(project)))return false;
  return true;
