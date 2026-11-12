@@ -160,6 +160,18 @@ if(body.action==='onboard_project_manager'){
  const phone=String(body.phone||'').trim();
  const username=String(body.username||'').trim().replace(/\s+/g,' ').toLowerCase();
  const ids=body.project_ids;
+ const employeeId=String(body.employee_id||'').trim();
+ let employeeRow:any=null;
+ let employeeData:any=null;
+ if(employeeId){
+  employeeRow=await db.prepare("SELECT id,company,data,revision FROM records WHERE id=? AND module='employees'").bind(employeeId).first<any>();
+  if(!employeeRow)throw Error('سجل الموظف المحدد غير موجود');
+  employeeData=JSON.parse(employeeRow.data||'{}');
+  if(employeeData._archived||!['active','نشط','على رأس العمل','علي راس العمل'].includes(String(employeeData.employment_status||employeeData.employee_status||'').trim()))throw Error('يمكن تعيين الموظفين النشطين فقط كمدراء مشاريع');
+  if(String(employeeData.name||'').trim()!==name)throw Error('اسم المدير يجب أن يطابق الموظف المختار من السجل');
+  const storedEmail=String(employeeData.email||'').trim().toLowerCase();
+  if(storedEmail&&storedEmail!==email)throw Error('بريد المدير لا يطابق البريد المحفوظ في سجل الموظف؛ صحح سجل الموظف أولاً');
+ }
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||name.length<3||name.length>160)throw Error('الاسم والبريد الإلكتروني مطلوبان وبصيغة صحيحة');
  if(username&&!/^[\p{L}][\p{L}\p{N} ._-]{2,63}$/u.test(username))throw Error('اسم المستخدم غير صالح');
  if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some((id:any)=>typeof id!=='string')||new Set(ids).size!==ids.length)throw Error('حدد مشاريع غير مكررة لمدير المشروع');
@@ -167,8 +179,14 @@ if(body.action==='onboard_project_manager'){
  const selected=ids.map((id:string)=>allProjects.find((p:any)=>p.id===id));
  if(selected.some((p:any)=>!p))throw Error('أحد المشاريع المحددة غير موجود');
  const existing=await db.prepare('SELECT * FROM members WHERE lower(email)=?').bind(email).first<any>();
- if(existing&&(existing.role!=='project_manager'||existing.is_active===false))throw Error('البريد مرتبط بحساب ليس مدير مشروع نشطًا');
+ if(existing&&(existing.is_active===false||!['project_manager',...(employeeId?['employee']:[])].includes(existing.role)))throw Error('البريد مرتبط بحساب آخر لا يمكن تحويله إلى مدير مشروع نشط');
+ if(employeeId&&existing?.employee_id&&existing.employee_id!==employeeId)throw Error('هذا الحساب مرتبط بموظف آخر، ولا يمكن إعادة استخدامه');
+ if(employeeId){
+  const other=await db.prepare('SELECT email FROM members WHERE employee_id=? AND lower(email)<>?').bind(employeeId,email).first();
+  if(other)throw Error('الموظف مرتبط بحساب دخول آخر؛ استخدم حسابه الحالي بدل إنشاء حساب مكرر');
+ }
  const allowedCompanies=[...new Set(selected.map((p:any)=>p.company))];
+ if(employeeId&&!allowedCompanies.includes(employeeRow.company))throw Error('اختر مشروعًا تابعًا لشركة الموظف؛ لا يمكن ربط حسابه بمشروع شركة مختلفة من هذه النافذة');
  for(const p of selected){
   const data=JSON.parse(p.data||'{}');
   const assigned=String(data.manager_email||'').trim().toLowerCase();
@@ -185,25 +203,30 @@ if(body.action==='onboard_project_manager'){
   const clash=await db.prepare('SELECT email FROM members WHERE lower(username)=?').bind(username).first();
   if(clash)throw Error('اسم المستخدم مستخدم بالفعل');
   commands.push(db.prepare('INSERT INTO members(email,role,employee_id,companies,projects,permissions,username,contact_email) VALUES(?,?,?,?,?,?,?,?)')
-   .bind(email,'project_manager',null,JSON.stringify(allowedCompanies),JSON.stringify(ids),'{}',username,email));
+   .bind(email,'project_manager',employeeId||null,JSON.stringify(allowedCompanies),JSON.stringify(ids),'{}',username,email));
  }else{
   if(username&&username!==existing.username){
    const clash=await db.prepare('SELECT email FROM members WHERE lower(username)=? AND lower(email)<>?').bind(username,email).first();
    if(clash)throw Error('اسم المستخدم مستخدم بالفعل');
   }
-  commands.push(db.prepare('UPDATE members SET companies=?,projects=?,username=? WHERE email=? AND role=\'project_manager\' AND is_active=true')
-    .bind(nextCompanies==='*'?'*':JSON.stringify(nextCompanies),nextProjects==='*'?'*':JSON.stringify(nextProjects),username||existing.username,email));
+  commands.push(db.prepare("UPDATE members SET role='project_manager',employee_id=?,companies=?,projects=?,username=? WHERE email=? AND role IN ('project_manager','employee') AND is_active=true")
+    .bind(employeeId||existing.employee_id||null,nextCompanies==='*'?'*':JSON.stringify(nextCompanies),nextProjects==='*'?'*':JSON.stringify(nextProjects),username||existing.username,email));
  }
  for(const co of allowedCompanies){
   const recorded=duplicateDirectory.find((r:any)=>r.company===co&&String(JSON.parse(r.data||'{}').email||'').trim().toLowerCase()===email);
   if(recorded){
    const d=JSON.parse(recorded.data);
    commands.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='project_managers'")
-    .bind(JSON.stringify({...d,name,email,phone:phone||d.phone||''}),now,mutation,recorded.id));
+    .bind(JSON.stringify({...d,name,email,phone:phone||d.phone||'',employee_id:employeeId||d.employee_id||null}),now,mutation,recorded.id));
   }else{
    commands.push(db.prepare("INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation) VALUES(?,'project_managers',?,?,?,'draft',1,?,?,?,?)")
-    .bind(crypto.randomUUID(),co,null,JSON.stringify({name,email,phone,job:'مدير مشروع'}),u.email,now,now,mutation));
+    .bind(crypto.randomUUID(),co,null,JSON.stringify({name,email,phone,job:'مدير مشروع',employee_id:employeeId||null}),u.email,now,now,mutation));
   }
+ }
+ if(employeeId){
+  const revised={...employeeData,project_manager_account:email,is_project_manager:true};
+  commands.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
+   .bind(JSON.stringify(revised),now,mutation,employeeId,employeeRow.revision));
  }
  for(const project of selected){
   const data=JSON.parse(project.data||'{}');
@@ -211,10 +234,10 @@ if(body.action==='onboard_project_manager'){
    .bind(JSON.stringify({...data,manager_email:email,manager_name:name,manager_phone:phone}),now,mutation,project.id,project.revision));
  }
  commands.push(db.prepare('INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)')
-  .bind(crypto.randomUUID(),u.email,email,'project_manager_onboarding',now,JSON.stringify({project_ids:ids,companies:allowedCompanies,existing_account:!!existing})));
+  .bind(crypto.randomUUID(),u.email,email,'project_manager_onboarding',now,JSON.stringify({project_ids:ids,companies:allowedCompanies,employee_id:employeeId||null,existing_account:!!existing})));
  const applied=await db.batch(commands);
  if(applied.slice(0,-1).some((result:any)=>result?.meta?.changes!==1))throw Error('تغير أحد المشاريع أثناء الربط؛ أعد تحديث البيانات');
- return json({ok:true,email,username:username||existing?.username||'',created:!existing,projects:ids.length});
+ return json({ok:true,email,username:username||existing?.username||'',created:!existing,employee_id:employeeId||null,projects:ids.length});
 }
 if(body.action==='member'){if(u.role!=='admin')throw Error('403');const email=String(body.email||'').trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!['hr','administrative_assistant','finance','administrative_manager','project_manager','projects_director','employee'].includes(body.role))throw Error('بيانات المستخدم غير صالحة');const username=String(body.username||'').trim().replace(/\s+/g,' ').toLowerCase();if(username&&(!/^[\p{L}][\p{L}\p{N} ._-]{2,63}$/u.test(username)||username.includes('  ')))throw Error('اسم المستخدم من 3 إلى 64 حرفًا ويقبل الحروف العربية والإنجليزية والمسافات');if(body.permissions&&(typeof body.permissions!=='object'||Array.isArray(body.permissions)||Object.entries(body.permissions).some(([k,v])=>typeof v!=='boolean'||!/^([a-z_]+):(view|edit|approve)$/.test(k))))throw Error('صلاحيات غير صالحة');if(body.projects!=='*'&&body.projects!==undefined&&(!Array.isArray(body.projects)||body.projects.some((id:any)=>typeof id!=='string')))throw Error('نطاق مشاريع غير صالح');
 if(body.role==='project_manager'&&body.projects!=='*'){
