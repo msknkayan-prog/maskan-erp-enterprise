@@ -1311,3 +1311,19 @@ test('payroll approval requires authorized project managers for every staff row 
  assert.match(cycle,/\['admin','projects_director'\]\.includes\(u\.role\)/);
  assert.match(ui,/إرسال لإدارة المشاريع بعد مراجعة المدراء/);
 });
+
+test('project manager can view payroll employees only from projects assigned to own active account',async()=>{
+ const {visible}=await import('../lib/modules.mjs');
+ const all=[
+  {id:'p1',module:'projects',company:'مسكن الكيان',data:{manager_email:'pm1@example.test'}},
+  {id:'p2',module:'projects',company:'مسكن الكيان',data:{manager_email:'pm2@example.test'}},
+  {id:'e1',module:'employees',company:'مسكن الكيان',data:{project_id:'p1'}},
+  {id:'e2',module:'employees',company:'مسكن الكيان',data:{project_id:'p2'}}
+ ];
+ const person=(id,project)=>({id,module:'payroll',company:'مسكن الكيان',data:{employee_id:id,project_id:project}});
+ const u={role:'project_manager',email:'pm1@example.test',projects:'*',companies:'*'};
+ assert.equal(visible(u,person('e1','p1'),all),true);
+ assert.equal(visible(u,person('e2','p2'),all),false);
+ assert.equal(visible({...u,projects:JSON.stringify(['p2'])},person('e1','p1'),all),false);
+ assert.equal(visible(u,{id:'b1',module:'payroll_batches',company:'مسكن الكيان',data:{month:'2026-11'}},all),true);
+});
