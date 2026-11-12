@@ -1371,3 +1371,16 @@ test('direct manager and project manager use the same canonical project assignme
  assert.match(ui,/direct_manager_id:manager\?\.id\|\|''/);
  assert.match(ui,/direct_name:projectManager\?\.data\.name\|\|project\.data\.manager_name/);
 });
+
+test('manager assignment supports one director for multiple projects with employee-name previews',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ for(const phrase of ['تحديد كل المشاريع المعروضة','عرض أسماء موظفي المشروع','أسماء الموظفين الذين سيُربطون بهذا المدير','المشاريع والموظفون المرتبطون','المشاريع المختارة'])assert.ok(ui.includes(phrase),phrase);
+ assert.match(ui,/ids:\[\.\.\.new Set\(\[\.\.\.p\.ids,\.\.\.shownEligible\.map\(r=>r\.id\)\]\)\]/);
+ assert.match(ui,/const linkedEmployees=rows\.filter/);
+ assert.match(backend,/const syncEmployees:any\[\]=\[\]/);
+ assert.match(backend,/direct_manager_id:directoryIds\.get\(employee\.company\)/);
+ assert.match(backend,/for\(const project of selected\)/);
+ assert.match(backend,/for\(const employee of syncEmployees\.filter/);
+ assert.match(backend,/employees_linked:syncEmployees\.length/);
+});
