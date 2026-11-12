@@ -30,6 +30,27 @@ const canManageProject=async(u,project,company)=>{
 const isFinance=u=>['admin','finance'].includes(u.role);
 const isProjectsDirector=u=>['admin','projects_director'].includes(u.role);
 const nowIso=()=>new Date().toISOString();
+const ensureAssignedPayrollManager=async(projectId,company)=>{
+ if(!projectId)throw Error('يجب تعيين مشروع لكل موظف قبل إرسال المسير لمدراء المشاريع');
+ const project=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(projectId).first();
+ if(!project)throw Error('مشروع الموظف غير مسجل في المنصة');
+ const p=JSON.parse(project.data);
+ if(project.company!==company&&!(Array.isArray(p._shared_companies)&&p._shared_companies.includes(company)))throw Error('مشروع الموظف لا يتبع شركة المسير');
+ const email=String(p.manager_email||'').trim().toLowerCase();
+ if(!email)throw Error('المشروع غير مرتبط بمدير مشروع مخول');
+ const manager=await db.prepare('SELECT role,is_active,companies,projects FROM members WHERE lower(email)=?').bind(email).first();
+ if(!manager||manager.role!=='project_manager'||manager.is_active===false)throw Error('مدير المشروع ليس لديه حساب مشروع نشط: '+email);
+ if(manager.companies&&manager.companies!=='*'){
+  let eligible=false;try{eligible=JSON.parse(manager.companies).includes(company)}catch{}
+  if(!eligible)throw Error('مدير المشروع لا يملك صلاحية شركة المسير: '+email);
+ }
+ if(manager.projects&&manager.projects!=='*'){
+  let eligible=false;try{eligible=JSON.parse(manager.projects).includes(projectId)}catch{}
+  if(!eligible)throw Error('مدير المشروع لا يملك صلاحية المشروع في المسير: '+email);
+ }
+ return email;
+};
+
 export async function POST(req){
  try{
   // The Next.js proxy validates the browser Origin against the site Origin.
@@ -105,6 +126,7 @@ export async function POST(req){
      if(details.length!==Number(b.data.employee_count)||!details.some(row=>!row.data.excluded))throw Error('قائمة المسير غير مكتملة: '+b.company);
      for(const row of details.filter(row=>!row.data.excluded)){
       if(!row.data.split_confirmed||!Number.isFinite(Number(row.data.net))||cents(row.data.cash_amount)+cents(row.data.bank_amount)!==cents(row.data.net)||row.data.needs_review&&!row.data.exception_note)throw Error('مراجعة الأجور غير مكتملة: '+b.company);
+       await ensureAssignedPayrollManager(row.data.project_id,b.company);
      }
      stmts.push(db.prepare("UPDATE records SET status='manager_review',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='payroll_batches' AND revision=? AND status='draft'").bind(now,mutation,id,b.revision));
      stmts.push(db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,id,'payroll_batch_bulk_submit',now,JSON.stringify({company:b.company,month:b.data.month})));
@@ -236,6 +258,7 @@ export async function POST(req){
    for(const e of monthly.filter(r=>!r.data.excluded)){
     if(!e.data.split_confirmed||!Number.isFinite(Number(e.data.net))||cents(e.data.cash_amount)+cents(e.data.bank_amount)!==cents(e.data.net))throw Error('يجب مراجعة وتوزيع صافي راتب جميع الموظفين قبل الإرسال');
     if(e.data.needs_review&&!e.data.exception_note)throw Error('راجع استثناءات الموظفين غير النشطين أو اختلاف بيانات الرواتب');
+     if(modern)await ensureAssignedPayrollManager(e.data.project_id,batch.company);
    }
   }else if(!modern&&action==='admin_approve'){
    if(!['admin','administrative_manager'].includes(u.role)||batch.status!=='admin_review')return err('الاعتماد الإداري ليس ضمن صلاحيتك أو المرحلة',403);
