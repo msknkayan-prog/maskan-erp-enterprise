@@ -286,6 +286,22 @@ if(mod==='projects'&&String(data.manager_email||'').trim()){
  data.manager_phone=managerRecord.phone||'';
  data.manager_email=managerEmail;
 }
+if(mod==='employees'&&data.direct_manager_id){
+ const managerRow=await db.prepare("SELECT id,company,data FROM records WHERE module='project_managers' AND id=? AND company=?").bind(data.direct_manager_id,body.company).first<any>();
+ if(!managerRow)throw Error('المدير المباشر غير موجود في دليل مدراء المشاريع للشركة');
+ const managerData=JSON.parse(managerRow.data);
+ const managerEmail=String(managerData.email||'').trim().toLowerCase();
+ const account=await db.prepare('SELECT email,role,is_active,companies FROM members WHERE lower(email)=?').bind(managerEmail).first<any>();
+ if(!account||account.is_active===false||account.role!=='project_manager')throw Error('المدير المباشر المحدد ليس لديه حساب مدير مشروع نشط');
+ if(account.companies&&account.companies!=='*'){
+  let matches=false;try{matches=JSON.parse(account.companies).includes(body.company)}catch{}
+  if(!matches)throw Error('حساب المدير المباشر لا يشمل شركة الموظف');
+ }
+ data.manager=String(managerData.name||'');
+ data.manager_email=managerEmail;
+ data.supervisor_account=managerEmail;
+ data.manager_phone=String(managerData.phone||'');
+}
 if(mod==='employees'&&data.project_id){
  const project=await db.prepare("SELECT data,company FROM records WHERE module='projects' AND id=?").bind(data.project_id).first<any>();
  if(project){
@@ -293,13 +309,14 @@ if(mod==='employees'&&data.project_id){
   const managerEmail=String(details.manager_email||'').trim().toLowerCase();
   if(managerEmail){
    const manager=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
-   data.manager=manager?.name||details.manager_name||data.manager||'';
-   data.manager_email=managerEmail;
+   if(!data.direct_manager_id){
+    data.manager=manager?.name||details.manager_name||data.manager||'';
+    data.manager_email=managerEmail;
+   }
   }else{
    // The original employee roster is the authority for managers until an
    // actual login is assigned. Never erase imported manager names on edit.
-   data.manager=details.manager_name||data.manager||'';
-   data.manager_email='';
+   if(!data.direct_manager_id){data.manager=details.manager_name||data.manager||'';data.manager_email='';}
   }
  }
 }
@@ -339,8 +356,9 @@ if(mod!=='employees'&&['leave','advances','warnings','resignations','returns','t
  const employeeRecord=await db.prepare("SELECT id,company,data FROM records WHERE id=? AND module='employees' AND company=?").bind(data.employee_id,body.company).first<any>();
  if(!employeeRecord)throw Error('الموظف المختار غير موجود في الشركة');
  const employee=JSON.parse(employeeRecord.data);
- const snapshot={employee_id:employeeRecord.id,company:body.company,name:String(employee.name||''),code:String(employee.code||''),job:String(employee.job||''),department:String(employee.department||''),project_id:String(employee.project_id||''),manager:String(employee.manager||''),identity:String(employee.identity||''),nationality:String(employee.nationality||''),hire_date:String(employee.hire_date||''),salary:Number(employee.salary||0),basic:Number(employee.basic||0),housing:Number(employee.housing||0),transport:Number(employee.transport||0),bank_amount:Number(employee.bank_amount||0),cash_amount:Number(employee.cash_amount||0),bank:String(employee.bank||''),iban:String(employee.iban||'')};
+ const snapshot={employee_id:employeeRecord.id,company:body.company,name:String(employee.name||''),code:String(employee.code||''),job:String(employee.job||''),department:String(employee.department||''),project_id:String(employee.project_id||''),manager:String(employee.manager||''),direct_manager_id:String(employee.direct_manager_id||''),manager_email:String(employee.manager_email||''),manager_phone:String(employee.manager_phone||''),identity:String(employee.identity||''),nationality:String(employee.nationality||''),hire_date:String(employee.hire_date||''),salary:Number(employee.salary||0),basic:Number(employee.basic||0),housing:Number(employee.housing||0),transport:Number(employee.transport||0),bank_amount:Number(employee.bank_amount||0),cash_amount:Number(employee.cash_amount||0),bank:String(employee.bank||''),iban:String(employee.iban||'')};
  if(!old||previous?.employee_id!==data.employee_id||!previous?.employee_snapshot)data.employee_snapshot=snapshot;
+  data.direct_manager={name:snapshot.manager,email:snapshot.manager_email,phone:snapshot.manager_phone,directory_id:snapshot.direct_manager_id};
  if(employee.project_id){
   const project=await db.prepare("SELECT company,data FROM records WHERE module='projects' AND id=?").bind(employee.project_id).first<any>();
   if(project){
