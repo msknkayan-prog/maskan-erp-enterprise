@@ -192,9 +192,9 @@ if(body.action==='onboard_project_manager'){
   const assigned=String(data.manager_email||'').trim().toLowerCase();
   if(assigned&&assigned!==email&&!body.confirm_reassign)throw Error('المشروع '+(data.name||p.id)+' مرتبط بمدير آخر؛ يلزم تأكيد إعادة التكليف');
  }
- const currentScope=existing?.companies==='*'?'*':(()=>{try{return JSON.parse(existing?.companies||'[]')}catch{return []}})();
+ const currentScope=existing?.role==='employee'?[]:existing?.companies==='*'?'*':(()=>{try{return JSON.parse(existing?.companies||'[]')}catch{return []}})();
  const nextCompanies=currentScope==='*'?'*':[...new Set([...(Array.isArray(currentScope)?currentScope:[]),...allowedCompanies])];
- const currentProjects=existing?.projects==='*'?'*':(()=>{try{return JSON.parse(existing?.projects||'[]')}catch{return []}})();
+ const currentProjects=existing?.role==='employee'?[]:existing?.projects==='*'?'*':(()=>{try{return JSON.parse(existing?.projects||'[]')}catch{return []}})();
  const nextProjects=currentProjects==='*'?'*':[...new Set([...(Array.isArray(currentProjects)?currentProjects:[]),...ids])];
  const duplicateDirectory=(await db.prepare("SELECT id,company,data FROM records WHERE module='project_managers'").all()).results;
  const commands:any[]=[];
@@ -224,7 +224,7 @@ if(body.action==='onboard_project_manager'){
   }
  }
  if(employeeId){
-  const revised={...employeeData,project_manager_account:email,is_project_manager:true};
+  const revised={...employeeData,email:employeeData.email||email,project_manager_account:email,is_project_manager:true};
   commands.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
    .bind(JSON.stringify(revised),now,mutation,employeeId,employeeRow.revision));
  }
