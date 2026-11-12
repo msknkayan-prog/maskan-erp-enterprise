@@ -667,7 +667,7 @@ test('leave editor recalculates duration and end date on type and start date cha
  assert.match(ui,/function applyLeaveField\(key,value\)/);
  assert.match(ui,/next\.days=String\(days\);next\.end=leaveEndDate\(next\.start,days\)/);
  assert.match(ui,/module==='leave'&&f\.key==='leave_type'\?applyLeaveField/);
- assert.match(ui,/module==='leave'&&f\.key==='start'\)applyLeaveField/);
+ assert.match(ui,/module==='leave'&&\['start','end'\]\.includes\(f\.key\)\)applyLeaveField/);
  assert.match(ui,/fixedLeaveDays\(edit\.data\.leave_type\)!==null/);
  assert.match(ui,/لا تخصم من رصيد الإجازة السنوية/);
 });
@@ -1212,4 +1212,26 @@ test('live records search matches rendered leave employee names and Arabic digit
  for(const marker of ['companyDisplayName(r.company)','employee?.data?.name','enumOptions[f.type].find','relationModules[f.type]','searchWords.every','البحث في السجلات','مسح البحث'])assert.ok(ui.includes(marker),marker);
  assert.match(ui,/\[٠-٩\]/);
  assert.match(ui,/\[۰-۹\]/);
+});
+
+test('leave day count updates from both dates and selected holiday policy',async()=>{
+ const {leaveCalendarDays,leaveChargedDays,parseLeaveHolidayDates,normalize}=await import('../lib/modules.mjs');
+ assert.equal(leaveCalendarDays('2026-11-12','2026-11-15'),4);
+ assert.equal(leaveCalendarDays('2026-11-16','2026-11-15'),null);
+ assert.equal(leaveChargedDays('2026-11-12','2026-11-15','2026-11-13','include'),4);
+ assert.equal(leaveChargedDays('2026-11-12','2026-11-15','2026-11-13','exclude'),3);
+ assert.deepEqual(parseLeaveHolidayDates('2026-11-14,2026-11-13','2026-11-12','2026-11-15'),['2026-11-13','2026-11-14']);
+ assert.throws(()=>parseLeaveHolidayDates('2026-11-16','2026-11-12','2026-11-15'),/داخل فترة الإجازة/);
+ assert.throws(()=>parseLeaveHolidayDates('2026-11-13,2026-11-13','2026-11-12','2026-11-15'),/مكرر/);
+ const data={employee_id:'test',leave_type:'annual',start:'2026-11-12',end:'2026-11-15',days:3,holiday_policy:'exclude',holiday_dates:'2026-11-13'};
+ const result=normalize('leave',{company:'مسكن الكيان',data});
+ assert.equal(result.days,3);
+ assert.equal(result.holiday_dates,'2026-11-13');
+ assert.throws(()=>normalize('leave',{company:'مسكن الكيان',data:{...data,days:4}}),/عدد أيام الإجازة يجب أن يطابق/);
+ assert.throws(()=>normalize('leave',{company:'مسكن الكيان',data:{...data,holiday_dates:'2026-11-18'}}),/داخل فترة الإجازة/);
+});
+test('leave UI allows adding/removing holiday dates and displays automatic net day count',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ for(const marker of ['addLeaveHolidayDate','leaveChargedDays','leaveCalendarDays','إضافة يوم عطلة','أيام الإجازة المحتسبة','leave-holiday-tags','holiday_policy'])assert.ok(ui.includes(marker),marker);
+ assert.match(ui,/f\.key==='days'\|\|f\.key==='end'/);
 });
