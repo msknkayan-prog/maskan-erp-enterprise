@@ -970,3 +970,16 @@ body{line-height:1.55}
 .cf-readiness-item.needs-action>span{background:#fff0df;color:#b1591f}
 @media(max-width:1100px){.cf-readiness-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.cf-readiness-grid{grid-template-columns:1fr}}
+
+/* Leave duration and optional holidays inside the requested period */
+.leave-holidays-control{display:grid;gap:8px;min-width:0}
+.leave-holiday-add{display:flex;gap:8px;align-items:center}
+.leave-holiday-add input{flex:1;min-width:0;min-height:40px}
+.leave-holiday-add button,.leave-holiday-tags button{border:1px solid #b99750;background:#f9f2e1;color:#493513;border-radius:6px;padding:8px 11px;cursor:pointer;font-size:12px;font-weight:700}
+.leave-holiday-add button:disabled{opacity:.5;cursor:not-allowed}
+.leave-holiday-tags{display:flex;flex-wrap:wrap;gap:7px}
+.leave-holiday-tags span{display:flex;align-items:center;gap:7px;direction:ltr;border:1px solid #d8bf84;border-radius:6px;background:#fffaf0;padding:4px 5px 4px 9px;font-size:12px}
+.leave-holiday-tags button{padding:2px 7px}
+.leave-holidays-control small{color:#79684b;line-height:1.6}
+.leave-days-preview{padding:11px 14px;background:#f7f0e0;border:1px solid #c9ae72;border-radius:8px;font-size:13px;line-height:1.8;margin-top:10px;color:#5b431b}
+@media(max-width:650px){.leave-holiday-add{flex-direction:column;align-items:stretch}}
