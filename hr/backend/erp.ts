@@ -386,7 +386,7 @@ if(mod==='projects'&&String(data.manager_email||'').trim()){
  data.manager_phone=managerRecord.phone||'';
  data.manager_email=managerEmail;
 }
-if(mod==='employees'&&data.direct_manager_id){
+if(mod==='employees'&&data.direct_manager_id&&!data.project_id){
  const managerRow=await db.prepare("SELECT id,company,data FROM records WHERE module='project_managers' AND id=? AND company=?").bind(data.direct_manager_id,body.company).first<any>();
  if(!managerRow)throw Error('المدير المباشر غير موجود في دليل مدراء المشاريع للشركة');
  const managerData=JSON.parse(managerRow.data);
