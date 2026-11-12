@@ -239,6 +239,10 @@ if(body.action==='onboard_project_manager'){
  const currentProjects=existing?.role==='employee'?[]:existing?.projects==='*'?'*':(()=>{try{return JSON.parse(existing?.projects||'[]')}catch{return []}})();
  const nextProjects=currentProjects==='*'?'*':[...new Set([...(Array.isArray(currentProjects)?currentProjects:[]),...ids])];
  const duplicateDirectory=(await db.prepare("SELECT id,company,data FROM records WHERE module='project_managers'").all()).results;
+ const directoryIds=new Map(allowedCompanies.map(co=>{
+  const matching=duplicateDirectory.find((r:any)=>r.company===co&&String(JSON.parse(r.data||'{}').email||'').trim().toLowerCase()===email);
+  return [co,matching?.id||crypto.randomUUID()];
+ }));
  const linkedEmployees=(await db.prepare("SELECT id,company,data,revision FROM records WHERE module='employees'").all()).results;
  const syncEmployees:any[]=[];
  for(const employee of linkedEmployees){
@@ -246,9 +250,8 @@ if(body.action==='onboard_project_manager'){
   if(d._archived||!ids.includes(String(d.project_id||'')))continue;
   const project=selected.find((p:any)=>p.id===d.project_id);
   const projectData=JSON.parse(project.data||'{}');
-  if(project.company!==employee.company&&!(Array.isArray(projectData._shared_companies)&&projectData._shared_companies.includes(employee.company)))continue;
-  const direct=duplicateDirectory.find((r:any)=>r.company===employee.company&&String(JSON.parse(r.data||'{}').email||'').trim().toLowerCase()===email);
-  const updated={...d,manager:name,manager_email:email,manager_phone:phone||d.manager_phone||'',supervisor_account:email,direct_manager_id:direct?.id||''};
+  if(project.company!==employee.company)continue;
+  const updated={...d,manager:name,manager_email:email,manager_phone:phone,supervisor_account:email,direct_manager_id:directoryIds.get(employee.company)||''};
   syncEmployees.push({record:employee,data:updated});
  }
  if(syncEmployees.length>1500)throw Error('عدد الموظفين كبير؛ قسّم ربط المشاريع إلى دفعات أصغر');
@@ -275,11 +278,12 @@ if(body.action==='onboard_project_manager'){
     .bind(JSON.stringify({...d,name,email,phone:phone||d.phone||'',employee_id:employeeId||d.employee_id||null}),now,mutation,recorded.id));
   }else{
    commands.push(db.prepare("INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation) VALUES(?,'project_managers',?,?,?,'draft',1,?,?,?,?)")
-    .bind(crypto.randomUUID(),co,null,JSON.stringify({name,email,phone,job:'مدير مشروع',employee_id:employeeId||null}),u.email,now,now,mutation));
+    .bind(directoryIds.get(co),co,null,JSON.stringify({name,email,phone,job:'مدير مشروع',employee_id:employeeId||null}),u.email,now,now,mutation));
   }
  }
  if(employeeId){
-  const revised={...employeeData,email:employeeData.email||email,project_manager_account:email,is_project_manager:true};
+  const linkedManagerRecord=syncEmployees.find(e=>e.record.id===employeeId);
+  const revised={...employeeData,...(linkedManagerRecord?.data||{}),email:employeeData.email||email,project_manager_account:email,is_project_manager:true};
   commands.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
    .bind(JSON.stringify(revised),now,mutation,employeeId,employeeRow.revision));
  }
@@ -288,7 +292,7 @@ if(body.action==='onboard_project_manager'){
   commands.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='projects' AND revision=?")
    .bind(JSON.stringify({...data,manager_email:email,manager_name:name,manager_phone:phone}),now,mutation,project.id,project.revision));
  }
- for(const employee of syncEmployees){
+ for(const employee of syncEmployees.filter(e=>e.record.id!==employeeId)){
   commands.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
    .bind(JSON.stringify(employee.data),now,mutation,employee.record.id,employee.record.revision));
  }
