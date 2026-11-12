@@ -158,10 +158,10 @@ if(body.action==='onboard_project_manager'){
  const email=String(body.email||'').trim().toLowerCase();
  const name=String(body.name||'').trim();
  const phone=String(body.phone||'').trim();
- const username=String(body.username||'').trim().replace(/\\s+/g,' ').toLowerCase();
+ const username=String(body.username||'').trim().replace(/\s+/g,' ').toLowerCase();
  const ids=body.project_ids;
- if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||name.length<3||name.length>160)throw Error('الاسم والبريد الإلكتروني مطلوبان وبصيغة صحيحة');
- if(username&&!/^[\\p{L}][\\p{L}\\p{N} ._-]{2,63}$/u.test(username))throw Error('اسم المستخدم غير صالح');
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||name.length<3||name.length>160)throw Error('الاسم والبريد الإلكتروني مطلوبان وبصيغة صحيحة');
+ if(username&&!/^[\p{L}][\p{L}\p{N} ._-]{2,63}$/u.test(username))throw Error('اسم المستخدم غير صالح');
  if(!Array.isArray(ids)||!ids.length||ids.length>100||ids.some((id:any)=>typeof id!=='string')||new Set(ids).size!==ids.length)throw Error('حدد مشاريع غير مكررة لمدير المشروع');
  const allProjects=(await db.prepare("SELECT id,company,data,revision FROM records WHERE module='projects'").all()).results;
  const selected=ids.map((id:string)=>allProjects.find((p:any)=>p.id===id));
