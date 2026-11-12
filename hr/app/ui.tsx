@@ -577,7 +577,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <div className="panel-head"><div><h2>الطلبات قيد الإجراء</h2><span>قائمة موحّدة للطلبات غير المكتملة ضمن صلاحيات حسابك والشركات المتاحة له</span></div><span className="members-count">{pendingRequestRows.length} طلب</span></div>
  <div className="form-grid" style={{margin:'16px 0'}}>
  <label>نوع الطلب<select value={pendingType} onChange={e=>setPendingType(e.target.value)}><option value="">جميع أنواع الطلبات</option>{accessiblePendingTypes.map(k=><option key={k} value={k}>{modules[k].label}</option>)}</select></label>
- <label>مرحلة الاعتماد<select value={pendingStage} onChange={e=>setPendingStage(e.target.value)}><option value="">جميع المراحل الجارية</option>{pendingStages.map(status=><option key={status} value={status}>{states[status]||status}</option>)}</select></label>
+ <label>مرحلة الاعتماد<select value={pendingStage} onChange={e=>setPendingStage(e.target.value)}><option value="">جميع المراحل الجارية</option>{pendingStages.map(status=><option key={status} value={status}>{states[status]||cycleStatus[status]||status}</option>)}</select></label>
  <label>بحث عن الموظف أو الطلب<input type="search" value={pendingSearch} onChange={e=>setPendingSearch(e.target.value)} placeholder="اسم الموظف أو رقمه أو بيانات الطلب"/></label>
  </div>
  <div style={{display:'flex',gap:8,justifyContent:'space-between',alignItems:'center',marginBottom:12,flexWrap:'wrap'}}><small>تعرض هذه النافذة المسودات والطلبات قيد المراجعة والمعادة للتصحيح. لا تشمل المعتمدة أو المصروفة أو المرفوضة.</small><button type="button" onClick={()=>{setPendingType('');setPendingStage('');setPendingSearch('')}}>مسح الفلاتر</button></div>
