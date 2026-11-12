@@ -21,7 +21,10 @@ function ManagerProjectPicker({projects,companies,managerEmail,mode,selected,onM
   if(p.module!=='projects'||!manager||normalize(p.data?.manager_email)!==manager)return false;
   const shared=Array.isArray(p.data?._shared_companies)?p.data._shared_companies:[];
   return companies==='*'||companies.includes(p.company)||shared.some(c=>companies.includes(c));
- }).filter((p,index,all)=>all.findIndex(other=>other.id===p.id)===index);
+ }).filter((p,index,all)=>{
+  const key=r=>String(r.company||'')+'|'+String(r.data?.code||r.data?.project_number||r.code||r.id).trim().toLowerCase();
+  return all.findIndex(other=>key(other)===key(p))===index;
+ });
  const matched=eligible.filter(p=>normalize([p.data.name,p.data.code,p.data.project_number,p.code,p.company].join(' ')).includes(normalize(query)));
  const toggle=(id,checked)=>onSelectedChange(checked?[...new Set([...selected,id])]:selected.filter(x=>x!==id));
  return <fieldset className="member-project-access" disabled={disabled} dir="rtl">
