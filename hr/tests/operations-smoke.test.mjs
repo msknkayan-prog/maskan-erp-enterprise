@@ -543,7 +543,7 @@ test('employee form supports searchable department, project and direct manager w
  assert.match(ui,/employee-department-choices/);
  assert.match(ui,/r\.module==='employees'&&r\.company===edit\.company/);
  assert.match(ui,/module==='employees'&&f\.key==='manager'/);
- assert.match(ui,/employee-manager-choices/);
+ assert.match(ui,/aria-label="اختيار المدير المباشر من الدليل"/);
  assert.match(ui,/module==='employees'&&f\.key==='project_id'/);
  assert.match(ui,/aria-label="فلتر المشاريع حسب الاسم"/);
  assert.match(ui,/r\.module==='projects'&&\(r\.company===edit\.company/);
@@ -782,7 +782,7 @@ test('employee editing preserves project manager names even before a project log
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(erp,/data\.manager=details\.manager_name\|\|data\.manager\|\|''/);
  assert.match(erp,/data\.manager_email='';/);
- assert.match(ui,/manager\?\.data\.name\|\|project\.data\.manager_name\|\|employee\?\.data\.manager/);
+ assert.match(ui,/directRow\?\.data\.name\|\|employeeData\.manager/);
 });
 test('automatic refresh coalesces focus/visibility triggers and rejects out-of-order responses',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
@@ -1276,4 +1276,38 @@ test('leave request grid and editor show days, accrued entitlement and projected
  assert.match(ui,/x.status==='approved'/);
  assert.match(ui,/alreadyApproved/);
  assert.match(css,/\.leave-balance-summary/);
+});
+
+test('employee direct manager is a canonical active scoped directory record and request snapshot',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const mod=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ for(const term of ['direct_manager_id','manager_phone','supervisor_account'])assert.ok(erp.includes(term),term);
+ assert.match(erp,/module='project_managers' AND id=\? AND company=\?/);
+ assert.match(erp,/managerRow/);
+ assert.match(erp,/account\.role!=='project_manager'/);
+ assert.match(erp,/data\.direct_manager=\{name:snapshot\.manager/);
+ assert.match(mod,/f\('direct_manager_id','مرجع المدير المباشر','internal'\)/);
+ assert.match(ui,/aria-label="بحث المدير المباشر"/);
+ assert.match(ui,/aria-label="اختيار المدير المباشر من الدليل"/);
+ assert.match(ui,/setMembers\(d\.rows\)/);
+ assert.match(ui,/f\.type!=='internal'/);
+});
+test('leave and advance approvals show assigned project manager and horizontal stages',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const print=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
+ for(const term of ['request-approval-guide','request-approval-summary','approvalStages','مدير المشروع المختص','دورة اعتماد الطلب'])assert.ok(ui.includes(term),term);
+ for(const term of ['Direct Manager','Project Manager','التسلسل: إعداد الطلب'])assert.ok(print.includes(term),term);
+});
+test('payroll approval requires authorized project managers for every staff row and protects final handoff',()=>{
+ const cycle=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(cycle,/ensureAssignedPayrollManager/);
+ assert.match(cycle,/await ensureAssignedPayrollManager\(row\.data\.project_id,b\.company\)/);
+ assert.match(cycle,/await ensureAssignedPayrollManager\(e\.data\.project_id,batch\.company\)/);
+ assert.match(cycle,/await canManageProject\(u,projectId,batch\.company\)/);
+ assert.match(cycle,/manager\.role!=='project_manager'/);
+ assert.match(cycle,/manager_reviewed_by/);
+ assert.match(cycle,/\['admin','projects_director'\]\.includes\(u\.role\)/);
+ assert.match(ui,/إرسال لإدارة المشاريع بعد مراجعة المدراء/);
 });
