@@ -874,7 +874,7 @@ test('project managers choose authorized projects via searchable checkbox list o
  assert.match(ui,/memberRole==='project_manager'&&<ManagerProjectPicker/);
  assert.match(ui,/memberEdit\.role==='project_manager'&&<ManagerProjectPicker/);
  assert.match(backend,/حدد مشروعًا واحدًا على الأقل لمدير المشروع/);
- assert.match(backend,/المشاريع المختارة لا تتبع الشركات المسموح بها/);
+ assert.match(backend,/يمكن منح المدير صلاحية المشاريع المعيّن مديرًا لها فقط/);
  assert.match(backend,/ليس لديك صلاحية مراجعة طلبات هذا المشروع/);
 });
 test('project manager visibility requires both assigned manager and explicit selected project scope',async()=>{
@@ -1325,7 +1325,10 @@ test('project manager can view payroll employees only from projects assigned to 
  assert.equal(visible(u,person('e1','p1'),all),true);
  assert.equal(visible(u,person('e2','p2'),all),false);
  assert.equal(visible({...u,projects:JSON.stringify(['p2'])},person('e1','p1'),all),false);
- assert.equal(visible(u,{id:'b1',module:'payroll_batches',company:'مسكن الكيان',data:{month:'2026-11'}},all),true);
+ const batch={id:'b1',module:'payroll_batches',company:'مسكن الكيان',data:{month:'2026-11'}};
+ assert.equal(visible(u,batch,all),false); // Unlinked monthly headers must not be disclosed.
+ all.push({id:'pay1',module:'payroll',company:'مسكن الكيان',data:{batch_id:'b1',employee_id:'e1',project_id:'p1'}});
+ assert.equal(visible(u,batch,all),true);
 });
 
 test('existing employee can be chosen as project manager and linked to scoped approvals',()=>{
