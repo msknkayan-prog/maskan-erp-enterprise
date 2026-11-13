@@ -8,6 +8,7 @@ import {Attendance,Migration,Attachments,RecordPaper,RecordHistory} from './oper
 import ClientFinance from './client-finance';
 import {companyLogoPath,companyOfficialName} from '../lib/company-brand.mjs';
 import {readXlsx,workbookBytes} from '../lib/sheets.mjs';
+import {canSelectManagerProject,managerReassignmentConflicts} from '../lib/manager-assignment.mjs';
 const icons={users:Users,building:Building2,file:FileText,wallet:Wallet,cart:ShoppingCart,calendar:CalendarDays,alert:TriangleAlert,chart:ChartNoAxesCombined};
 const money=n=>Number(n||0).toLocaleString('ar-SA',{maximumFractionDigits:2});
 function download(name,content,type='text/csv;charset=utf-8'){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff',content],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
@@ -104,9 +105,23 @@ async function assignProjectManager(row){
 async function saveManagerSetup(e){
  e.preventDefault();if(!managerSetup||managerSetupBusy)return;
  if(!managerSetup.ids.length)return notify('اختر مشروعًا واحدًا على الأقل');
+ const email=String(managerSetup.email||'').trim().toLowerCase();
+ const existingAccount=members.find(m=>String(m.email||'').trim().toLowerCase()===email);
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+  setManagerSetup(p=>({...p,showDetails:true}));return notify('حدد المشاريع ثم أدخل البريد الإلكتروني الصحيح للمدير');
+ }
+ if(String(managerSetup.name||'').trim().length<3)return notify('أدخل اسم المدير كاملًا');
+ if(!existingAccount&&!String(managerSetup.username||'').trim()){
+  setManagerSetup(p=>({...p,showDetails:true}));return notify('أدخل اسم المستخدم لإنشاء حساب المدير');
+ }
+ const selectedProjects=rows.filter(r=>r.module==='projects'&&managerSetup.ids.includes(r.id));
+ const employeeCompany=rows.find(r=>r.module==='employees'&&r.id===managerSetup.employeeId)?.company||'';
+ if(selectedProjects.length!==managerSetup.ids.length||selectedProjects.some(r=>!canSelectManagerProject(r,employeeCompany)))return notify('المشاريع المختارة لا تتطابق مع الشركة؛ أعد الاختيار');
+ const conflicts=managerReassignmentConflicts(selectedProjects,managerSetup.ids,email);
+ if(conflicts.length&&!window.confirm('المشاريع التالية مرتبطة بمدراء آخرين:\n'+conflicts.map(p=>'• '+(p.data?.name||p.code||p.id)).join('\n')+'\n\nهل تؤكد نقل هذه المشاريع إلى '+managerSetup.name+'؟ ستنتقل إليه اعتمادات الطلبات الجديدة.'))return;
  setManagerSetupBusy(true);
  try{
-  const result=await post({action:'onboard_project_manager',name:managerSetup.name,email:managerSetup.email,phone:managerSetup.phone,username:managerSetup.username,project_ids:managerSetup.ids,employee_id:managerSetup.employeeId||null});
+  const result=await post({action:'onboard_project_manager',name:managerSetup.name,email,phone:managerSetup.phone,username:managerSetup.username,project_ids:managerSetup.ids,employee_id:managerSetup.employeeId||null,confirm_reassign:conflicts.length>0});
   let msg='تم ربط المدير بـ '+result.projects+' مشروع وربط '+(result.employees_linked||0)+' موظف وتحديث صلاحياته';
   const currentAccount=members.find(m=>String(m.email||'').toLowerCase()===String(result.email||'').toLowerCase());
   if(result.created||currentAccount?.auth_ready===false){
@@ -715,18 +730,15 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <select disabled={!!managerSetup.employeeId} value={members.some(m=>m.email===managerSetup.email&&m.role==='project_manager')?managerSetup.email:'new'} onChange={e=>{const email=e.target.value;const account=members.find(x=>x.email===email);const directory=rows.find(r=>r.module==='project_managers'&&r.data?.email===email);setManagerSetup(p=>({...p,choiceKey:'',employeeId:'',email:account?.email||'',name:directory?.data?.name||account?.display_name||'',username:account?.username||'',phone:directory?.data?.phone||'',ids:[]}))}}><option value="new">+ مدير مشروع جديد</option>{members.filter(m=>m.role==='project_manager'&&m.is_active!==false).map(m=><option value={m.email} key={m.email}>{rows.find(r=>r.module==='project_managers'&&r.data?.email===m.email)?.data?.name||m.display_name||m.username||m.email}</option>)}</select></label>
  <div className="form-grid">
  <label>اسم المدير<input required readOnly={!!managerSetup.employeeId} minLength={3} value={managerSetup.name} onChange={e=>setManagerSetup(p=>({...p,name:e.target.value}))}/></label>
- <label>البريد الإلكتروني<input required type="email" dir="ltr" value={managerSetup.email} onChange={e=>setManagerSetup(p=>({...p,email:e.target.value,ids:[]}))}/></label>
+ <label>البريد الإلكتروني<input required type="email" dir="ltr" value={managerSetup.email} onChange={e=>setManagerSetup(p=>({...p,email:e.target.value}))}/></label>
  <label>اسم المستخدم<input required={!members.some(m=>m.email===managerSetup.email)} value={managerSetup.username} onChange={e=>setManagerSetup(p=>({...p,username:e.target.value}))}/></label>
  <label>رقم الهاتف<input type="tel" dir="ltr" value={managerSetup.phone} onChange={e=>setManagerSetup(p=>({...p,phone:e.target.value}))}/></label>
  </div></div>}
  <fieldset style={{padding:10}}><legend>ربط المدير بمشروع واحد أو عدة مشاريع</legend>
  {(()=>{
   const allProjects=rows.filter(r=>r.module==='projects'&&(!company||r.company===company)&&(!managerSetup.selectedCompany||r.company===managerSetup.selectedCompany)).filter((r,i,all)=>all.findIndex(x=>x.id===r.id)===i);
-  const isEligible=r=>{
-   const current=String(r.data?.manager_email||'').trim().toLowerCase();
-   const wrongCompany=!!managerSetup.employeeId&&rows.find(e=>e.id===managerSetup.employeeId)?.company!==r.company;
-   return !!managerSetup.email&&!wrongCompany&&(!current||current===String(managerSetup.email||'').trim().toLowerCase());
-  };
+  const employeeCompany=rows.find(e=>e.module==='employees'&&e.id===managerSetup.employeeId)?.company||'';
+  const isEligible=r=>canSelectManagerProject(r,employeeCompany);
   const eligible=allProjects.filter(isEligible);
   const shown=allProjects.filter(r=>!managerSetup.projectSearch||normalizeSearch([r.data?.name,r.data?.code,r.code].join(' ')).includes(normalizeSearch(managerSetup.projectSearch)));
   const linkedEmployees=rows.filter(r=>r.module==='employees'&&!r.data?._archived&&managerSetup.ids.includes(String(r.data?.project_id||''))&&allProjects.some(p=>p.id===r.data.project_id&&p.company===r.company));
@@ -735,7 +747,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    <div style={{display:'flex',gap:7,flexWrap:'wrap',alignItems:'center',justifyContent:'space-between'}}>
     <strong style={{fontSize:13}}>المشاريع المختارة: {managerSetup.ids.length} من {eligible.length} متاحة</strong>
     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-     <button type="button" disabled={!managerSetup.email||!shownEligible.length} onClick={()=>setManagerSetup(p=>({...p,ids:[...new Set([...p.ids,...shownEligible.map(r=>r.id)])]}))}>تحديد كل المشاريع المعروضة</button>
+     <button type="button" disabled={!shownEligible.length} onClick={()=>setManagerSetup(p=>({...p,ids:[...new Set([...p.ids,...shownEligible.map(r=>r.id)])]}))}>تحديد كل المشاريع المعروضة</button>
      <button type="button" disabled={!managerSetup.ids.length} onClick={()=>setManagerSetup(p=>({...p,ids:[]}))}>إلغاء التحديد</button>
     </div>
    </div>
@@ -745,10 +757,10 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
      const assigned=String(r.data?.manager_email||'').trim().toLowerCase();
      const other=assigned&&assigned!==String(managerSetup.email||'').trim().toLowerCase();
      const employees=rows.filter(e=>e.module==='employees'&&e.company===r.company&&!e.data?._archived&&String(e.data?.project_id||'')===r.id);
-     return <div key={r.id} style={{padding:'8px 9px',border:'1px solid #e8ddc8',borderRadius:7,opacity:other?0.6:1,display:'grid',gap:4}}>
+     return <div key={r.id} style={{padding:'8px 9px',border:'1px solid #e8ddc8',borderRadius:7,opacity:isEligible(r)?1:0.6,display:'grid',gap:4}}>
       <label style={{display:'flex',alignItems:'center',gap:9,fontSize:13,cursor:isEligible(r)?'pointer':'not-allowed'}}>
        <input type="checkbox" disabled={!isEligible(r)} checked={managerSetup.ids.includes(r.id)} onChange={e=>setManagerSetup(p=>({...p,ids:e.target.checked?[...new Set([...p.ids,r.id])]:p.ids.filter(id=>id!==r.id)}))}/>
-       <span style={{flex:1}}><strong>{r.data?.name||r.code}</strong> <small>· {employees.length} موظف · {other?'مرتبط بمدير آخر':assigned?'مرتبط بهذا المدير':'متاح'}</small></span>
+       <span style={{flex:1}}><strong>{r.data?.name||r.code}</strong> <small>· {employees.length} موظف · {other?'مرتبط بمدير آخر — يتطلب تأكيد النقل':assigned?'مرتبط بهذا المدير':'متاح للتعيين'}</small></span>
       </label>
       {!!employees.length&&<details style={{fontSize:12,paddingInlineStart:25}}><summary style={{cursor:'pointer'}}>عرض أسماء موظفي المشروع ({employees.length})</summary><div style={{padding:'6px 0',lineHeight:1.9}}>{employees.slice(0,30).map(e=><span key={e.id} style={{display:'inline-block',marginInlineEnd:10}}>{e.data?.name||e.data?.code||'غير مسمى'}{e.data?.code?' ('+e.data.code+')':''}</span>)}{employees.length>30&&<small>و{employees.length-30} موظف آخر</small>}</div></details>}
      </div>;
@@ -757,13 +769,13 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    </div>
    <div style={{display:'grid',gap:4,padding:'9px 10px',background:'#f7f2e7',borderRadius:8,fontSize:13}}>
     <strong>ملخص الربط: {managerSetup.ids.length} مشروع · {linkedEmployees.length} موظف</strong>
-    <small>تُحدّث بيانات المدير المباشر لموظفي المشاريع المختارة عند الحفظ. المشاريع التابعة لمدير آخر غير قابلة للاختيار من هنا.</small>
+    <small>يمكن اختيار المشاريع قبل إدخال البريد. عند نقل مشروع من مدير آخر سيُطلب تأكيد صريح قبل الحفظ، ثم تُحدَّث بيانات المدير المباشر لموظفي المشروع.</small>
     {linkedEmployees.length>0&&<details><summary style={{cursor:'pointer'}}>أسماء الموظفين الذين سيُربطون بهذا المدير</summary><div style={{paddingTop:5,lineHeight:1.8}}>{linkedEmployees.slice(0,35).map(e=><span key={e.id} style={{display:'inline-block',marginInlineEnd:9}}>{e.data?.name||e.data?.code||'غير مسمى'}</span>)}{linkedEmployees.length>35&&<small>و{linkedEmployees.length-35} موظف آخر</small>}</div></details>}
    </div>
   </>;
  })()}</fieldset>
  <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',justifyContent:'flex-start'}}>
- <button className="primary" type="submit" disabled={managerSetupBusy||!managerSetup.ids.length||!managerSetup.email||!managerSetup.name||(!managerSetup.username&&!members.some(m=>m.email===managerSetup.email))}>{managerSetupBusy?'جارٍ الحفظ…':'حفظ وتعيين المدير'}</button>
+ <button className="primary" type="submit" disabled={managerSetupBusy}>{managerSetupBusy?'جارٍ الحفظ…':'حفظ وتعيين المدير'}</button>
  <button type="button" disabled={managerSetupBusy} onClick={()=>setManagerSetup(null)}>إلغاء</button>
  </div></form></section></div>}
  {module==='pending_requests'&&<section className="panel" dir="rtl" style={{padding:20}}>
