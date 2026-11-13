@@ -275,10 +275,12 @@ if(body.action==='onboard_project_manager'){
  }
  const allowedCompanies=[...new Set(selected.map((p:any)=>p.company))];
  if(employeeId&&!allowedCompanies.includes(employeeRow.company))throw Error('اختر مشروعًا تابعًا لشركة الموظف؛ لا يمكن ربط حسابه بمشروع شركة مختلفة من هذه النافذة');
+ const transferredProjects=new Map<string,string[]>();
  for(const p of selected){
   const data=JSON.parse(p.data||'{}');
   const assigned=String(data.manager_email||'').trim().toLowerCase();
   if(assigned&&assigned!==email&&!body.confirm_reassign)throw Error('المشروع '+(data.name||p.id)+' مرتبط بمدير آخر؛ يلزم تأكيد إعادة التكليف');
+  if(assigned&&assigned!==email)transferredProjects.set(assigned,[...(transferredProjects.get(assigned)||[]),p.id]);
  }
  const currentScope=existing?.role==='employee'?[]:existing?.companies==='*'?'*':(()=>{try{return JSON.parse(existing?.companies||'[]')}catch{return []}})();
  const nextCompanies=currentScope==='*'?'*':[...new Set([...(Array.isArray(currentScope)?currentScope:[]),...allowedCompanies])];
@@ -316,6 +318,16 @@ if(body.action==='onboard_project_manager'){
   commands.push(db.prepare("UPDATE members SET role='project_manager',employee_id=?,companies=?,projects=?,username=? WHERE email=? AND role IN ('project_manager','employee') AND is_active=true")
     .bind(employeeId||existing.employee_id||null,nextCompanies==='*'?'*':JSON.stringify(nextCompanies),nextProjects==='*'?'*':JSON.stringify(nextProjects),username||existing.username,email));
  }
+ // Reassigned projects must also be removed from the previous managers'
+ // explicit scopes; '*' scopes are checked against live project ownership.
+ for(const [previousEmail,projectIds] of transferredProjects){
+  const previous=await db.prepare("SELECT projects FROM members WHERE lower(email)=? AND role='project_manager'").bind(previousEmail).first<any>();
+  if(!previous||previous.projects==='*')continue;
+  let scope:any=[];try{scope=JSON.parse(previous.projects||'[]')}catch{}
+  if(!Array.isArray(scope)||!scope.some((id:string)=>projectIds.includes(id)))continue;
+  commands.push(db.prepare("UPDATE members SET projects=? WHERE lower(email)=? AND role='project_manager'")
+   .bind(JSON.stringify(scope.filter((id:string)=>!projectIds.includes(id))),previousEmail));
+ }
  for(const co of allowedCompanies){
   const recorded=duplicateDirectory.find((r:any)=>r.company===co&&String(JSON.parse(r.data||'{}').email||'').trim().toLowerCase()===email);
   if(recorded){
@@ -343,7 +355,7 @@ if(body.action==='onboard_project_manager'){
    .bind(JSON.stringify(employee.data),now,mutation,employee.record.id,employee.record.revision));
  }
  commands.push(db.prepare('INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)')
-  .bind(crypto.randomUUID(),u.email,email,'project_manager_onboarding',now,JSON.stringify({project_ids:ids,companies:allowedCompanies,employee_id:employeeId||null,existing_account:!!existing,employees_linked:syncEmployees.length})));
+  .bind(crypto.randomUUID(),u.email,email,'project_manager_onboarding',now,JSON.stringify({project_ids:ids,companies:allowedCompanies,employee_id:employeeId||null,existing_account:!!existing,employees_linked:syncEmployees.length,reassigned_from:[...transferredProjects.keys()]})));
  const applied=await db.batch(commands);
  if(applied.slice(0,-1).some((result:any)=>result?.meta?.changes!==1))throw Error('تغير أحد المشاريع أثناء الربط؛ أعد تحديث البيانات');
  return json({ok:true,email,username:username||existing?.username||'',created:!existing,employee_id:employeeId||null,projects:ids.length,employees_linked:syncEmployees.length});
