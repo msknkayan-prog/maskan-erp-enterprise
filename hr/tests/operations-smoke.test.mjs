@@ -1423,3 +1423,10 @@ test('admin integrity report is read-only and scans linked HR modules',()=>{
  assert.match(ui,/الفحص التشغيلي وترابط البيانات/);
  assert.match(ui,/integrityReport\.issues/);
 });
+test('projects register displays manager name without duplicate manager email column',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/f\.key==='manager_email'\?\{\.\.\.f,key:'manager_name',label:'اسم مدير المشروع'\}/);
+ assert.match(ui,/module==='projects'&&f\.key==='manager_name'\?projectManagerName\(r\)/);
+ assert.match(ui,/module==='employees'\?tableFields:projectRegisterFields/);
+ assert.match(ui,/manager\?\.data\?\.name\|\|row\.data\?\.manager_name/);
+});
