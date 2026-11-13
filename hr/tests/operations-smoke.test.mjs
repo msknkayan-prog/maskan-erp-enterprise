@@ -42,6 +42,33 @@ test('Musab receives finance requests across projects, while other project data 
  assert.equal(backendModules.visible(musab,atFinance,records),true);
 });
 import {employeeRegisterValue,employeeRegisterFields} from '../lib/employee-register.mjs';
+import {requestApprovalStages,requestStageView,requestStageTimestamp} from '../lib/request-approval.mjs';
+
+test('request approval register shows four role-specific status columns with no invented dates',()=>{
+ assert.deepEqual(requestApprovalStages.map(stage=>stage.id),['project_manager','projects_director','hr','finance']);
+ const statuses=[
+  ['draft',['waiting','future','future','future']],
+  ['project_manager',['waiting','future','future','future']],
+  ['projects_director',['done','waiting','future','future']],
+  ['hr',['done','done','waiting','future']],
+  ['finance',['done','done','done','waiting']],
+  ['approved',['done','done','done','done']],
+  ['paid',['done','done','done','done']]
+ ];
+ for(const [status,expected] of statuses)assert.deepEqual(requestApprovalStages.map(stage=>requestStageView({status},stage.id).kind),expected,status);
+ assert.equal(requestStageView({status:'returned'},'project_manager').kind,'returned');
+ assert.equal(requestStageView({status:'rejected'},'hr').kind,'stopped');
+ assert.equal(requestStageTimestamp({status:'hr',data:{}},'projects_director'),'');
+ const stamp='2026-11-13T12:30:00.000Z';
+ assert.equal(requestStageTimestamp({data:{approval_tracking:{hr:{at:stamp}}}},'hr'),stamp);
+ const frontend=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(frontend,/requestApprovalStages\.map\(stage=><th/);
+ assert.match(frontend,/requestApprovalStages\.map\(stage=><td/);
+ assert.match(frontend,/className=\{'approval-track-pill '/);
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(backend,/details\.approval_tracking=\{\.\.\.tracking,\[completed\]/);
+ assert.match(backend,/details\.approval_tracking=\{\};/);
+});
 import {projectRegisterFields,projectRegisterValue} from '../lib/project-register.mjs';
 import {employeeDirectManagerOptions,normalizeManagerName,magdiGeneralManagerEmail,magdiProjectManagerName,isMagdiGeneralManagerAccount,isAuthorizedProjectManagerAccount} from '../lib/project-manager-roster.mjs';
 

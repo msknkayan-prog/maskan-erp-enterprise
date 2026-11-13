@@ -626,6 +626,22 @@ if(current==='project_manager'&&(routedRequest||u.role!=='admin')){
   details.project_manager={...details.project_manager,email:explicitManager,name:assigned?.name||explicitManager,phone:assigned?.phone||''};
  }
 }
+if(routedRequest){
+ // Save verified approver and timestamp for the horizontal status register.
+ // Audit entries below remain the authoritative history of all decisions.
+ if(decision==='approve'){
+  const completed=current==='draft'?(next==='projects_director'?'project_manager':null):current;
+  if(completed&&['project_manager','projects_director','hr','finance'].includes(completed)){
+   const tracking=details.approval_tracking&&typeof details.approval_tracking==='object'&&!Array.isArray(details.approval_tracking)?details.approval_tracking:{};
+   details.approval_tracking={...tracking,[completed]:{actor:u.email,name:String(u.username||u.displayName||''),at:now}};
+  }
+ }else if(decision==='return'){
+  // A returned request must pass through the approval stages again.
+  details.approval_tracking={};
+  delete details.manager_submitted_at;
+  delete details.manager_submitted_by;
+ }
+}
 if(mod==='payroll'&&decision==='approve'){
  const rounded=n=>Math.round(Number(n||0)*100);
  if(!Number.isFinite(Number(details.net))||rounded(details.cash_amount)+rounded(details.bank_amount)!==rounded(details.net))throw Error('لا يمكن اعتماد مسير غير موزع بالكامل بين الكاش والتحويل البنكي');
