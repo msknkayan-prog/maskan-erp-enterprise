@@ -8,6 +8,7 @@ import {Attendance,Migration,Attachments,RecordPaper,RecordHistory} from './oper
 import ClientFinance from './client-finance';
 import {companyLogoPath,companyOfficialName} from '../lib/company-brand.mjs';
 import {readXlsx,workbookBytes} from '../lib/sheets.mjs';
+import {preferredProjectManagers,preferredManagerForName,suggestedProjectsForManager} from '../lib/project-manager-roster.mjs';
 import {canSelectManagerProject,managerReassignmentConflicts} from '../lib/manager-assignment.mjs';
 const icons={users:Users,building:Building2,file:FileText,wallet:Wallet,cart:ShoppingCart,calendar:CalendarDays,alert:TriangleAlert,chart:ChartNoAxesCombined};
 const money=n=>Number(n||0).toLocaleString('ar-SA',{maximumFractionDigits:2});
@@ -49,16 +50,21 @@ function ManagerProjectPicker({projects,companies,managerEmail,mode,selected,onM
 // The employee register is the source of direct-manager assignments. Keep the
 // project-manager directory as the canonical identity for saving assignments.
 function directManagerChoices(rows,members,company){
- const employees=rows.filter(r=>r.module==='employees'&&r.company===company&&!r.data?._archived);
  const directory=rows.filter(r=>r.module==='project_managers'&&r.company===company);
- const referenced=new Set(employees.flatMap(r=>[String(r.data?.direct_manager_id||''),String(r.data?.manager_email||'').trim().toLowerCase()]));
- return directory.map(r=>{
-  const email=String(r.data?.email||'').trim().toLowerCase();
-  const account=members.find(m=>String(m.email||'').trim().toLowerCase()===email);
-  let companies=[];try{companies=JSON.parse(account?.companies||'[]')}catch{}
-  const eligible=Boolean(email&&account?.role==='project_manager'&&account?.is_active!==false&&(account.companies==='*'||Array.isArray(companies)&&companies.includes(company)));
-  return {id:r.id,email,name:r.data?.name||employees.find(e=>String(e.data?.manager_email||'').toLowerCase()===email)?.data?.manager||email,eligible,referenced:referenced.has(r.id)||referenced.has(email)};
- }).filter(m=>m.email).sort((a,b)=>Number(b.referenced)-Number(a.referenced)||a.name.localeCompare(b.name,'ar'));
+ const staff=rows.filter(r=>r.module==='employees'&&r.company===company&&!r.data?._archived);
+ return preferredProjectManagers.map(profile=>{
+  const records=directory.filter(r=>preferredManagerForName(r.data?.name)?.id===profile.id);
+  const managed=staff.filter(r=>preferredManagerForName(r.data?.manager)?.id===profile.id||records.some(d=>d.id===r.data?.direct_manager_id));
+  const emails=[...new Set([...records.map(r=>r.data?.email),...managed.map(r=>r.data?.manager_email),...members.filter(m=>preferredManagerForName(m.display_name)?.id===profile.id).map(m=>m.email)].map(v=>String(v||'').trim().toLowerCase()).filter(Boolean))];
+  const eligibleEmails=emails.filter(email=>{
+   const member=members.find(m=>String(m.email||'').trim().toLowerCase()===email);
+   if(!member||member.role!=='project_manager'||member.is_active===false)return false;
+   if(member.companies==='*')return true;
+   try{return JSON.parse(member.companies||'[]').includes(company)}catch{return false}
+  }).filter(email=>records.some(r=>String(r.data?.email||'').trim().toLowerCase()===email));
+  const eligible=eligibleEmails.length===1;
+  return {id:profile.id,name:profile.name,email:eligibleEmails[0]||emails[0]||'',eligible,ambiguous:eligibleEmails.length>1};
+ });
 }
 export default function ERP(){const [integrityReport,setIntegrityReport]=useState(null),[integrityBusy,setIntegrityBusy]=useState(false),[managerSetup,setManagerSetup]=useState(null),[managerSetupBusy,setManagerSetupBusy]=useState(false),[leaveHolidayCandidate,setLeaveHolidayCandidate]=useState(''),[module,setModule]=useState('overview'),[pendingType,setPendingType]=useState(''),[pendingStage,setPendingStage]=useState(''),[pendingSearch,setPendingSearch]=useState(''),[payrollStage,setPayrollStage]=useState('__all__'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollEdit,setPayrollEdit]=useState(null),[cycleEdit,setCycleEdit]=useState(null),[payrollManageBatchId,setPayrollManageBatchId]=useState(null),[payrollAllOpen,setPayrollAllOpen]=useState(false),[payrollBulkSelected,setPayrollBulkSelected]=useState([]),[payrollAddEmployeeId,setPayrollAddEmployeeId]=useState(''),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[employeeProjectSearch,setEmployeeProjectSearch]=useState(''),[employeeManagerSearch,setEmployeeManagerSearch]=useState(''),[projectCompanySearch,setProjectCompanySearch]=useState(''),[projectManagerSearch,setProjectManagerSearch]=useState(''),[managerRecordSearch,setManagerRecordSearch]=useState(''),[employeeFilterOpen,setEmployeeFilterOpen]=useState(false),[employeeFieldFilters,setEmployeeFieldFilters]=useState({}),[edit,setEdit]=useState(null),[employeeReadOnly,setEmployeeReadOnly]=useState(false),[showArchivedEmployees,setShowArchivedEmployees]=useState(false),[saving,setSaving]=useState(false),[formError,setFormError]=useState(''),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberContactEmail,setMemberContactEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberSelectedProjects,setMemberSelectedProjects]=useState([]),[memberPermissions,setMemberPermissions]=useState({}),[memberUsername,setMemberUsername]=useState(''),[memberEdit,setMemberEdit]=useState(null),[memberEditPermissions,setMemberEditPermissions]=useState({}),[memberBusy,setMemberBusy]=useState(false),[linkedEmployee,setLinkedEmployee]=useState(null),[memberSearch,setMemberSearch]=useState(''),[memberRoleFilter,setMemberRoleFilter]=useState(''),[memberUserFilter,setMemberUserFilter]=useState(''),[memberStatusFilter,setMemberStatusFilter]=useState(''),[memberFormOpen,setMemberFormOpen]=useState(false),[expandedPermissions,setExpandedPermissions]=useState(null),[passwordResetDialog,setPasswordResetDialog]=useState(null),[generatedPassword,setGeneratedPassword]=useState(null),[credentialPhone,setCredentialPhone]=useState(''),[newMemberCredential,setNewMemberCredential]=useState(null);
 const notify=t=>{setToast(t);setTimeout(()=>setToast(''),4500)};
@@ -695,43 +701,34 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <form onSubmit={saveManagerSetup} style={{display:'grid',gap:11}}>
  {(()=>{const directory=rows.filter(r=>r.module==='project_managers'&&(!company||r.company===company));
   const staff=rows.filter(r=>r.module==='employees'&&(!company||r.company===company)&&!r.data?._archived);
-  const candidates=new Map();
-  for(const employee of staff){
-   const ref=directory.find(d=>d.id===employee.data?.direct_manager_id);
-   const email=String(ref?.data?.email||employee.data?.manager_email||'').trim().toLowerCase();
-   const name=String(ref?.data?.name||employee.data?.manager||'').trim();
-   if(!name)continue;
-   const key=employee.company+'|'+(email||normalizeSearch(name));
-   if(!candidates.has(key))candidates.set(key,{name,email,company:employee.company,phone:ref?.data?.phone||employee.data?.manager_phone||''});
-  }
-  // Retain directory entries already assigned as direct managers even if no employee still references them.
-  for(const manager of directory){
-   const email=String(manager.data?.email||'').trim().toLowerCase();
-   const name=String(manager.data?.name||'').trim();
-   if(!name||!email)continue;
-   const key=manager.company+'|'+email;
-   if(!candidates.has(key))candidates.set(key,{name,email,company:manager.company,phone:manager.data?.phone||''});
-  }
-  const choices=[...candidates.values()].sort((a,b)=>a.name.localeCompare(b.name,'ar'));
-  const keyOf=m=>m.company+'|'+(m.email||normalizeSearch(m.name));
-  const found=choices.filter(m=>!managerSetup.managerSearch||normalizeSearch([m.name,m.email,m.company].join(' ')).includes(normalizeSearch(managerSetup.managerSearch)));
+  const companiesForRoster=company?[company]:companies;
+  const choices=companiesForRoster.flatMap(co=>preferredProjectManagers.map(profile=>{
+   const registered=directory.filter(r=>r.company===co&&preferredManagerForName(r.data?.name)?.id===profile.id);
+   const related=staff.filter(r=>r.company===co&&(preferredManagerForName(r.data?.manager)?.id===profile.id||registered.some(d=>d.id===r.data?.direct_manager_id)));
+   const emails=[...new Set([...registered.map(r=>r.data?.email),...related.map(r=>r.data?.manager_email)].map(v=>String(v||'').trim().toLowerCase()).filter(Boolean))];
+   const email=emails.length===1?emails[0]:'';
+   return {profileId:profile.id,label:profile.name,name:registered[0]?.data?.name||related[0]?.data?.manager||profile.name,email,company:co,phone:registered[0]?.data?.phone||related[0]?.data?.manager_phone||'',ambiguous:emails.length>1};
+  }));
+  const keyOf=m=>m.company+'|'+m.profileId;
+  const found=choices.filter(m=>!managerSetup.managerSearch||normalizeSearch([m.label,m.name,m.email,m.company].join(' ')).includes(normalizeSearch(managerSetup.managerSearch)));
   const selected=choices.find(m=>keyOf(m)===(managerSetup.choiceKey||''));
   return <div style={{display:'grid',gap:7}}>
-   <label>المدير المباشر المعيّن مسبقًا
+   <label>اختيار مدير المشروع من القائمة المعتمدة
     <input type="search" aria-label="فلترة المدراء المباشرين" placeholder="بحث بالاسم أو البريد" value={managerSetup.managerSearch||''} onChange={e=>setManagerSetup(p=>({...p,managerSearch:e.target.value}))}/>
     <select aria-label="اختيار المدير المباشر لتعيينه مدير مشروع" value={selected?keyOf(selected):''} onChange={e=>{
       const m=choices.find(x=>keyOf(x)===e.target.value);
-      const employee=m?.email&&staff.find(x=>String(x.data?.email||'').trim().toLowerCase()===m.email&&x.company===m.company&&normalizeSearch(x.data?.name||'')===normalizeSearch(m.name));
+      const employee=m?.email&&staff.find(x=>String(x.data?.email||'').trim().toLowerCase()===m.email&&x.company===m.company&&preferredManagerForName(x.data?.name)?.id===m.profileId);
       const account=m?.email&&members.find(x=>String(x.email||'').trim().toLowerCase()===m.email);
       const identity=employee?.data||{};
-      setManagerSetup(p=>({...p,choiceKey:m?keyOf(m):'',employeeId:employee?.id||'',name:identity.name||m?.name||'',email:m?.email||'',phone:m?.phone||identity.phone||'',username:account?.username||'',ids:[],showDetails:!m?.email,selectedCompany:m?.company||'',managerSearch:''}));
+      const suggested=m?suggestedProjectsForManager(rows,m.profileId,m.company,m.email):[];
+      setManagerSetup(p=>({...p,choiceKey:m?keyOf(m):'',employeeId:employee?.id||'',name:identity.name||m?.name||'',email:m?.email||'',phone:m?.phone||identity.phone||'',username:account?.username||'',ids:suggested,showDetails:!m?.email||!account,selectedCompany:m?.company||'',managerSearch:''}));
     }}>
-     <option value="">اختر من قائمة المدراء المباشرين…</option>
-     {found.map(m=><option key={keyOf(m)} value={keyOf(m)}>{m.name} — {companyDisplayName(m.company)}{!m.email?' · يتطلب إضافة بريد':''}</option>)}
-     {selected&&!found.some(m=>keyOf(m)===keyOf(selected))&&<option value={keyOf(selected)}>{selected.name} — {companyDisplayName(selected.company)}</option>}
+     <option value="">اختر أحد المدراء الستة…</option>
+     {found.map(m=><option key={keyOf(m)} value={keyOf(m)}>{m.label} — {companyDisplayName(m.company)}{m.ambiguous?' · راجع تكرار البريد':!m.email?' · يتطلب ربط بريد':''}</option>)}
+     {selected&&!found.some(m=>keyOf(m)===keyOf(selected))&&<option value={keyOf(selected)}>{selected.label} — {companyDisplayName(selected.company)}</option>}
     </select>
    </label>
-   <small>{found.length} مدير مطابق من {choices.length} · يمكن اختيار المدير بلا بريد واستكمال بيانات دخوله من الأسفل.</small>
+   <small>{found.length} خيار مطابق من قائمة المدراء الستة. تُحدد مشاريع المدير تلقائيًا بناءً على «المدير المباشر» في سجل الموظفين، ويمكن مراجعتها وتعديلها قبل الحفظ. لا يُنشأ حساب دون بريد حقيقي.</small>
   </div>;
  })()}
  {managerSetup.email&&!managerSetup.showDetails&&<div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',background:'#f7f2e7',padding:10,borderRadius:8,fontSize:13}}>
@@ -1019,8 +1016,8 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
 <div className="form-grid">{fieldsFor.filter(f=>module!=='project_managers'||['name','email','department'].includes(f.key)).map(f=><label className={f.type==='textarea'?'full':''} key={f.key}>{f.label}{f.required&&!((module==='employees'||module==='projects')&&!edit.id&&f.key==='code')&&<span className="required"> *</span>}{module==='projects'&&f.key==='manager_email'?<div style={{display:'grid',gap:8}}>
  <strong>مدير المشروع المسؤول</strong>
  <input type="search" aria-label="فلتر مدير المشروع" placeholder="ابحث باسم المدير أو بريده الإلكتروني" value={projectManagerSearch} onChange={e=>setProjectManagerSearch(e.target.value)}/>
- <select aria-label="اختيار مدير المشروع" value={edit.data.manager_email||''} onChange={e=>{setEdit({...edit,data:{...edit.data,manager_email:e.target.value}});setProjectManagerSearch('')}}><option value="">اختر من قائمة المدراء المباشرين…</option>{directManagerChoices(rows,members,edit.company).filter(m=>!projectManagerSearch.trim()||normalizeSearch([m.name,m.email].join(' ')).includes(normalizeSearch(projectManagerSearch))||m.email===edit.data.manager_email).map(m=><option value={m.email} key={m.id} disabled={!m.eligible}>{m.name} — {m.email}{m.eligible?'':' (يتطلب تفعيل صلاحية مدير مشروع)'}</option>)}</select>
- <small>القائمة مرتبطة بدليل المدراء المباشرين للموظفين. لا يمكن تعيين المدير إلا بعد تفعيل حسابه بصلاحية مدير مشروع للشركة المختارة.</small>
+ <select aria-label="اختيار مدير المشروع" value={edit.data.manager_email||''} onChange={e=>{setEdit({...edit,data:{...edit.data,manager_email:e.target.value}});setProjectManagerSearch('')}}><option value="">اختر من المدراء الستة المعتمدين…</option>{directManagerChoices(rows,members,edit.company).filter(m=>!projectManagerSearch.trim()||normalizeSearch([m.name,m.email].join(' ')).includes(normalizeSearch(projectManagerSearch))||m.email===edit.data.manager_email).map(m=><option value={m.email||'pending:'+m.id} key={m.id} disabled={!m.eligible}>{m.name}{m.eligible?' — '+m.email:m.ambiguous?' — يحتاج مراجعة حسابات مكررة':' — يحتاج ربط بريد وصلاحية مدير مشروع'}</option>)}{edit.data.manager_email&&!directManagerChoices(rows,members,edit.company).some(m=>m.email===String(edit.data.manager_email).toLowerCase())&&<option value={edit.data.manager_email}>{edit.data.manager_name||edit.data.manager_email} — تعيين سابق</option>}</select>
+ <small>الأسماء الستة معتمدة للاختيار. المدير غير المفعّل يظهر في القائمة لكنه يحتاج ربط حساب وبريد وصلاحية قبل حفظ تعيينه. عند التعيين يتحدّث المدير المباشر لموظفي المشروع تلقائيًا.</small>
  </div>:module==='project_managers'&&f.key==='name'?(()=>{
  const directory=rows.filter(r=>r.module==='project_managers'&&r.company===edit.company);
  const staff=rows.filter(r=>r.module==='employees'&&r.company===edit.company&&!r.data?._archived);
@@ -1030,7 +1027,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   const employee=staff.find(r=>String(r.data?.email||'').trim().toLowerCase()===email);
   const managed=staff.find(r=>String(r.data?.manager_email||'').trim().toLowerCase()===email);
   return {email,name:listed?.data?.name||employee?.data?.name||managed?.data?.manager||m.display_name||m.username||email,department:listed?.data?.department||employee?.data?.department||'',phone:listed?.data?.phone||employee?.data?.phone||'',job:listed?.data?.job||employee?.data?.job||'مدير مشاريع'};
- });
+ }).filter(m=>preferredManagerForName(m.name)||m.email===String(edit.data.email||'').trim().toLowerCase());
  const choices=candidates.filter(m=>!managerRecordSearch||normalizeSearch([m.name,m.email,m.department].join(' ')).includes(normalizeSearch(managerRecordSearch)));
  const current=candidates.find(m=>m.email===String(edit.data.email||'').toLowerCase());
  return <div style={{display:'grid',gap:7}}>
@@ -1049,8 +1046,8 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
     notify('تم إعداد سجل جديد للمدير المختار دون تعديل حساب المدير السابق');
    }else setEdit({...edit,data:{...edit.data,name:m.name,email:m.email,department:edit.data.department||m.department,phone:edit.data.phone||m.phone,job:edit.data.job||m.job}});
    setManagerRecordSearch('');
-  }}><option value="">اختر مدير المشروع…</option>{choices.map(m=><option key={m.email} value={m.email}>{m.name} — {m.email}</option>)}{current&&!choices.some(m=>m.email===current.email)&&<option value={current.email}>{current.name} — {current.email}</option>}{edit.data.email&&!current&&<option value={edit.data.email}>{edit.data.name||edit.data.email} — حساب غير متاح أو غير نشط</option>}</select>
-  <small>الاسم المحدد: <b>{edit.data.name||'لم يُحدّد بعد'}</b> · {choices.length} مدير مطابق. يستخدم الحفظ حساب المدير النشط والمخوّل لهذه الشركة.</small>
+  }}><option value="">اختر مدير المشروع…</option>{preferredProjectManagers.map(p=>{const matching=choices.filter(m=>preferredManagerForName(m.name)?.id===p.id),active=matching.length===1?matching[0]:null;return <option key={p.id} value={active?.email||'pending:'+p.id} disabled={!active}>{p.name}{active?' — '+active.email:matching.length>1?' — حسابات متكررة تحتاج مراجعة':' — يحتاج ربط حساب نشط'}</option>})}{current&&!preferredManagerForName(current.name)&&<option value={current.email}>{current.name} — {current.email}</option>}{edit.data.email&&!current&&<option value={edit.data.email}>{edit.data.name||edit.data.email} — حساب غير متاح أو غير نشط</option>}</select>
+  <small>الاسم المحدد: <b>{edit.data.name||'لم يُحدّد بعد'}</b> · {choices.length} حساب مطابق. تظهر الأسماء الستة كاملة، ولا يمكن اختيار اسم دون حساب نشط ومخوّل للشركة.</small>
   {formError&&<div role="alert" style={{color:'#a12724',background:'#fff1ee',border:'1px solid #dfaaa2',borderRadius:8,padding:'9px 12px',fontSize:13}}>{formError}</div>}
  </div>;
 })():module==='project_managers'&&f.key==='email'?<input type="email" dir="ltr" readOnly aria-label="بريد حساب المدير المحدد" value={edit.data.email||''} placeholder="يُملأ عند اختيار الاسم"/>:module==='project_managers'&&f.key==='department'?(()=>{
