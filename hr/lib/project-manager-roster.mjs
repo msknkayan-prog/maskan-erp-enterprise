@@ -18,7 +18,58 @@ export function normalizeManagerName(value){
 
 export function preferredManagerForName(name){
  const normalized=normalizeManagerName(name);
- return preferredProjectManagers.find(p=>p.aliases.some(alias=>normalizeManagerName(alias)===normalized))||null;
+ return preferredProjectManagers.find(p=>[p.name,...p.aliases].some(alias=>normalizeManagerName(alias)===normalized))||null;
+}
+
+// Direct-supervisor names are operational personnel data, not login identities.
+// Keep the seven approved names selectable even before an Auth account exists.
+export function employeeDirectManagerOptions(records=[],members=[],company=''){
+ const choices=new Map();
+ const add=name=>{
+  const normalized=normalizeManagerName(name);
+  if(!normalized)return;
+  const profile=preferredManagerForName(name);
+  const key=profile?'roster:'+profile.id:'name:'+normalized;
+  if(!choices.has(key))choices.set(key,{key,name:profile?.name||String(name).trim(),email:'',phone:'',directory_id:'',hasLogin:false});
+ };
+ for(const profile of preferredProjectManagers)add(profile.name);
+ const relevant=records.filter(r=>{
+  if(r.module==='projects')return r.company===company||Array.isArray(r.data?._shared_companies)&&r.data._shared_companies.includes(company);
+  return r.company===company&&!r.data?._deleted;
+ });
+ for(const row of relevant){
+  if(row.module==='projects')add(row.data?.manager_name);
+  if(row.module==='project_managers')add(row.data?.name);
+  if(row.module==='employees'&&!row.data?._archived)add(row.data?.manager);
+ }
+ const active=members.filter(m=>{
+  if(m.role!=='project_manager'||m.is_active===false)return false;
+  if(!m.companies||m.companies==='*')return true;
+  try{return JSON.parse(m.companies||'[]').includes(company)}catch{return false}
+ });
+ for(const member of active)add(member.username||member.display_name);
+ for(const choice of choices.values()){
+  const relatedDirectory=relevant.filter(r=>r.module==='project_managers'&&normalizeManagerName(r.data?.name)===normalizeManagerName(choice.name));
+  const relatedProjects=relevant.filter(r=>r.module==='projects'&&normalizeManagerName(r.data?.manager_name)===normalizeManagerName(choice.name));
+  const emails=new Set([
+   ...relatedDirectory.map(r=>r.data?.email),
+   ...relatedProjects.map(r=>r.data?.manager_email),
+   ...active.filter(m=>normalizeManagerName(m.username||m.display_name)===normalizeManagerName(choice.name)).map(m=>m.email)
+  ].map(x=>String(x||'').trim().toLowerCase()).filter(Boolean));
+  const valid=active.filter(m=>emails.has(String(m.email||'').trim().toLowerCase()));
+  if(valid.length!==1)continue;
+  choice.email=String(valid[0].email).trim().toLowerCase();
+  choice.hasLogin=true;
+  const directory=relatedDirectory.find(r=>String(r.data?.email||'').trim().toLowerCase()===choice.email);
+  choice.phone=String(directory?.data?.phone||'');
+  choice.directory_id=directory?.id||'';
+ }
+ return [...choices.values()].sort((a,b)=>{
+  const ai=preferredProjectManagers.findIndex(p=>a.key==='roster:'+p.id);
+  const bi=preferredProjectManagers.findIndex(p=>b.key==='roster:'+p.id);
+  if(ai!==-1||bi!==-1)return ai===-1?1:bi===-1?-1:ai-bi;
+  return a.name.localeCompare(b.name,'ar');
+ });
 }
 
 export function suggestedProjectsForManager(rows,profileId,company,email=''){

@@ -3,6 +3,60 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {companies,normalize,annualLeave,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite} from '../lib/modules.mjs';
 import {employeeRegisterValue,employeeRegisterFields} from '../lib/employee-register.mjs';
+import {employeeDirectManagerOptions,normalizeManagerName} from '../lib/project-manager-roster.mjs';
+
+test('all approved direct managers are selectable before login identities are created',()=>{
+ const options=employeeDirectManagerOptions([],[],'مسكن الكيان');
+ assert.equal(options.filter(option=>option.key.startsWith('roster:')).length,7);
+ for(const name of ['م مجدي محجوب','أ. عثمان محمد أحمد','م محمد يوسف','م. أمجد فؤاد']){
+  assert.ok(options.some(option=>normalizeManagerName(option.name)===normalizeManagerName(name)),name);
+ }
+ assert.ok(options.every(option=>!option.hasLogin));
+});
+
+test('manager names from company projects and employees merge without duplicates or unauthorized login assignments',()=>{
+ const records=[
+  {module:'projects',company:'مسكن الكيان',data:{manager_name:'م. مجدي محجوب'}},
+  {module:'employees',company:'مسكن الكيان',data:{manager:'م مجدي محجوب'}},
+  {module:'projects',company:'مسكن الكيان',data:{manager_name:'م محمد إسماعيل',manager_email:'ismail@example.com'}},
+  {module:'project_managers',company:'مسكن الكيان',id:'directory1',data:{name:'م محمد إسماعيل',email:'ismail@example.com',phone:'123'}},
+  {module:'projects',company:'رياح الاعمار',data:{manager_name:'مدير شركة أخرى'}}
+ ];
+ const members=[{email:'ismail@example.com',username:'محمد اسماعيل',role:'project_manager',is_active:true,companies:'*'}];
+ const options=employeeDirectManagerOptions(records,members,'مسكن الكيان');
+ assert.equal(options.filter(x=>x.key==='roster:magdi').length,1);
+ assert.equal(options.find(x=>x.key==='roster:magdi').email,'');
+ assert.equal(options.find(x=>x.key==='name:محمداسماعيل').email,'ismail@example.com');
+ assert.equal(options.find(x=>x.key==='name:محمداسماعيل').directory_id,'directory1');
+ assert.ok(!options.some(x=>x.name==='مدير شركة أخرى'));
+});
+
+test('Edge and frontend use identical direct-manager selection rules',async()=>{
+ const edge=await import('../backend/project-manager-roster.mjs');
+ assert.deepEqual(edge.employeeDirectManagerOptions([],[],'مسكن الكيان'),employeeDirectManagerOptions([],[],'مسكن الكيان'));
+ assert.equal(edge.normalizeManagerName('أ. عثمان محمد أحمد'),normalizeManagerName('عثمان محمداحمد'));
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(erp,/from '\.\/project-manager-roster\.mjs'/);
+ assert.match(erp,/const match=options\.find\(m=>m\.key===key/);
+ assert.match(erp,/resolved=await resolveEmployeeDirectManager\(db,old\.company,String\(projectData\.manager_email\|\|''\),String\(projectData\.manager_name\|\|''\),false\)/);
+ assert.match(ui,/manager_key:choice==='__project__'\?'':choice/);
+});
+
+test('employee register separates numeric project code, project manager, and working company',()=>{
+ const project={id:'project1',module:'projects',company:'مسكن الكيان',data:{code:'1047',manager_name:'م مجدي محجوب'}};
+ const employee={id:'employee1',company:'مسكن الكيان',data:{project_id:'project1',working_company:'رياح الاعمار'}};
+ assert.equal(employeeRegisterValue(employee,'project_code',[project]),'1047');
+ assert.equal(employeeRegisterValue(employee,'project_manager_name',[project]),'م مجدي محجوب');
+ assert.equal(employeeRegisterValue(employee,'working_company',[project]),'رياح الاعمار');
+ assert.equal(employeeRegisterValue({company:'مسكن الكيان',data:{}},'working_company',[]),'مسكن الكيان');
+ assert.equal(employeeRegisterValue({company:'مسكن الكيان',data:{project_number:'اسم غير رقمي'}},'project_code',[]),'');
+ assert.deepEqual(employeeRegisterFields.slice(0,6).map(f=>f.key),['working_company','code','name','manager','project_code','project_manager_name']);
+ const saved=normalize('employees',{company:'مسكن الكيان',data:{name:'موظف',code:'10001',salary:1000,sponsorship:'yes',working_company:'رياح الاعمار'}});
+ assert.equal(saved.working_company,'رياح الاعمار');
+ assert.equal(normalize('employees',{company:'مسكن الكيان',data:{name:'موظف',code:'10001',salary:1000,sponsorship:'yes'}}).working_company,'مسكن الكيان');
+ assert.throws(()=>normalize('employees',{company:'مسكن الكيان',data:{name:'موظف',code:'10001',salary:1000,sponsorship:'yes',working_company:'جهة خارج القائمة'}}),/اختيار غير صالح/);
+});
 
 test('all seven HR companies including Modern Standards are supported',()=>{
  assert.equal(companies.length,7);
@@ -543,7 +597,7 @@ test('employee form supports searchable department, project and direct manager w
  assert.match(ui,/employee-department-choices/);
  assert.match(ui,/r\.module==='employees'&&r\.company===edit\.company/);
  assert.match(ui,/module==='employees'&&f\.key==='manager'/);
- assert.match(ui,/aria-label="اختيار المدير المباشر من حسابات المدراء النشطة"/);
+ assert.match(ui,/aria-label="اختيار المدير المباشر من قائمة المدراء المعتمدين"/);
  assert.match(ui,/module==='employees'&&f\.key==='project_id'/);
  assert.match(ui,/aria-label="فلتر المشاريع حسب الاسم"/);
  assert.match(ui,/r\.module==='projects'&&\(r\.company===edit\.company/);
@@ -805,12 +859,13 @@ test('HR directory choices expose only active project manager identities without
  assert.match(ui,/user\?\.role==='admin'\?'members':'project_manager_choices'/);
 });
 
-test('direct manager displays active account names even without a matching company directory record',()=>{
+test('direct manager saves known project names without requiring a login identity',()=>{
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- assert.match(erp,/details\.name\|\|account\.username\|\|email/);
+ assert.match(erp,/details\.name\|\|fallbackName\|\|account\.username\|\|email/);
  assert.match(erp,/account\.role!=='project_manager'\|\|account\.is_active===false/);
- assert.match(ui,/directoryFor\(m\)\?\.data\.name\|\|m\.username\|\|m\.email/);
+ assert.match(erp,/availableEmployeeDirectManagers\(db,old\.company\)/);
+ assert.match(ui,/employeeDirectManagerOptions\(rows,members,c\)/);
 });
 test('automatic refresh coalesces focus/visibility triggers and rejects out-of-order responses',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
@@ -1306,7 +1361,7 @@ test('leave request grid and editor show days, accrued entitlement and projected
  assert.match(css,/\.leave-balance-summary/);
 });
 
-test('employee direct manager is a verified active scoped account reflected in request snapshots',()=>{
+test('employee direct manager is a verified roster choice reflected in request snapshots',()=>{
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const mod=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
@@ -1317,7 +1372,7 @@ test('employee direct manager is a verified active scoped account reflected in r
  assert.match(erp,/data\.direct_manager=\{name:snapshot\.manager/);
  assert.match(mod,/f\('direct_manager_id','مرجع المدير المباشر','internal'\)/);
  assert.match(ui,/aria-label="بحث المدير المباشر"/);
- assert.match(ui,/aria-label="اختيار المدير المباشر من حسابات المدراء النشطة"/);
+ assert.match(ui,/aria-label="اختيار المدير المباشر من قائمة المدراء المعتمدين"/);
  assert.match(ui,/setMembers\(d\.rows\)/);
  assert.match(ui,/f\.type!=='internal'/);
 });
@@ -1402,13 +1457,13 @@ test('direct manager remains editable independently from project approval owners
 });
 
 test('direct manager is a prominent employee register column and remains in employee snapshots',()=>{
- assert.deepEqual(employeeRegisterFields.slice(0,3).map(f=>f.key),['code','name','manager']);
+ assert.deepEqual(employeeRegisterFields.slice(1,4).map(f=>f.key),['code','name','manager']);
  assert.equal(employeeRegisterValue({data:{manager:'المشرف المحدد'}},'manager',[]),'المشرف المحدد');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  assert.match(ui,/EmployeeDirectManagerCell employee=\{row\}/);
  assert.match(ui,/حفظ\<\/button\>\<button type="button" disabled=\{disabled\}/);
- assert.match(ui,/المدير المباشر قابل للتعيين بشكل مستقل/);
+ assert.match(ui,/تظهر الأسماء المعتمدة سابقًا حتى دون حساب دخول/);
  assert.match(ui,/<\/fieldset>;\n}\nfunction ManagerEmployeePicker\(/);
  assert.match(backend,/data\.direct_manager=\{name:snapshot\.manager,email:snapshot\.manager_email/);
  assert.match(backend,/if\(mod==='employees'&&typeof body\.data\?\._direct_manager_manual==='boolean'\)/);

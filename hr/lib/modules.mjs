@@ -21,6 +21,8 @@ export const modules={
  company_profiles:{label:'هوية الشركات',singular:'هوية شركة',icon:'building',group:'الإدارة والإعدادات',fields:[f('name','الاسم الرسمي للشركة','text',true),f('english_name','اسم الشركة باللغة الإنجليزية'),f('commercial_registration','رقم السجل التجاري'),f('vat_registration','الرقم الضريبي للشركة'),f('bank_name','اسم البنك'),f('iban','رقم الآيبان'),f('bank_account','رقم الحساب البنكي'),f('phone','الهاتف'),f('email','البريد الإلكتروني','email'),f('mobile','الجوال'),f('website','الموقع الإلكتروني','url'),f('city','المدينة'),f('address','العنوان','textarea')]}
 
 };
+// Worksite company is distinct from the legal employer used for access and payroll.
+modules.employees.fields.splice(2,0,f('working_company','الشركة التي يعمل بها','work_company'));
 export const workflow=['draft','project_manager','projects_director','hr','finance','approved'];
 export const states={draft:'مسودة',project_manager:'مدير المشروع',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
 export const saudiDate=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,10);
@@ -28,6 +30,10 @@ export function annualLeave(hire,at=saudiDate()){if(!/^\d{4}-\d{2}-\d{2}$/.test(
 const numValue=v=>Number(v||0);
 export function normalize(module,input){const spec=modules[module];if(!spec)throw Error('نافذة غير معروفة');if(!companies.includes(input.company))throw Error('حدد الشركة');const out={};for(const field of spec.fields){let v=String(input.data?.[field.key]??'').trim();if(module==='leave'&&field.key==='ticket'){if(v==='نعم')v='yes';if(v==='لا')v='no';}if(v.length>4000)throw Error('بيانات طويلة');if(enumOptions[field.type]&&v&&!enumOptions[field.type].some(o=>o[0]===v))throw Error('اختيار غير صالح: '+field.label);if(field.required&&!v)throw Error('أكمل '+field.label);if(field.type==='number'){let n=Number(v||0);if(!Number.isFinite(n)||Math.abs(n)>1e9||(n<0&&field.key!=='opening_leave'))throw Error('قيمة غير صالحة: '+field.label);out[field.key]=n;}else{if(field.type==='email'&&v&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))throw Error('بريد إلكتروني غير صحيح');if(field.type==='coordinate'&&v){let n=Number(v),limit=field.key==='latitude'?90:180;if(!Number.isFinite(n)||Math.abs(n)>limit)throw Error('إحداثيات غير صحيحة');}if(['date','month'].includes(field.type)&&v){const re=field.type==='month'?/^\d{4}-(0[1-9]|1[0-2])$/:/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/;if(!re.test(v)||(field.type==='date'&&(isNaN(Date.parse(v))||new Date(v).toISOString().slice(0,10)!==v)))throw Error('تاريخ غير صالح');}out[field.key]=v;}}
 if(module==='employees'&&/^(?:مراقب|مشرف)(?:\s*[-–/]\s*(?:مراقب|مشرف))?$/.test(String(out.job||'').trim()))out.job='مشرف';
+if(module==='employees'){
+ out.working_company=canonicalCompany(String(out.working_company||input.company));
+ if(!companies.includes(out.working_company))throw Error('اختر الشركة التي يعمل بها الموظف من القائمة');
+}
 if(module==='leave'){
  const nextReturn=leaveNextDate(out.end);
  if(!nextReturn)throw Error('تاريخ نهاية الإجازة غير صالح');
@@ -82,6 +88,7 @@ if(module==='settlements'){const sum=['wages_amount','leave_amount','ticket_amou
 export const operationalModules=['employees','projects','project_managers','appointments','warnings','returns','terminations','company_profiles'];
 export const enumOptions={sponsorship:[['yes','على الكفالة'],['no','خارج الكفالة'],['unknown','غير محدد']],method:[['bank','تحويل بنكي'],['cash','كاش'],['mixed','كاش وتحويل بنكي']],employment:[['active','نشط'],['inactive','غير نشط'],['on_leave','في إجازة'],['needs_review','بحاجة مراجعة']],ticket_eligibility:[['yes','نعم'],['no','لا']],holiday_policy:[['include','احتساب العطلة ضمن أيام الإجازة'],['exclude','استبعاد العطلة من الرصيد المخصوم']],leave_type:[['annual','سنوية'],['sick','مرضية'],['unpaid','بدون راتب'],['emergency','طارئة'],['bereavement','إجازة وفاة – 5 أيام'],['wife_childbirth','إجازة وضع الزوجة – شهران (60 يومًا)'],['marriage','إجازة زواج – 5 أيام'],['newborn','إجازة مولود – 3 أيام'],['other','أخرى']],warning_type:[['first','إنذار أول'],['second','إنذار ثان'],['final','إنذار نهائي'],['notice','تنبيه']],case_status:[['draft','قيد التجهيز'],['completed','مكتمل التسجيل'],['cancelled','ملغي']]};
 export const specialLeaveDays=Object.freeze({bereavement:5,wife_childbirth:60,marriage:5,newborn:3});
+enumOptions.work_company=companies.map(c=>[c,companyDisplayName(c)]);
 export const fixedLeaveDays=type=>specialLeaveDays[type]||null;
 export function leaveEndDate(start,days){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(start||''))||!Number.isInteger(Number(days))||Number(days)<1)return '';

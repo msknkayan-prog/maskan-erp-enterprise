@@ -1,6 +1,6 @@
-import {annualLeave} from './modules.mjs';
+import {annualLeave,companyDisplayName} from './modules.mjs';
 export const employeeRegisterFields = [
- ['code','الرقم الوظيفي'],['name','اسم الموظف'],['manager','المدير المباشر'],['project_code','رقم المشروع'],
+ ['working_company','الشركة التي يعمل بها'],['code','الرقم الوظيفي'],['name','اسم الموظف'],['manager','المدير المباشر'],['project_code','رمز المشروع'],['project_manager_name','اسم مدير المشروع'],
  ['hire_date','تاريخ التعيين'],['job','المسمى الوظيفي'],['department','القسم'],
  ['nationality','الجنسية'],['identity','الهوية أو الإقامة'],['phone','الجوال'],
  ['email','البريد الإلكتروني'],['basic','الراتب الأساسي'],['housing','بدل السكن'],
@@ -19,7 +19,12 @@ export function employeeRegisterValue(row,key,rows){
  const leaves=rows.filter(item=>item.module==='leave'&&item.status==='approved'&&item.data.employee_id===row.id);
  const annual=leaves.filter(item=>item.data.balance_deducted??(!item.data.leave_type||item.data.leave_type==='annual'));
  const used=annual.reduce((total,item)=>total+Number(item.data.days||0),0);
- if(key==='project_code')return project?.data.code||data.extra_fields?.['رقم المشروع']||'';
+ if(key==='working_company')return companyDisplayName(data.working_company||row.company);
+ if(key==='project_code'){
+  const code=String(project?.data.code||data.project_number||data.project_code||data.extra_fields?.['رقم المشروع']||'').trim();
+  return /^\d+$/.test(code)?code:'';
+ }
+ if(key==='project_manager_name')return project?.data.manager_name||data.project_manager_name||'';
  if(key==='project_id')return project?.data.name||data.project_name||data['اسم المشروع']||'';
  if(key==='annual_entitlement')return data.sponsorship==='yes'?(service?.annual??'أكمل تاريخ التعيين'):(data.annual_days||'');
  if(key==='service_years')return service?.years??'أكمل تاريخ التعيين';
