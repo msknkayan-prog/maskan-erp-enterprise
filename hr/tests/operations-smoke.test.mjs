@@ -1462,3 +1462,15 @@ test('project register removes quick manager assignment and adds guarded deletio
  assert.match(backend,/project_deleted/);
  assert.match(backend,/const result=await db\.batch\(statements\)/);
 });
+test('project manager editor shows selected name and preserves registered account identity',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/aria-label="اسم مدير المشروع المحدد" readOnly value=\{edit\.data\.name\|\|''\}/);
+ assert.match(ui,/const existingRecord=directory\.find/);
+ assert.match(ui,/existingRecord&&existingRecord\.id!==edit\.id/);
+ assert.match(ui,/تم فتح سجله الحالي للتعديل/);
+ assert.match(ui,/تم إعداد سجل جديد للمدير المختار دون تعديل حساب المدير السابق/);
+ assert.match(ui,/formError&&<div role="alert"/);
+ assert.match(erp,/if\(recordData&&String\(recordData\.email/);
+ assert.match(erp,/لا يمكن تغيير حساب مدير مشروع مسجل إلى حساب آخر/);
+});
