@@ -4,7 +4,47 @@ import {readFileSync} from 'node:fs';
 import {companies,modules,normalize,annualLeave,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite} from '../lib/modules.mjs';
 import {employeeRegisterValue,employeeRegisterFields} from '../lib/employee-register.mjs';
 import {projectRegisterFields,projectRegisterValue} from '../lib/project-register.mjs';
-import {employeeDirectManagerOptions,normalizeManagerName} from '../lib/project-manager-roster.mjs';
+import {employeeDirectManagerOptions,normalizeManagerName,magdiGeneralManagerEmail,magdiProjectManagerName,isMagdiGeneralManagerAccount,isAuthorizedProjectManagerAccount} from '../lib/project-manager-roster.mjs';
+
+test('Magdi Mahjoub uses the existing general manager login without changing its admin role',()=>{
+ const admin={email:magdiGeneralManagerEmail,username:'magdi osman',role:'admin',is_active:true,companies:'*',projects:'*'};
+ assert.equal(magdiProjectManagerName,'م مجدي محجوب');
+ assert.equal(isMagdiGeneralManagerAccount(admin,'م. مجدي محجوب'),true);
+ assert.equal(isAuthorizedProjectManagerAccount(admin,'م مجدي محجوب'),true);
+ assert.equal(isAuthorizedProjectManagerAccount(admin,'أ عثمان محمداحمد'),false);
+ assert.equal(isAuthorizedProjectManagerAccount({...admin,email:'another-admin@example.com'},'م مجدي محجوب'),false);
+ assert.equal(isAuthorizedProjectManagerAccount({...admin,is_active:false},'م مجدي محجوب'),false);
+ assert.equal(admin.role,'admin');
+ assert.equal(admin.username,'magdi osman');
+});
+
+test('direct-manager selector links only approved Magdi profile to the original admin account',()=>{
+ const admin={email:magdiGeneralManagerEmail,username:'magdi osman',role:'admin',is_active:true,companies:'*'};
+ const options=employeeDirectManagerOptions([], [admin,{...admin,email:'someone@example.com'}],'مسكن الكيان');
+ const magdi=options.find(m=>m.key==='roster:magdi');
+ assert.equal(magdi.email,magdiGeneralManagerEmail);
+ assert.equal(magdi.hasLogin,true);
+ assert.equal(magdi.name,magdiProjectManagerName);
+ assert.ok(!options.some(m=>m.name==='magdi osman'));
+ assert.ok(options.filter(m=>m.key.startsWith('roster:')&&m.hasLogin).every(m=>m.key==='roster:magdi'));
+});
+
+test('inactive or wrong admin account cannot be substituted into Magdi manager profile',()=>{
+ for(const member of [{email:magdiGeneralManagerEmail,role:'admin',is_active:false},{email:'other@example.com',role:'admin',is_active:true}]){
+  const magdi=employeeDirectManagerOptions([], [member],'مسكن الكيان').find(m=>m.key==='roster:magdi');
+  assert.equal(magdi.email,'');
+  assert.equal(magdi.hasLogin,false);
+ }
+});
+
+test('Magdi onboarding and project approval preserve the general manager role in backend',()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(backend,/const adminMagdi=isMagdiGeneralManagerAccount\(existing,name\)/);
+ assert.match(backend,/\}else if\(!adminMagdi\)\{/);
+ assert.match(backend,/isAuthorizedProjectManagerAccount\(manager,data\.manager_name/);
+ assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:managerEmail\}/);
+ assert.match(backend,/if\(!adminMagdi&&manager\.projects!=='\*'/);
+});
 
 test('all approved direct managers are selectable before login identities are created',()=>{
  const options=employeeDirectManagerOptions([],[],'مسكن الكيان');
@@ -678,11 +718,11 @@ test('request workflow requires an assigned active manager before routing and ch
  assert.match(backend,/current==='draft'&&decision==='approve'&&next==='project_manager'/);
  assert.match(backend,/يجب ربط الموظف بمشروع قبل إرسال الطلب/);
  assert.match(backend,/يجب تعيين مدير المشروع في ملف المشروع/);
- assert.match(backend,/manager\.role!=='project_manager'/);
+ assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:managerEmail\}/);
  assert.match(backend,/current==='project_manager'&&u\.role!=='admin'/);
  assert.match(backend,/الطلب يخص مدير مشروع آخر/);
  assert.match(ui,/module==='projects'&&f\.key==='manager_email'/);
- assert.match(ui,/members\.filter\(m=>m\.role==='project_manager'&&m\.is_active!==false\)/);
+ assert.match(ui,/directManagerChoices\(rows,members,edit\.company\)/);
 });
 
 test('the deployed shared visibility rule restricts managers to their assigned projects',async()=>{
@@ -842,7 +882,7 @@ test('project editor supports searchable company, name and account-scoped manage
  assert.match(ui,/aria-label="فلتر اسم المشروع"/);
  assert.match(ui,/project-name-suggestions/);
  assert.match(ui,/aria-label="فلتر مدير المشروع"/);
- assert.match(ui,/members\.filter\(m=>m\.role==='project_manager'&&m\.is_active!==false/);
+ assert.match(ui,/members\.filter\(m=>\(m\.role==='project_manager'\|\|isMagdiGeneralManagerAccount\(m\)\)/);
  assert.match(ui,/module==='projects'&&f\.key==='code'/);
  assert.match(ui,/يُولّد تلقائيًا عند الحفظ/);
 });
@@ -891,7 +931,7 @@ test('project assignment and employee request details use project manager direct
  assert.match(ui,/managerDirectoryForRequest\(edit,edit\.company\)/);
  assert.match(erp,/سجّل بيانات مدير المشروع أولًا في دليل مدراء المشاريع للشركة/);
  assert.match(erp,/data\.project_manager=\{name:manager\?\.name/);
- assert.match(erp,/details\.project_manager=\{name:dir\?\.name\|\|managerEmail/);
+ assert.match(erp,/details\.project_manager=\{name:isMagdiGeneralManagerAccount/);
  assert.match(erp,/UPDATE records SET status=\?,data=\?,revision=revision\+1/);
 });
 
@@ -899,7 +939,7 @@ test('HR directory choices expose only active project manager identities without
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(erp,/if\(mod==='project_manager_choices'\)/);
- assert.match(erp,/SELECT email,username,contact_email,role,is_active,companies FROM members WHERE role='project_manager' AND is_active=true/);
+ assert.match(erp,/SELECT email,username,contact_email,role,is_active,companies FROM members WHERE is_active=true AND/);
  assert.match(erp,/\['admin','hr','projects_director'\]\.includes\(u\.role\)/);
  assert.match(ui,/user\?\.role==='admin'\?'members':'project_manager_choices'/);
 });
@@ -908,7 +948,7 @@ test('direct manager saves known project names without requiring a login identit
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(erp,/details\.name\|\|fallbackName\|\|account\.username\|\|email/);
- assert.match(erp,/account\.role!=='project_manager'\|\|account\.is_active===false/);
+ assert.match(erp,/isAuthorizedProjectManagerAccount\(account,fallbackName\)/);
  assert.match(erp,/availableEmployeeDirectManagers\(db,old\.company\)/);
  assert.match(ui,/employeeDirectManagerOptions\(rows,members,c\)/);
 });
@@ -1413,7 +1453,7 @@ test('employee direct manager is a verified roster choice reflected in request s
  for(const term of ['direct_manager_id','manager_phone','supervisor_account'])assert.ok(erp.includes(term),term);
  assert.match(erp,/module='project_managers' AND company=\?/);
  assert.match(erp,/setEmployeeDirectManager\(updated,resolved,mode==='selected'\)/);
- assert.match(erp,/account\.role!=='project_manager'/);
+ assert.match(erp,/isAuthorizedProjectManagerAccount\(account,fallbackName\)/);
  assert.match(erp,/data\.direct_manager=\{name:snapshot\.manager/);
  assert.match(mod,/f\('direct_manager_id','مرجع المدير المباشر','internal'\)/);
  assert.match(ui,/aria-label="بحث المدير المباشر"/);
@@ -1434,7 +1474,7 @@ test('payroll approval requires authorized project managers for every staff row 
  assert.match(cycle,/await ensureAssignedPayrollManager\(row\.data\.project_id,b\.company,row\.data\.employee_id\)/);
  assert.match(cycle,/await ensureAssignedPayrollManager\(e\.data\.project_id,batch\.company,e\.data\.employee_id\)/);
  assert.match(cycle,/await canManageProject\(u,projectId,batch\.company,employee\.data\.employee_id\)/);
- assert.match(cycle,/manager\.role!=='project_manager'/);
+ assert.match(cycle,/isAuthorizedProjectManagerAccount\(manager,managerName/);
  assert.match(cycle,/manager_reviewed_by/);
  assert.match(cycle,/\['admin','projects_director'\]\.includes\(u\.role\)/);
  assert.match(ui,/إرسال لإدارة المشاريع بعد مراجعة المدراء/);
@@ -1471,7 +1511,7 @@ test('existing employee can be chosen as project manager and linked to scoped ap
  assert.match(backend,/الموظف مرتبط بحساب دخول آخر/);
  assert.match(backend,/employee_id=\?,companies=\?,projects=\?,username=\?/);
  assert.match(backend,/project_manager_account:email,is_project_manager:true/);
- assert.match(backend,/manager_email:email,manager_name:name/);
+ assert.match(backend,/manager_email:email,manager_name:adminMagdi\?magdiProjectManagerName:name/);
  assert.match(backend,/project_manager_onboarding/);
 });
 test('manager payroll header visibility depends on assigned employee project',async()=>{
@@ -1535,7 +1575,7 @@ test('project manager form uses searched authorized name and department with ser
  assert.match(ui,/aria-label="اختيار اسم مدير المشروع من القائمة"/);
  assert.match(ui,/aria-label="اختيار الإدارة والقسم من القائمة"/);
  assert.match(ui,/aria-label="بريد حساب المدير المحدد"/);
- assert.match(erp,/const canonicalName=String\(/);
+ assert.match(erp,/const canonicalName=isMagdiGeneralManagerAccount\(member,data\.name\)/);
  assert.match(erp,/يجب اختيار اسم المدير من القائمة المعتمدة/);
  assert.match(erp,/registeredDepartments\.has\(department\)/);
 });

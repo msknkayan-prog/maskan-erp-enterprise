@@ -4,6 +4,7 @@
 import {env} from './runtime.ts';
 import {identity} from './erp.ts';
 import {companies,permission} from './modules.mjs';
+import {isAuthorizedProjectManagerAccount,magdiProjectManagerName} from './project-manager-roster.mjs';
 const response=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 const err=(message,status=400)=>response({error:message},status);
 const cents=x=>Math.round(Number(x||0)*100);
@@ -50,8 +51,9 @@ const ensureAssignedPayrollManager=async(projectId,company,employeeId='')=>{
  const delegated=String(worker?JSON.parse(worker.data||'{}').delegated_manager_email||'':'').trim().toLowerCase();
  const email=delegated||String(p.manager_email||'').trim().toLowerCase();
  if(!email)throw Error('المشروع غير مرتبط بمدير مشروع مخول');
- const manager=await db.prepare('SELECT role,is_active,companies,projects FROM members WHERE lower(email)=?').bind(email).first();
- if(!manager||manager.role!=='project_manager'||manager.is_active===false)throw Error('مدير المشروع ليس لديه حساب مشروع نشط: '+email);
+ const manager=await db.prepare('SELECT email,role,is_active,companies,projects FROM members WHERE lower(email)=?').bind(email).first();
+ const managerName=delegated?String(worker?JSON.parse(worker.data||'{}').manager||'':''):String(p.manager_name||'');
+ if(!isAuthorizedProjectManagerAccount(manager,managerName||magdiProjectManagerName))throw Error('مدير المشروع ليس لديه حساب مشروع نشط: '+email);
  if(manager.companies&&manager.companies!=='*'){
   let eligible=false;try{eligible=JSON.parse(manager.companies).includes(company)}catch{}
   if(!eligible)throw Error('مدير المشروع لا يملك صلاحية شركة المسير: '+email);

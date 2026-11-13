@@ -21,6 +21,21 @@ export function preferredManagerForName(name){
  return preferredProjectManagers.find(p=>[p.name,...p.aliases].some(alias=>normalizeManagerName(alias)===normalized))||null;
 }
 
+// The general manager's existing admin login also represents this one approved
+// project-manager profile. Never convert the login to project_manager or infer
+// that other admin accounts can manage projects.
+export const magdiGeneralManagerEmail='mskn.kayan@gmail.com';
+export const magdiProjectManagerName='م مجدي محجوب';
+export function isMagdiGeneralManagerAccount(member,managerName=magdiProjectManagerName){
+ return !!member&&member.role==='admin'&&member.is_active!==false&&
+  String(member.email||'').trim().toLowerCase()===magdiGeneralManagerEmail&&
+  preferredManagerForName(managerName)?.id==='magdi';
+}
+export function isAuthorizedProjectManagerAccount(member,managerName=''){
+ return !!member&&member.is_active!==false&&
+  (member.role==='project_manager'||isMagdiGeneralManagerAccount(member,managerName));
+}
+
 // Direct-supervisor names are operational personnel data, not login identities.
 // Keep the seven approved names selectable even before an Auth account exists.
 export function employeeDirectManagerOptions(records=[],members=[],company=''){
@@ -43,12 +58,23 @@ export function employeeDirectManagerOptions(records=[],members=[],company=''){
   if(row.module==='employees'&&!row.data?._archived)add(row.data?.manager);
  }
  const active=members.filter(m=>{
-  if(m.role!=='project_manager'||m.is_active===false)return false;
+  if(!isAuthorizedProjectManagerAccount(m,magdiProjectManagerName))return false;
   if(!m.companies||m.companies==='*')return true;
   try{return JSON.parse(m.companies||'[]').includes(company)}catch{return false}
  });
- for(const member of active)add(member.username||member.display_name);
+ for(const member of active.filter(m=>m.role==='project_manager'))add(member.username||member.display_name);
  for(const choice of choices.values()){
+  if(choice.key==='roster:magdi'){
+   const admin=active.find(m=>isMagdiGeneralManagerAccount(m,choice.name));
+   if(admin){
+    choice.email=magdiGeneralManagerEmail;
+    choice.hasLogin=true;
+    const linked=relevant.find(r=>r.module==='project_managers'&&String(r.data?.email||'').trim().toLowerCase()===magdiGeneralManagerEmail);
+    choice.phone=String(linked?.data?.phone||'');
+    choice.directory_id=linked?.id||'';
+    continue;
+   }
+  }
   const relatedDirectory=relevant.filter(r=>r.module==='project_managers'&&normalizeManagerName(r.data?.name)===normalizeManagerName(choice.name));
   const relatedProjects=relevant.filter(r=>r.module==='projects'&&normalizeManagerName(r.data?.manager_name)===normalizeManagerName(choice.name));
   const emails=new Set([
@@ -56,7 +82,7 @@ export function employeeDirectManagerOptions(records=[],members=[],company=''){
    ...relatedProjects.map(r=>r.data?.manager_email),
    ...active.filter(m=>normalizeManagerName(m.username||m.display_name)===normalizeManagerName(choice.name)).map(m=>m.email)
   ].map(x=>String(x||'').trim().toLowerCase()).filter(Boolean));
-  const valid=active.filter(m=>emails.has(String(m.email||'').trim().toLowerCase()));
+  const valid=active.filter(m=>m.role==='project_manager'&&emails.has(String(m.email||'').trim().toLowerCase()));
   if(valid.length!==1)continue;
   choice.email=String(valid[0].email).trim().toLowerCase();
   choice.hasLogin=true;
