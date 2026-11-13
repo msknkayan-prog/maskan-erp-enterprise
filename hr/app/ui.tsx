@@ -278,7 +278,7 @@ const list=scoped.filter(r=>{
 });
 const name=id=>rows.find(r=>r.id===id)?.data.name||'غير متاح';
 const registerDisplay=(row,f)=>{const value=employeeRegisterValue(row,f.key,rows);const original=modules.employees.fields.find(x=>x.key===f.key);return original&&enumOptions[original.type]?(enumOptions[original.type].find(o=>o[0]===value)?.[1]||'—'):value===0?'0':value||'—';};
-const display=(row,f)=>relationModules[f.type]?name(row.data[f.key]):f.type==='number'?money(row.data[f.key]):enumOptions[f.type]?(enumOptions[f.type].find(o=>o[0]===row.data[f.key])?.[1]||'—'):row.data[f.key]||'—';
+const display=(row,f)=>row.module==='projects'&&f.key==='manager_name'?projectManagerName(row):relationModules[f.type]?name(row.data[f.key]):f.type==='number'?money(row.data[f.key]):enumOptions[f.type]?(enumOptions[f.type].find(o=>o[0]===row.data[f.key])?.[1]||'—'):row.data[f.key]||'—';
 const title=row=>row.data.name||(row.data.employee_id?name(row.data.employee_id):row.data.reference||row.code||modules[row.module]?.singular||'سجل');
 const fieldsFor=spec?spec.fields.filter(f=>f.type!=='internal'&&(!['project_manager','projects_director'].includes(user?.role)||module!=='employees'||['name','code','job','department','project_id','employment_status'].includes(f.key))):[];
 const leaveBalanceFor=(employeeId,companyName,request=null)=>{
@@ -293,7 +293,14 @@ const leaveBalanceFor=(employeeId,companyName,request=null)=>{
  const alreadyApproved=request?.id&&rows.some(x=>x.id===request.id&&x.module==='leave'&&x.status==='approved');
  return {entitled:Math.round(entitled*100)/100,used,remaining,after:Math.round((remaining-(deductible&&!alreadyApproved?Number(request.days||0):0))*100)/100};
 };
-const tableFields=module==='employees'?[...employeeRegisterFields,...spec.fields.filter(f=>['iqama_expiry','contract_expiry','notes'].includes(f.key))].filter(f=>!['project_manager','projects_director'].includes(user?.role)||['name','code','job','department','project_id','employment_status'].includes(f.key)):fieldsFor.slice(0,7);
+// Keep the email stored for approval routing, but display the assigned manager's name.
+const projectManagerName=row=>{
+ const email=String(row.data?.manager_email||'').trim().toLowerCase();
+ const manager=rows.find(r=>r.module==='project_managers'&&r.company===row.company&&String(r.data?.email||'').trim().toLowerCase()===email);
+ return manager?.data?.name||row.data?.manager_name||(email?'بحاجة لمراجعة':'غير معيّن');
+};
+const projectRegisterFields=fieldsFor.map(f=>module==='projects'&&f.key==='manager_email'?{...f,key:'manager_name',label:'اسم مدير المشروع'}:f);
+const tableFields=module==='employees'?[...employeeRegisterFields,...spec.fields.filter(f=>['iqama_expiry','contract_expiry','notes'].includes(f.key))].filter(f=>!['project_manager','projects_director'].includes(user?.role)||['name','code','job','department','project_id','employment_status'].includes(f.key)):projectRegisterFields.slice(0,7);
 // Payroll previews use the imported employee source of truth. A preview is not a paid or approved payroll.
 const payrollCompanies=[...new Set(rows.filter(r=>r.module==='employees').map(r=>r.company).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
 const payrollEmployees=rows.filter(r=>r.module==='employees'&&(payrollCompany==='__all__'||r.company===payrollCompany)&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(r.data?.employment_status||r.data?.employee_status||'').trim()));
@@ -579,7 +586,7 @@ function startEdit(row){
  const defaultData=Object.fromEntries(spec.fields.map(f=>[f.key,f.type==='number'?'0':f.type==='date'?saudiDate():f.type==='month'?saudiDate().slice(0,7):f.type==='sponsorship'?'yes':f.type==='method'?'bank':f.type==='employment'?'active':f.type==='leave_type'?'annual':f.type==='warning_type'?'first':f.type==='case_status'?'draft':'']));
  if(module==='leave'){defaultData.holiday_policy='include';defaultData.holiday_dates='';defaultData.days='1';defaultData.ticket='no';defaultData.ticket_due_date='';defaultData.expected_return=leaveNextDate(defaultData.end);}if(module==='advances'){defaultData.installments='1';defaultData.first_month=saudiDate().slice(0,7);}setLeaveHolidayCandidate('');setEdit({company,data:defaultData});
 }
-function exportRows(){const fields=module==='employees'?tableFields:fieldsFor,extras=[...new Set(list.flatMap(r=>Object.keys(r.data.extra_fields||{})))];const financial=false;const headers=['الشركة',...fields.map(f=>f.label),...(financial?['الراتب الأساسي (65%)','بدل السكن (25%)','بدل الترحيل (10%)','الاستحقاق السنوي الحالي','الرصيد المتبقي الحالي']:[]),...extras,'مرحلة الاعتماد'];const data=list.map(r=>{const used=rows.filter(x=>x.module==='leave'&&x.status==='approved'&&(x.data.balance_deducted??(!x.data.leave_type||x.data.leave_type==='annual'))&&x.data.employee_id===r.id).reduce((n,x)=>n+Number(x.data.days),0);const service=annualLeave(r.data.hire_date);const balance=r.data.sponsorship==='yes'?(service?service.accrued+Number(r.data.opening_leave||0)-used:'أكمل تاريخ التعيين'):Number(r.data.opening_leave||0)+Number(r.data.legacy_ledger_adjustment||0)-used;return [r.company,...fields.map(f=>module==='employees'?employeeRegisterValue(r,f.key,rows):r.data[f.key]??''),...(financial?[Number(r.data.basic||0),Number(r.data.housing||0),Number(r.data.transport||0),r.data.sponsorship==='yes'?(service?.annual??''):r.data.annual_days||'',balance]:[]),...extras.map(k=>r.data.extra_fields?.[k]??''),states[r.status]||r.status]});const bytes=workbookBytes([headers,...data]);const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));a.download=module+'-export.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function exportRows(){const fields=module==='employees'?tableFields:projectRegisterFields,extras=[...new Set(list.flatMap(r=>Object.keys(r.data.extra_fields||{})))];const financial=false;const headers=['الشركة',...fields.map(f=>f.label),...(financial?['الراتب الأساسي (65%)','بدل السكن (25%)','بدل الترحيل (10%)','الاستحقاق السنوي الحالي','الرصيد المتبقي الحالي']:[]),...extras,'مرحلة الاعتماد'];const data=list.map(r=>{const used=rows.filter(x=>x.module==='leave'&&x.status==='approved'&&(x.data.balance_deducted??(!x.data.leave_type||x.data.leave_type==='annual'))&&x.data.employee_id===r.id).reduce((n,x)=>n+Number(x.data.days),0);const service=annualLeave(r.data.hire_date);const balance=r.data.sponsorship==='yes'?(service?service.accrued+Number(r.data.opening_leave||0)-used:'أكمل تاريخ التعيين'):Number(r.data.opening_leave||0)+Number(r.data.legacy_ledger_adjustment||0)-used;return [r.company,...fields.map(f=>module==='employees'?employeeRegisterValue(r,f.key,rows):module==='projects'&&f.key==='manager_name'?projectManagerName(r):r.data[f.key]??''),...(financial?[Number(r.data.basic||0),Number(r.data.housing||0),Number(r.data.transport||0),r.data.sponsorship==='yes'?(service?.annual??''):r.data.annual_days||'',balance]:[]),...extras.map(k=>r.data.extra_fields?.[k]??''),states[r.status]||r.status]});const bytes=workbookBytes([headers,...data]);const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));a.download=module+'-export.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
 function printModuleRegister(){
  if(!spec)return;
@@ -587,7 +594,7 @@ function printModuleRegister(){
  const chosenCompany=company||'جميع الشركات';
  const profile=rows.find(r=>r.module==='company_profiles'&&r.company===company);
  const companyName=company?companyOfficialName(company,rows):chosenCompany;
- const fields=module==='employees'?tableFields:fieldsFor;
+ const fields=module==='employees'?tableFields:projectRegisterFields;
  const limited=fields.slice(0,8);
  const tableHeaders=['م','الشركة',...limited.map(f=>f.label),'الحالة'];
  const cells=entry=>[entry.index+1,entry.row.company,...limited.map(f=>module==='employees'?registerDisplay(entry.row,f):display(entry.row,f)),states[entry.row.status]||entry.row.status||'—'];
