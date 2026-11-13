@@ -1335,9 +1335,9 @@ test('existing employee can be chosen as project manager and linked to scoped ap
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/اختيار أحد الموظفين لتعيينه مدير مشروع/);
- assert.match(ui,/aria-label="اختيار موظف مدير مشروع"/);
+ assert.match(ui,/aria-label="اختيار المدير المباشر لتعيينه مدير مشروع"/);
  assert.match(ui,/employee_id:managerSetup\.employeeId\|\|null/);
- assert.match(ui,/setManagerSetup\(\{employeeId:employee\.id/);
+ assert.match(ui,/employeeId:employee\?\.id\|\|''/);
  assert.match(backend,/if\(body\.action==='onboard_project_manager'\)/);
  assert.match(backend,/employeeRow=await db\.prepare/);
  assert.match(backend,/الموظف مرتبط بحساب دخول آخر/);
@@ -1448,4 +1448,17 @@ test('manager onboarding lets projects be selected before entering email and ide
  assert.match(ui,/onChange=\{e=>setManagerSetup\(p=>\(\{\.\.\.p,email:e\.target\.value\}\)\)\}/);
  assert.match(backend,/transferredProjects\.set\(assigned/);
  assert.match(backend,/scope\.filter\(\(id:string\)=>!projectIds\.includes\(id\)\)/);
+});
+test('project register removes quick manager assignment and adds guarded deletion',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.doesNotMatch(ui,/<th>تعيين مدير المشروع<\/th>/);
+ assert.match(ui,/module==='projects'&&user\?\.role==='admin'&&<button[^>]*onClick=\{\(\)=>deleteProject\(row\)\}>حذف المشروع/);
+ assert.match(ui,/module==='projects'&&f\.key==='manager_email'/);
+ assert.match(ui,/managerChanged.*?assign_project_manager/s);
+ assert.match(backend,/if\(body\.action==='delete_project'\)/);
+ assert.match(backend,/if\(linked\)throw Error\('لا يمكن حذف المشروع لوجود سجلات مرتبطة به/);
+ assert.match(backend,/_deleted:true,_deleted_at:now,_deleted_by:u\.email/);
+ assert.match(backend,/project_deleted/);
+ assert.match(backend,/const result=await db\.batch\(statements\)/);
 });
