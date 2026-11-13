@@ -4,11 +4,12 @@ import {currentUser} from './runtime.ts';
 import {modules,companies,normalize,workflow,canWrite,canRead,annualLeave,operationalModules,relationModules,visible,permission,saudiDate,permittedRead,permittedWrite} from './modules.mjs';
 export const dynamic='force-dynamic';
 const json=(v:any,status=200)=>Response.json(v,{status,headers:{'Cache-Control':'no-store'}});
+const projectManagerContactEmail='mskn.kayan@gmail.com';
 export async function identity(){const u=currentUser();if(!u)throw Error('401');const row=await env.DB.prepare('SELECT * FROM members WHERE email=?').bind(u.email.toLowerCase()).first();if(!row||row.is_active===false)throw Error('403');return {...u,...row};}
 const parse=(r:any)=>({...r,data:JSON.parse(r.data)});
 export async function GET(req:Request){try{const u=await identity();const db=env.DB!;const query=new URL(req.url).searchParams;const mod=query.get('module');if(mod==='audit'){if(u.role!=='admin')throw Error('403');return json({rows:(await db.prepare('SELECT * FROM audit ORDER BY at DESC LIMIT 100').all()).results});}if(mod==='record_history'){const all=(await db.prepare('SELECT * FROM records').all()).results.map(parse);const row=all.find((r:any)=>r.id===query.get('id'));if(!row||!permittedRead(u,row.module)||!visible(u,row,all))throw Error('403');const current=(await db.prepare('SELECT * FROM audit WHERE record_id=? ORDER BY at').bind(row.id).all()).results.map((r:any)=>({at:r.at,actor:r.actor,action:r.action,details:r.details,source:'cloud'}));const old=row.data._legacy;if(old){const archive=(await db.prepare('SELECT table_name,payload FROM legacy WHERE source=?').bind(old.source).all()).results.map((r:any)=>({...r,payload:JSON.parse(r.payload)}));const users=Object.fromEntries(archive.filter((r:any)=>r.table_name==='users').map((r:any)=>[r.payload.id,r.payload.display_name]));for(const item of archive){const r=item.payload;let match=item.table_name==='approval_events'&&((old.table==='leave_requests'&&r.leave_request_id===old.id)||(old.table==='advance_requests'&&r.advance_request_id===old.id))||item.table_name==='resignation_events'&&old.table==='resignation_requests'&&r.resignation_id===old.id;if(match)current.push({at:r.decided_at,actor:users[r.actor_user_id]||'مستخدم مرحّل',action:r.decision,details:JSON.stringify({step:r.step,note:r.note}),source:'python'});}}return json({rows:current.sort((a:any,b:any)=>String(a.at).localeCompare(String(b.at)))});}if(mod==='project_manager_choices'){
  if(!['admin','hr','projects_director'].includes(u.role))throw Error('403');
- const result=(await db.prepare("SELECT email,username,display_name,role,is_active,companies FROM members WHERE role='project_manager' AND is_active=true").all()).results;
+ const result=(await db.prepare("SELECT email,username,contact_email,role,is_active,companies FROM members WHERE role='project_manager' AND is_active=true").all()).results;
  return json({rows:result.filter((m:any)=>{
   const userScope=u.companies==='*'||!u.companies?null:(()=>{try{return JSON.parse(u.companies)}catch{return []}})();
   const managerScope=m.companies==='*'||!m.companies?null:(()=>{try{return JSON.parse(m.companies)}catch{return []}})();
@@ -119,7 +120,7 @@ if(body.action==='update_member'){
  if(u.role!=='admin')throw Error('403');
  const oldEmail=String(body.original_email||'').trim().toLowerCase();
  const email=String(body.email||'').trim().toLowerCase();
- if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error('البريد الإلكتروني غير صالح');const contactEmail=String(body.contact_email||email).trim().toLowerCase();
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error('البريد الإلكتروني غير صالح');const contactEmail=body.role==='project_manager'?projectManagerContactEmail:String(body.contact_email||email).trim().toLowerCase();
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail))throw Error('بريد التواصل غير صالح');
  const row=await db.prepare('SELECT * FROM members WHERE email=?').bind(oldEmail).first();
  if(!row)throw Error('المستخدم المراد تعديله غير موجود');
@@ -309,14 +310,14 @@ if(body.action==='onboard_project_manager'){
   const clash=await db.prepare('SELECT email FROM members WHERE lower(username)=?').bind(username).first();
   if(clash)throw Error('اسم المستخدم مستخدم بالفعل');
   commands.push(db.prepare('INSERT INTO members(email,role,employee_id,companies,projects,permissions,username,contact_email) VALUES(?,?,?,?,?,?,?,?)')
-   .bind(email,'project_manager',employeeId||null,JSON.stringify(allowedCompanies),JSON.stringify(ids),'{}',username,email));
+   .bind(email,'project_manager',employeeId||null,JSON.stringify(allowedCompanies),JSON.stringify(ids),'{}',username,projectManagerContactEmail));
  }else{
   if(username&&username!==existing.username){
    const clash=await db.prepare('SELECT email FROM members WHERE lower(username)=? AND lower(email)<>?').bind(username,email).first();
    if(clash)throw Error('اسم المستخدم مستخدم بالفعل');
   }
-  commands.push(db.prepare("UPDATE members SET role='project_manager',employee_id=?,companies=?,projects=?,username=? WHERE email=? AND role IN ('project_manager','employee') AND is_active=true")
-    .bind(employeeId||existing.employee_id||null,nextCompanies==='*'?'*':JSON.stringify(nextCompanies),nextProjects==='*'?'*':JSON.stringify(nextProjects),username||existing.username,email));
+  commands.push(db.prepare("UPDATE members SET role='project_manager',employee_id=?,companies=?,projects=?,username=?,contact_email=? WHERE email=? AND role IN ('project_manager','employee') AND is_active=true")
+    .bind(employeeId||existing.employee_id||null,nextCompanies==='*'?'*':JSON.stringify(nextCompanies),nextProjects==='*'?'*':JSON.stringify(nextProjects),username||existing.username,projectManagerContactEmail,email));
  }
  // Reassigned projects must also be removed from the previous managers'
  // explicit scopes; '*' scopes are checked against live project ownership.
@@ -374,7 +375,7 @@ if(body.role==='project_manager'&&body.projects!=='*'){
   return allowed&&String(d.manager_email||'').trim().toLowerCase()===email;
  })))throw Error('يمكن منح المدير صلاحية المشاريع المعيّن مديرًا لها فقط، وضمن شركاته المسموحة');
 }
-if(body.companies!=='*'&&body.companies!==undefined&&(!Array.isArray(body.companies)||body.companies.some((c:any)=>!companies.includes(c))))throw Error('نطاق شركات غير صالح');const contactEmail=String(body.contact_email||email).trim().toLowerCase();
+if(body.companies!=='*'&&body.companies!==undefined&&(!Array.isArray(body.companies)||body.companies.some((c:any)=>!companies.includes(c))))throw Error('نطاق شركات غير صالح');const contactEmail=body.role==='project_manager'?projectManagerContactEmail:String(body.contact_email||email).trim().toLowerCase();
 if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail))throw Error('بريد التواصل غير صالح');
 if(await db.prepare('SELECT 1 FROM members WHERE email=?').bind(email).first())throw Error('بريد الدخول مسجل مسبقًا؛ استخدم بريد دخول مختلفًا واسم مستخدم فريدًا، ويمكن تكرار بريد التواصل');
 if(await db.prepare('SELECT 1 FROM auth.users WHERE lower(email)=? LIMIT 1').bind(email).first())throw Error('بريد الدخول مستخدم في حساب مصادقة آخر');
@@ -534,7 +535,7 @@ if(mod==='projects'&&old&&String(data.manager_email||'').trim().toLowerCase()!==
 if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previous.salary??previous.total_monthly_salary)===Number(data.salary))for(const key of ['basic','housing','transport'])if(previous[key]!==undefined)data[key]=previous[key];if(mod==='employees'){data._review_flags=[...(!data.hire_date?['تاريخ التعيين يحتاج استكمال']:[]),...(data.company==='غير محددة'?['الشركة تحتاج مراجعة']:[])];}if(mod==='warnings'&&data.warning_type!=='notice'&&!Number(data.sequence)){data.sequence=({first:1,second:2,final:3} as any)[data.warning_type];}if(!visible(u,{module:mod,company:body.company,data},(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(mod==='project_managers'){
  if(!['admin','hr'].includes(u.role))throw Error('403');
  data.email=String(data.email||'').trim().toLowerCase();
- const member=await db.prepare('SELECT email,role,is_active,companies,display_name,username FROM members WHERE lower(email)=?').bind(data.email).first<any>();
+ const member=await db.prepare('SELECT email,role,is_active,companies,username FROM members WHERE lower(email)=?').bind(data.email).first<any>();
  if(!member||member.role!=='project_manager'||member.is_active===false)throw Error('يجب ربط بيانات المدير بحساب نشط بصلاحية مدير مشروع');
  if(member.companies&&member.companies!=='*'){
   let valid=false;try{valid=JSON.parse(member.companies).includes(body.company)}catch{}
@@ -547,7 +548,7 @@ if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previo
  const managedEmployee=employees.find((e:any)=>String(e.manager_email||'').trim().toLowerCase()===data.email);
  const recordData=currentEntry?JSON.parse(currentEntry.data||'{}'):null;
  if(recordData&&String(recordData.email||'').trim().toLowerCase()!==data.email)throw Error('لا يمكن تغيير حساب مدير مشروع مسجل إلى حساب آخر؛ افتح سجل المدير الآخر أو أنشئ سجلًا جديدًا');
- const canonicalName=String(recordData?.name||matchingEmployee?.name||managedEmployee?.manager||member.display_name||member.username||data.email).trim();
+ const canonicalName=String(recordData?.name||matchingEmployee?.name||managedEmployee?.manager||member.username||data.email).trim();
  if(!canonicalName||String(data.name||'').trim()!==canonicalName)throw Error('يجب اختيار اسم المدير من القائمة المعتمدة، ولا يمكن إدخال اسم مختلف');
  const department=String(data.department||'').trim();
  const registeredDepartments=new Set([...employees.map((e:any)=>String(e.department||'').trim()),...records.map((r:any)=>String(JSON.parse(r.data||'{}').department||'').trim()),'إدارة المشاريع'].filter(Boolean));
