@@ -1462,6 +1462,21 @@ test('project register removes quick manager assignment and adds guarded deletio
  assert.match(backend,/project_deleted/);
  assert.match(backend,/const result=await db\.batch\(statements\)/);
 });
+test('project manager directory supports audited, guarded deletion without removing login accounts',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/module==='project_managers'&&user\?\.role==='admin'&&<button[^>]*onClick=\{\(\)=>deleteProjectManager\(row\)\}>حذف المدير/);
+ assert.match(ui,/async function deleteProjectManager\(row\)/);
+ assert.match(ui,/action:'delete_project_manager',module:'project_managers',id:row\.id,revision:row\.revision/);
+ assert.match(ui,/لن يُحذف حساب الدخول/);
+ assert.match(backend,/if\(body\.action==='delete_project_manager'\)/);
+ assert.match(backend,/mod!=='project_managers'\|\|!old\|\|u\.role!=='admin'/);
+ assert.match(backend,/record\.module==='projects'/);
+ assert.match(backend,/data\.direct_manager_id/);
+ assert.match(backend,/project_manager_deleted/);
+ assert.match(backend,/_delete_reason:reason/);
+ assert.doesNotMatch(backend,/DELETE FROM records WHERE module='project_managers'/);
+});
 test('project manager editor shows selected name and preserves registered account identity',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
