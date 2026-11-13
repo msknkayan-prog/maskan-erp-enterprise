@@ -1474,3 +1474,26 @@ test('project manager editor shows selected name and preserves registered accoun
  assert.match(erp,/if\(recordData&&String\(recordData\.email/);
  assert.match(erp,/لا يمكن تغيير حساب مدير مشروع مسجل إلى حساب آخر/);
 });
+test('six approved project managers are selectable and linked to employee project assignments',async()=>{
+ const {preferredProjectManagers,preferredManagerForName,suggestedProjectsForManager}=await import('../lib/project-manager-roster.mjs');
+ assert.deepEqual(preferredProjectManagers.map(p=>p.name),['م محمداحمد','م الهادي الرحيمة','م محمد يوسف','أ مصعب عبد القيوم','م مجدي محجوب','أ عثمان محمداحمد']);
+ for(const name of ['م محمد أحمد','م الهادي الرحمة','م الهادي الرحيمة','أ.مصعب عبد القيوم','أ عثمان محمد أحمد'])assert.ok(preferredManagerForName(name),name);
+ assert.equal(preferredManagerForName('م الهادي الرحمة')?.id,preferredManagerForName('م الهادي الرحيمة')?.id);
+ assert.equal(preferredManagerForName('اسم غير معتمد'),null);
+ const rows=[
+  {id:'p1',module:'projects',company:'مسكن الكيان',data:{name:'مشروع 1'}},
+  {id:'p2',module:'projects',company:'مسكن الكيان',data:{name:'مشروع 2'}},
+  {id:'p3',module:'projects',company:'رياح الاعمار',data:{name:'مشروع 3'}},
+  {id:'e1',module:'employees',company:'مسكن الكيان',data:{project_id:'p1',manager:'م الهادي الرحمة'}},
+  {id:'e2',module:'employees',company:'مسكن الكيان',data:{project_id:'p2',manager_email:'alhadi@example.test'}},
+  {id:'e3',module:'employees',company:'رياح الاعمار',data:{project_id:'p3',manager:'م الهادي الرحيمة'}}
+ ];
+ assert.deepEqual(suggestedProjectsForManager(rows,'alhadi','مسكن الكيان','alhadi@example.test'),['p1','p2']);
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/suggestedProjectsForManager\(rows,m\.profileId,m\.company,m\.email\)/);
+ assert.match(ui,/ids:suggested/);
+ assert.match(ui,/اختر أحد المدراء الستة/);
+ assert.match(erp,/updatedEmployee=\{\.\.\.d,manager:String\(directory\.name/);
+ assert.match(erp,/employees_linked:syncEmployees\.length/);
+});
