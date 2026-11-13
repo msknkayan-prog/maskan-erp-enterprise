@@ -1002,6 +1002,7 @@ body{line-height:1.55}
 .request-approval-top small,.request-approval-guide>small,.request-approval-summary>small{font-size:11px;line-height:1.7;color:#715f39}
 .request-approval-flow{display:flex;gap:7px;overflow-x:auto;padding:10px 0;margin:4px 0}
 .request-approval-step{display:flex;flex:1 0 112px;align-items:center;justify-content:center;gap:6px;padding:10px 9px;border:1px solid #d8c69f;background:#fff;border-radius:7px;white-space:nowrap;font-size:12px;color:#67502c}
+.request-approval-step b{white-space:pre-line;text-align:center;line-height:1.55}
 .request-approval-step span{border-radius:50%;height:21px;width:21px;display:grid;place-items:center;background:#e6ddcb;font-size:11px}
 .request-approval-step.done{border-color:#98b7a7;background:#edf6ef;color:#286045}
 .request-approval-step.done span{background:#c6e5d1;color:#205f3b}

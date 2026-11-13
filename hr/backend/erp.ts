@@ -1,7 +1,7 @@
 // @ts-nocheck
 import {env} from './runtime.ts';
 import {currentUser} from './runtime.ts';
-import {modules,companies,normalize,workflow,canWrite,canRead,annualLeave,operationalModules,relationModules,visible,permission,saudiDate,permittedRead,permittedWrite} from './modules.mjs';
+import {modules,companies,normalize,workflow,canWrite,canRead,annualLeave,operationalModules,relationModules,visible,permission,saudiDate,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor} from './modules.mjs';
 import {employeeDirectManagerOptions,normalizeManagerName,magdiGeneralManagerEmail,magdiProjectManagerName,isMagdiGeneralManagerAccount,isAuthorizedProjectManagerAccount,preferredManagerForName} from './project-manager-roster.mjs';
 export const dynamic='force-dynamic';
 const json=(v:any,status=200)=>Response.json(v,{status,headers:{'Cache-Control':'no-store'}});
@@ -576,8 +576,8 @@ if(old&&JSON.parse(old.data)?._deleted)throw Error('هذا الطلب محذوف
   if(!result[0].meta.changes)throw Error('تغير الطلب؛ حدّث الصفحة قبل الحذف');
   return json({ok:true,deleted:true});
  }
- if(body.action==='disburse'){if(mod!=='advances'||!old||old.status!=='approved'||!['admin','finance'].includes(u.role))throw Error('403');const reference=String(body.reference||'').trim();if(!reference||reference.length>200)throw Error('مرجع الصرف مطلوب');const data={...JSON.parse(old.data),payment_reference:reference,paid_at:now};const result=await db.batch([db.prepare("UPDATE records SET data=?,status='paid',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=?").bind(JSON.stringify(data),now,mutation,old.id,old.revision),db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,old.id,'record_disbursement',now,JSON.stringify({reference}),old.id,mutation)]);if(!result[0].meta.changes)throw Error('تغير السجل؛ حدّث الصفحة');return json({ok:true});}
-if(body.action==='transition'){if(['payroll','payroll_batches'].includes(mod))throw Error('اعتماد المسيرات الشهرية يتم حصريًا من نافذة المسير الشهري');if(!permission(u,mod,'approve'))throw Error('403');if(!old)throw Error('السجل غير موجود');if(operationalModules.includes(mod)||['repayments'].includes(mod))throw Error('هذا السجل لا يتطلب مسار اعتماد');const current=old.status;let next=mod==='payroll'?(current==='draft'?'hr':current==='hr'?'finance':current==='finance'?'approved':null):(current==='draft'?workflow[1]:workflow[workflow.indexOf(current)+1]);const decision=body.decision||'approve';if(decision==='return')next='draft';if(decision==='reject')next='rejected';if(!['approve','return','reject'].includes(decision))throw Error('قرار غير صالح');if(decision!=='approve'&&!String(body.note||'').trim())throw Error('سبب الإعادة أو الرفض مطلوب');if(!next)throw Error('السجل مغلق');if(current==='draft'&&decision!=='approve')throw Error('القرار غير متاح للمسودة');if(current==='draft'){if(!permittedWrite(u,mod))throw Error('403');}else if(u.role!=='admin'&&u.role!==current)throw Error('403');const details=JSON.parse(old.data);
+ if(body.action==='disburse'){if(mod!=='advances'||!old||old.status!=='approved'||!isRequestFinanceActor(u)||!permission(u,mod,'approve'))throw Error('403');const reference=String(body.reference||'').trim();if(!reference||reference.length>200)throw Error('مرجع الصرف مطلوب');const data={...JSON.parse(old.data),payment_reference:reference,paid_at:now};const result=await db.batch([db.prepare("UPDATE records SET data=?,status='paid',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=?").bind(JSON.stringify(data),now,mutation,old.id,old.revision),db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,old.id,'record_disbursement',now,JSON.stringify({reference}),old.id,mutation)]);if(!result[0].meta.changes)throw Error('تغير السجل؛ حدّث الصفحة');return json({ok:true});}
+if(body.action==='transition'){if(['payroll','payroll_batches'].includes(mod))throw Error('اعتماد المسيرات الشهرية يتم حصريًا من نافذة المسير الشهري');if(!permission(u,mod,'approve'))throw Error('403');if(!old)throw Error('السجل غير موجود');if(operationalModules.includes(mod)||['repayments'].includes(mod))throw Error('هذا السجل لا يتطلب مسار اعتماد');const current=old.status;let next=mod==='payroll'?(current==='draft'?'hr':current==='hr'?'finance':current==='finance'?'approved':null):(current==='draft'?workflow[1]:workflow[workflow.indexOf(current)+1]);const decision=body.decision||'approve';if(decision==='return')next='draft';if(decision==='reject')next='rejected';if(!['approve','return','reject'].includes(decision))throw Error('قرار غير صالح');if(decision!=='approve'&&!String(body.note||'').trim())throw Error('سبب الإعادة أو الرفض مطلوب');if(!next)throw Error('السجل مغلق');if(current==='draft'&&decision!=='approve')throw Error('القرار غير متاح للمسودة');const routedRequest=['leave','advances'].includes(mod);if(current==='draft'){if(!permittedWrite(u,mod))throw Error('403');}else if(routedRequest?!isRequestStageActor(u,current):u.role!=='admin'&&u.role!==current)throw Error('403');const details=JSON.parse(old.data);
 if(current==='draft'&&decision==='approve'&&next==='project_manager'){
  const employeeRecord=details.employee_id?await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(details.employee_id,old.company).first<any>():null;
  const projectId=String(details.project_id|| (employeeRecord?JSON.parse(employeeRecord.data).project_id:'') ||'').trim();
@@ -601,8 +601,16 @@ if(current==='draft'&&decision==='approve'&&next==='project_manager'){
  if(!dir&&!delegatedEmail&&!isMagdiGeneralManagerAccount({...manager,email:managerEmail},pd.manager_name))throw Error('بيانات مدير المشروع غير مسجلة في دليل مدراء المشاريع');
  details.project_id=projectId;
  details.project_manager={name:isMagdiGeneralManagerAccount({...manager,email:managerEmail},pd.manager_name)?magdiProjectManagerName:dir?.name||pd.manager_name||managerEmail,email:managerEmail,phone:dir?.phone||'',project_name:pd.name||''};
+ // A project manager prepares and sends their own or their team's request.
+ // HR/admin-created drafts still wait for the assigned manager's sign-off.
+ if(routedRequest&&isRequestStageActor(u,'project_manager')&&String(u.email||'').trim().toLowerCase()===managerEmail){
+  if(u.projects&&u.projects!=='*'&&!JSON.parse(u.projects).includes(projectId))throw Error('المشروع خارج نطاق صلاحية مدير المشروع');
+  next='projects_director';
+  details.manager_submitted_by=u.email;
+  details.manager_submitted_at=now;
+ }
 }
-if(current==='project_manager'&&u.role!=='admin'){
+if(current==='project_manager'&&(routedRequest||u.role!=='admin')){
  const employeeRecord=details.employee_id?await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(details.employee_id,old.company).first<any>():null;
  const projectId=String(details.project_id||(employeeRecord?JSON.parse(employeeRecord.data).project_id:'')||'').trim();
  if(!projectId)throw Error('الطلب غير مرتبط بمشروع محدد');

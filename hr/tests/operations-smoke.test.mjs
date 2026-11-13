@@ -1,7 +1,46 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {companies,modules,normalize,annualLeave,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite} from '../lib/modules.mjs';
+import {companies,modules,normalize,annualLeave,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners,visible} from '../lib/modules.mjs';
+
+test('leave and advance approval follows the four named accounts without changing member roles',()=>{
+ const magdi={email:requestApprovalOwners.projects_director.email,role:'admin',is_active:true};
+ const mohamed={email:requestApprovalOwners.hr.email,role:'hr',is_active:true};
+ const musab={email:requestApprovalOwners.finance.email,role:'project_manager',is_active:true};
+ assert.equal(isRequestStageActor(magdi,'projects_director'),true);
+ assert.equal(isRequestStageActor(mohamed,'hr'),true);
+ assert.equal(isRequestStageActor(musab,'finance'),true);
+ assert.equal(isRequestStageActor(musab,'project_manager'),true);
+ assert.equal(isRequestFinanceActor(musab),true);
+ assert.equal(isRequestStageActor(magdi,'finance'),false);
+ assert.equal(isRequestStageActor(mohamed,'projects_director'),false);
+ assert.equal(isRequestStageActor({...musab,email:'other@example.com'},'finance'),false);
+ assert.equal(isRequestStageActor({...musab,role:'finance'},'finance'),false);
+ assert.equal(isRequestStageActor({...mohamed,is_active:false},'hr'),false);
+});
+
+test('Musab receives finance requests across projects, while other project data stays restricted',async()=>{
+ const musab={role:'project_manager',email:requestApprovalOwners.finance.email,is_active:true,companies:'*',projects:'*'};
+ const other={...musab,email:'manager@example.com'};
+ const worker={id:'employee1',module:'employees',company:'مسكن الكيان',data:{project_id:'project1'}};
+ const project={id:'project1',module:'projects',company:'مسكن الكيان',data:{manager_email:'manager@example.com'}};
+ const atFinance={id:'request1',module:'advances',company:'مسكن الكيان',status:'finance',data:{employee_id:'employee1'}};
+ const atDirector={...atFinance,id:'request2',status:'projects_director'};
+ const records=[worker,project,atFinance,atDirector];
+ assert.equal(visible(musab,atFinance,records),true);
+ assert.equal(visible(musab,atDirector,records),false);
+ assert.equal(visible(musab,worker,records),true);
+ assert.equal(visible(musab,project,records),false);
+ assert.equal(visible(other,atFinance,records),true); // Its assigned project manager remains eligible.
+ assert.equal(visible(musab,{...worker,id:'not-in-finance',data:{project_id:'project2'}},records),false);
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(backend,/routedRequest\?\!isRequestStageActor\(u,current\)/);
+ assert.match(backend,/next='projects_director';\s*details.manager_submitted_by=u.email/);
+ assert.match(backend,/!isRequestFinanceActor\(u\)/);
+ const backendModules=await import('../backend/modules.mjs');
+ assert.equal(backendModules.isRequestStageActor(musab,'finance'),true);
+ assert.equal(backendModules.visible(musab,atFinance,records),true);
+});
 import {employeeRegisterValue,employeeRegisterFields} from '../lib/employee-register.mjs';
 import {projectRegisterFields,projectRegisterValue} from '../lib/project-register.mjs';
 import {employeeDirectManagerOptions,normalizeManagerName,magdiGeneralManagerEmail,magdiProjectManagerName,isMagdiGeneralManagerAccount,isAuthorizedProjectManagerAccount} from '../lib/project-manager-roster.mjs';
@@ -719,7 +758,7 @@ test('request workflow requires an assigned active manager before routing and ch
  assert.match(backend,/يجب ربط الموظف بمشروع قبل إرسال الطلب/);
  assert.match(backend,/يجب تعيين مدير المشروع في ملف المشروع/);
  assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:managerEmail\}/);
- assert.match(backend,/current==='project_manager'&&u\.role!=='admin'/);
+ assert.match(backend,/current==='project_manager'&&\(routedRequest\|\|u\.role!=='admin'\)/);
  assert.match(backend,/الطلب يخص مدير مشروع آخر/);
  assert.match(ui,/module==='projects'&&f\.key==='manager_email'/);
  assert.match(ui,/directManagerChoices\(rows,members,edit\.company\)/);

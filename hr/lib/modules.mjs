@@ -24,6 +24,23 @@ export const modules={
 // Worksite company is distinct from the legal employer used for access and payroll.
 modules.employees.fields.splice(2,0,f('working_company','الشركة التي يعمل بها','work_company'));
 export const workflow=['draft','project_manager','projects_director','hr','finance','approved'];
+// The finance approver also manages the Accounting project. Permissions for
+// approval stages are tied to existing verified accounts, not exclusive roles.
+export const requestApprovalOwners={
+ projects_director:{email:'mskn.kayan@gmail.com',name:'مجدي محجوب — المدير العام'},
+ hr:{email:'magdiosman0@gmail.com',name:'م. محمد يوسف — شؤون الموظفين'},
+ finance:{email:'altoom1900@gmail.com',name:'مصعب عبد القيوم — المالية والصرف'}
+};
+export const isRequestFinanceActor=user=>Boolean(user?.is_active!==false&&user?.role==='project_manager'&&String(user?.email||'').trim().toLowerCase()===requestApprovalOwners.finance.email);
+export function isRequestStageActor(user,stage){
+ if(!user||user.is_active===false)return false;
+ const email=String(user.email||'').trim().toLowerCase();
+ if(stage==='project_manager')return user.role==='project_manager'||user.role==='admin'&&email===requestApprovalOwners.projects_director.email;
+ if(stage==='projects_director')return user.role==='admin'&&email===requestApprovalOwners.projects_director.email;
+ if(stage==='hr')return user.role==='hr'&&email===requestApprovalOwners.hr.email;
+ if(stage==='finance')return isRequestFinanceActor(user);
+ return false;
+}
 export const states={draft:'مسودة',project_manager:'مدير المشروع',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
 export const saudiDate=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,10);
 export function annualLeave(hire,at=saudiDate()){if(!/^\d{4}-\d{2}-\d{2}$/.test(hire||''))return null;if(isNaN(Date.parse(hire))||new Date(hire).toISOString().slice(0,10)!==hire)return null;let [y,m,d]=hire.split('-').map(Number);const anniversary=n=>{let yy=y+n;let dd=Math.min(d,new Date(Date.UTC(yy,m,0)).getUTCDate());return new Date(Date.UTC(yy,m-1,dd))};const now=new Date(at+'T00:00:00Z');if(now<anniversary(0))return {years:0,annual:21,accrued:0};let years=now.getUTCFullYear()-y;if(anniversary(years)>now)years--;let annual=years>=5?30:21;return {years,annual,accrued:Math.round((Math.min(years,5)*21+Math.max(years-5,0)*30+annual*(+now-+anniversary(years))/(+anniversary(years+1)-+anniversary(years)))*100)/100};}
@@ -138,6 +155,9 @@ export function visible(user,row,all=[]){
  if(user.role==='employee')return (row.module==='employees'&&row.id===user.employee_id)||row.data?.employee_id===user.employee_id;
  const companyScope=safeScope(user.companies);
  if(companyScope&&!companyScope.includes(row.company))return false;
+ if(isRequestFinanceActor(user)&&['leave','advances'].includes(row.module)&&['finance','approved','paid'].includes(row.status))return true;
+ if(isRequestFinanceActor(user)&&row.module==='employees'&&all.some(r=>['leave','advances'].includes(r.module)&&['finance','approved','paid'].includes(r.status)&&r.company===row.company&&r.data?.employee_id===row.id))return true;
+ if(user.role==='project_manager'&&user.employee_id&&(row.module==='employees'&&row.id===user.employee_id||['leave','advances','resignations','returns'].includes(row.module)&&row.data?.employee_id===user.employee_id))return true;
  if(row.module==='project_managers'&&user.role==='project_manager')return String(row.data?.email||'').trim().toLowerCase()===String(user.email||'').trim().toLowerCase();
  const projectScope=safeScope(user.projects);
  const isPayroll=['payroll','payroll_batches'].includes(row.module);
