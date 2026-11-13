@@ -5,6 +5,26 @@ import {modules,companies,normalize,workflow,canWrite,canRead,annualLeave,operat
 export const dynamic='force-dynamic';
 const json=(v:any,status=200)=>Response.json(v,{status,headers:{'Cache-Control':'no-store'}});
 const projectManagerContactEmail='mskn.kayan@gmail.com';
+async function resolveEmployeeDirectManager(db:any,company:string,emailValue:string){
+ const email=String(emailValue||'').trim().toLowerCase();
+ if(!email)return {email:'',name:'',phone:'',directory_id:''};
+ const account=await db.prepare("SELECT email,username,role,is_active,companies FROM members WHERE lower(email)=?").bind(email).first<any>();
+ if(!account||account.role!=='project_manager'||account.is_active===false)throw Error('المدير المباشر المختار ليس حساب مدير مشروع نشطًا');
+ if(account.companies&&account.companies!=='*'){
+  let scope:any=[];try{scope=JSON.parse(account.companies||'[]')}catch{}
+  if(!Array.isArray(scope)||!scope.includes(company))throw Error('حساب المدير المباشر لا يملك صلاحية شركة الموظف');
+ }
+ const directory=(await db.prepare("SELECT id,data FROM records WHERE module='project_managers' AND company=?").bind(company).all()).results.find((r:any)=>{
+  const data=JSON.parse(r.data||'{}');return !data._deleted&&String(data.email||'').trim().toLowerCase()===email;
+ });
+ const details=directory?JSON.parse(directory.data||'{}'):{};
+ return {email,name:String(details.name||account.username||email),phone:String(details.phone||''),directory_id:directory?.id||''};
+}
+function setEmployeeDirectManager(data:any,manager:any,manual:boolean){
+ data.manager=manager.name;data.manager_email=manager.email;data.manager_phone=manager.phone;
+ data.direct_manager_id=manager.directory_id;data.supervisor_account=manager.email;
+ data._direct_manager_manual=manual;
+}
 export async function identity(){const u=currentUser();if(!u)throw Error('401');const row=await env.DB.prepare('SELECT * FROM members WHERE email=?').bind(u.email.toLowerCase()).first();if(!row||row.is_active===false)throw Error('403');return {...u,...row};}
 const parse=(r:any)=>({...r,data:JSON.parse(r.data)});
 export async function GET(req:Request){try{const u=await identity();const db=env.DB!;const query=new URL(req.url).searchParams;const mod=query.get('module');if(mod==='audit'){if(u.role!=='admin')throw Error('403');return json({rows:(await db.prepare('SELECT * FROM audit ORDER BY at DESC LIMIT 100').all()).results});}if(mod==='record_history'){const all=(await db.prepare('SELECT * FROM records').all()).results.map(parse);const row=all.find((r:any)=>r.id===query.get('id'));if(!row||!permittedRead(u,row.module)||!visible(u,row,all))throw Error('403');const current=(await db.prepare('SELECT * FROM audit WHERE record_id=? ORDER BY at').bind(row.id).all()).results.map((r:any)=>({at:r.at,actor:r.actor,action:r.action,details:r.details,source:'cloud'}));const old=row.data._legacy;if(old){const archive=(await db.prepare('SELECT table_name,payload FROM legacy WHERE source=?').bind(old.source).all()).results.map((r:any)=>({...r,payload:JSON.parse(r.payload)}));const users=Object.fromEntries(archive.filter((r:any)=>r.table_name==='users').map((r:any)=>[r.payload.id,r.payload.display_name]));for(const item of archive){const r=item.payload;let match=item.table_name==='approval_events'&&((old.table==='leave_requests'&&r.leave_request_id===old.id)||(old.table==='advance_requests'&&r.advance_request_id===old.id))||item.table_name==='resignation_events'&&old.table==='resignation_requests'&&r.resignation_id===old.id;if(match)current.push({at:r.decided_at,actor:users[r.actor_user_id]||'مستخدم مرحّل',action:r.decision,details:JSON.stringify({step:r.step,note:r.note}),source:'python'});}}return json({rows:current.sort((a:any,b:any)=>String(a.at).localeCompare(String(b.at)))});}if(mod==='project_manager_choices'){
@@ -34,7 +54,7 @@ if(mod==='integrity_report'){
   if(p.company!==e.company&&!(Array.isArray(p.data._shared_companies)&&p.data._shared_companies.includes(e.company)))add('company_mismatch',e,'شركة الموظف غير مرتبطة بشركة المشروع');
   const manager=String(p.data.manager_email||'').trim().toLowerCase();
   if(!manager)add('unassigned_manager',e,'لا يوجد مدير معتمد للمشروع');
-  else if(String(e.data.manager_email||'').trim().toLowerCase()!==manager)add('manager_mismatch',e,'المدير المباشر للموظف لا يطابق مدير المشروع');
+  else if(!e.data._direct_manager_manual&&String(e.data.manager_email||'').trim().toLowerCase()!==manager)add('manager_mismatch',e,'التعيين التلقائي للمدير المباشر لا يطابق مدير المشروع');
  }
  for(const p of projects){
   const manager=String(p.data.manager_email||'').trim().toLowerCase();
@@ -51,7 +71,7 @@ if(mod==='integrity_report'){
  return json({ok:true,generated_at:new Date().toISOString(),counts:{projects:projects.length,employees:employees.length,directory:directory.length,requests:requests.length,payroll:payrolls.length,batches:batches.length},issues,issue_count:issues.length,truncated:issues.length===500});
 }
 if(mod==='members'){if(u.role!=='admin')throw Error('403');return json({rows:(await db.prepare('SELECT m.*, EXISTS(SELECT 1 FROM auth.users a WHERE lower(a.email)=lower(m.email)) AS auth_ready, EXISTS(SELECT 1 FROM auth.users a WHERE lower(a.email)=lower(m.email) AND a.email_confirmed_at IS NOT NULL) AS auth_confirmed FROM members m ORDER BY m.email').all()).results});}
-const all=(await db.prepare('SELECT * FROM records ORDER BY updated_at DESC LIMIT 10000').all()).results.map(parse);const rows=all.filter((r:any)=>!r.data?._deleted&&(modules as any)[r.module]&&permittedRead(u,r.module)&&visible(u,r,all)).map((r:any)=>{if(!['project_manager','projects_director'].includes(u.role))return r;if(r.module==='employees')return {...r,data:{name:r.data.name,code:r.data.code,job:r.data.job,project_id:r.data.project_id}};if(r.data?.employee_snapshot){const {employee_snapshot,...safeData}=r.data;return {...r,data:safeData};}return r;});return json({user:{name:u.displayName,email:u.email,role:u.role,employee_id:u.employee_id,companies:u.companies,projects:u.projects,permissions:u.permissions},rows,companies});}catch(e:any){return json({error:e.message==='401'?'يرجى تسجيل الدخول':e.message==='403'?'الحساب غير مخوّل':'تعذر قراءة البيانات'},['401','403'].includes(e.message)?Number(e.message):500);}}
+const all=(await db.prepare('SELECT * FROM records ORDER BY updated_at DESC LIMIT 10000').all()).results.map(parse);const rows=all.filter((r:any)=>!r.data?._deleted&&(modules as any)[r.module]&&permittedRead(u,r.module)&&visible(u,r,all)).map((r:any)=>{if(!['project_manager','projects_director'].includes(u.role))return r;if(r.module==='employees')return {...r,data:{name:r.data.name,code:r.data.code,job:r.data.job,project_id:r.data.project_id,manager:r.data.manager||''}};if(r.data?.employee_snapshot){const {employee_snapshot,...safeData}=r.data;return {...r,data:safeData};}return r;});return json({user:{name:u.displayName,email:u.email,role:u.role,employee_id:u.employee_id,companies:u.companies,projects:u.projects,permissions:u.permissions},rows,companies});}catch(e:any){return json({error:e.message==='401'?'يرجى تسجيل الدخول':e.message==='403'?'الحساب غير مخوّل':'تعذر قراءة البيانات'},['401','403'].includes(e.message)?Number(e.message):500);}}
 export async function POST(req:Request){try{// Same-origin CSRF checks occur at the Next.js proxy before forwarding.
 // Supabase edge routing rewrites req.url, so its origin is not the browser origin.
 // JWT, active session, and module/role permission checks remain mandatory.
@@ -232,6 +252,7 @@ if(body.action==='assign_project_manager'){
  if(affected.length>1500)throw Error('عدد الموظفين في المشروع كبير؛ راجع إدارة المشاريع قبل إعادة التعيين');
  for(const employee of affected){
   const d=JSON.parse(employee.data||'{}');
+  if(d._direct_manager_manual)continue;
   const updatedEmployee={...d,manager:String(directory.name||''),manager_email:email,manager_phone:String(directory.phone||''),supervisor_account:email,direct_manager_id:directoryRow.id};
   statements.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
    .bind(JSON.stringify(updatedEmployee),now,mutation,employee.id,employee.revision));
@@ -340,6 +361,7 @@ if(body.action==='onboard_project_manager'){
  for(const employee of linkedEmployees){
   const d=JSON.parse(employee.data||'{}');
   if(d._archived||!ids.includes(String(d.project_id||'')))continue;
+  if(d._direct_manager_manual)continue;
   const project=selected.find((p:any)=>p.id===d.project_id);
   const projectData=JSON.parse(project.data||'{}');
   if(project.company!==employee.company)continue;
@@ -439,6 +461,34 @@ if(body.action==='set_member_status'){
 if(body.action==='remove_member'){if(u.role!=='admin')throw Error('403');const target=String(body.email||'').trim().toLowerCase();const existing=await db.prepare('SELECT role FROM members WHERE email=?').bind(target).first();if(!existing||existing.role==='admin'||target===u.email.toLowerCase())throw Error('لا يمكن إزالة حساب المدير');await db.prepare('DELETE FROM members WHERE email=?').bind(target).run();return json({ok:true});}
 const mod=body.module;if(!(modules as any)[mod])throw Error('نافذة غير معروفة');const old=body.id?await db.prepare('SELECT * FROM records WHERE id=? AND module=?').bind(body.id,mod).first<any>():null;if(body.id&&!old)throw Error('السجل غير موجود');if(old&&!visible(u,parse(old),(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(old&&old.revision!==body.revision)throw Error('تغير السجل؛ حدّث الصفحة');
 if(old&&JSON.parse(old.data)?._deleted)throw Error('هذا الطلب محذوف ولا يمكن تعديله أو إرساله للاعتماد');
+ if(body.action==='set_employee_direct_manager'){
+  if(mod!=='employees'||!old||!['admin','hr'].includes(u.role)||!permittedWrite(u,'employees')||!permission(u,'employees','edit'))throw Error('403');
+  const original=JSON.parse(old.data||'{}');
+  if(original._archived||original._deleted)throw Error('لا يمكن تعديل مدير موظف مؤرشف أو محذوف');
+  const mode=String(body.direct_manager_mode||'');
+  if(!['selected','project'].includes(mode))throw Error('اختر مديرًا مباشرًا أو ارجع إلى مدير المشروع');
+  let email='';
+  if(mode==='selected'){
+   email=String(body.manager_email||'').trim().toLowerCase();
+   if(!email)throw Error('اختر المدير المباشر من القائمة');
+  }else if(original.project_id){
+   const project=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(original.project_id).first<any>();
+   if(!project)throw Error('مشروع الموظف غير مسجل');
+   const projectData=JSON.parse(project.data||'{}');
+   if(project.company!==old.company&&!(Array.isArray(projectData._shared_companies)&&projectData._shared_companies.includes(old.company)))throw Error('المشروع لا يتبع شركة الموظف');
+   email=String(projectData.manager_email||'').trim().toLowerCase();
+  }
+  const resolved=await resolveEmployeeDirectManager(db,old.company,email);
+  const updated={...original};setEmployeeDirectManager(updated,resolved,mode==='selected');
+  const result=await db.batch([
+   db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
+    .bind(JSON.stringify(updated),now,mutation,old.id,old.revision),
+   db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)')
+    .bind(crypto.randomUUID(),u.email,old.id,'employee_direct_manager_updated',now,JSON.stringify({company:old.company,employee_id:old.id,previous:original.manager_email||'',next:resolved.email,manual:mode==='selected'}),old.id,mutation)
+  ]);
+  if(result[0]?.meta?.changes!==1)throw Error('تغير الموظف أثناء الحفظ؛ حدّث السجل وأعد المحاولة');
+  return json({ok:true,manager_name:resolved.name,manager_email:resolved.email,mode});
+ }
  if(body.action==='delete_project'){
   if(mod!=='projects'||!old||u.role!=='admin')throw Error('403');
   const reason=String(body.reason||'').trim().slice(0,1000);
@@ -582,6 +632,10 @@ if(!permittedWrite(u,mod)||!permission(u,mod,'edit'))throw Error('403');if(old&&
 if(mod==='employees'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 if(mod==='projects'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 const data={...(previous||{}),...normalize(mod,body)};
+if(mod==='employees'&&typeof body.data?._direct_manager_manual==='boolean'){
+ data._direct_manager_manual=body.data._direct_manager_manual;
+ if(data._direct_manager_manual)data.manager_email=String(body.data.manager_email||'').trim().toLowerCase();
+}
 if(mod==='projects'&&old)data.code=String(previous.code||old.code||'');
 if(mod==='projects'&&old&&String(data.manager_email||'').trim().toLowerCase()!==String(previous.manager_email||'').trim().toLowerCase())throw Error('احفظ تعيين مدير المشروع من نافذة المشروع باستخدام إجراء الربط المعتمد');
 
@@ -625,49 +679,37 @@ if(mod==='projects'&&String(data.manager_email||'').trim()){
  data.manager_phone=managerRecord.phone||'';
  data.manager_email=managerEmail;
 }
-if(mod==='employees'&&data.direct_manager_id&&!data.project_id){
- const managerRow=await db.prepare("SELECT id,company,data FROM records WHERE module='project_managers' AND id=? AND company=?").bind(data.direct_manager_id,body.company).first<any>();
- if(!managerRow)throw Error('المدير المباشر غير موجود في دليل مدراء المشاريع للشركة');
- const managerData=JSON.parse(managerRow.data);
- const managerEmail=String(managerData.email||'').trim().toLowerCase();
- const account=await db.prepare('SELECT email,role,is_active,companies FROM members WHERE lower(email)=?').bind(managerEmail).first<any>();
- if(!account||account.is_active===false||account.role!=='project_manager')throw Error('المدير المباشر المحدد ليس لديه حساب مدير مشروع نشط');
- if(account.companies&&account.companies!=='*'){
-  let matches=false;try{matches=JSON.parse(account.companies).includes(body.company)}catch{}
-  if(!matches)throw Error('حساب المدير المباشر لا يشمل شركة الموظف');
- }
- data.manager=String(managerData.name||'');
- data.manager_email=managerEmail;
- data.supervisor_account=managerEmail;
- data.manager_phone=String(managerData.phone||'');
-}
-if(mod==='employees'&&data.project_id){
- const project=await db.prepare("SELECT data,company FROM records WHERE module='projects' AND id=?").bind(data.project_id).first<any>();
- if(!project)throw Error('مشروع الموظف غير موجود');
- const details=JSON.parse(project.data);
- if(project.company!==body.company&&!(Array.isArray(details._shared_companies)&&details._shared_companies.includes(body.company)))throw Error('المشروع لا يتبع شركة الموظف');
- const managerEmail=String(details.manager_email||'').trim().toLowerCase();
- if(managerEmail){
-  const managerRow=(await db.prepare("SELECT id,data FROM records WHERE module='project_managers' AND company=?").bind(body.company).all()).results.find((r:any)=>String(JSON.parse(r.data).email||'').trim().toLowerCase()===managerEmail);
-  if(!managerRow)throw Error('سجل مدير المشروع غير موجود في شركة الموظف');
-  const manager=JSON.parse(managerRow.data);
-  // Only the project owner sets both direct and project manager; employee edits never transfer a project.
-  data.direct_manager_id=managerRow.id;
-  data.manager=String(manager.name||details.manager_name||'');
-  data.manager_email=managerEmail;
-  data.manager_phone=String(manager.phone||details.manager_phone||'');
-  data.supervisor_account=managerEmail;
- }else if(data.direct_manager_id){
-  throw Error('عيّن المدير المسؤول في سجل المشروع قبل ربط مدير مباشر بالموظف');
- }else{
-  data.manager_email='';
-  data.manager_phone='';
-  data.supervisor_account='';
- }
-}
-// A personal approval delegate never carries over to a different project or company.
-if(mod==='employees'&&old&&(transferringEmployee||String(previous?.project_id||'')!==String(data.project_id||'')))delete data.delegated_manager_email;
 const transferringEmployee=mod==='employees'&&Boolean(old)&&old.company!==body.company;
+if(mod==='employees'){
+ const changingProject=Boolean(old)&&String(previous?.project_id||'')!==String(data.project_id||'');
+ // The approval delegate is tied to this exact employment/project assignment.
+ if(old&&(transferringEmployee||changingProject))delete data.delegated_manager_email;
+ if(transferringEmployee)data._direct_manager_manual=false;
+ let projectOwnerEmail='';
+ if(data.project_id){
+  const project=await db.prepare("SELECT data,company FROM records WHERE module='projects' AND id=?").bind(data.project_id).first<any>();
+  if(!project)throw Error('مشروع الموظف غير موجود');
+  const details=JSON.parse(project.data||'{}');
+  if(project.company!==body.company&&!(Array.isArray(details._shared_companies)&&details._shared_companies.includes(body.company)))throw Error('المشروع لا يتبع شركة الموظف');
+  projectOwnerEmail=String(details.manager_email||'').trim().toLowerCase();
+ }
+ let directEmail='';
+ if(data._direct_manager_manual){
+  directEmail=String(data.manager_email||'').trim().toLowerCase();
+  if(!directEmail)throw Error('المدير المباشر المحدد غير صالح؛ أعد اختياره');
+ }else if(data.project_id){
+  directEmail=projectOwnerEmail;
+ }else if(data.direct_manager_id){
+  const directory=await db.prepare("SELECT data FROM records WHERE id=? AND module='project_managers' AND company=?").bind(data.direct_manager_id,body.company).first<any>();
+  if(!directory)throw Error('المدير المباشر غير مسجل لهذه الشركة');
+  directEmail=String(JSON.parse(directory.data||'{}').email||'').trim().toLowerCase();
+  data._direct_manager_manual=true;
+ }
+ if(directEmail||data.project_id||data._direct_manager_manual){
+  const resolved=await resolveEmployeeDirectManager(db,body.company,directEmail);
+  setEmployeeDirectManager(data,resolved,Boolean(data._direct_manager_manual));
+ }
+}
 let linkedAccount=false;
 if(old&&old.company!==body.company){
  if(mod!=='employees')throw Error('لا تغيّر شركة المعاملة بعد إنشائها');
@@ -715,7 +757,6 @@ if(mod!=='employees'&&['leave','advances','warnings','resignations','returns','t
    if(managerEmail){
     data.project_id=employee.project_id;
     data.project_manager={name:manager?.name||projectDetails.manager_name||'',email:managerEmail,phone:manager?.phone||'',project_name:projectDetails.name||''};
-    data.direct_manager={name:data.project_manager.name,email:managerEmail,phone:data.project_manager.phone,directory_id:snapshot.direct_manager_id};
    }
   }
  }

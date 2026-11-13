@@ -1,6 +1,6 @@
 import {annualLeave} from './modules.mjs';
 export const employeeRegisterFields = [
- ['code','الرقم الوظيفي'],['name','اسم الموظف'],['project_code','رقم المشروع'],
+ ['code','الرقم الوظيفي'],['name','اسم الموظف'],['manager','المدير المباشر'],['project_code','رقم المشروع'],
  ['hire_date','تاريخ التعيين'],['job','المسمى الوظيفي'],['department','القسم'],
  ['nationality','الجنسية'],['identity','الهوية أو الإقامة'],['phone','الجوال'],
  ['email','البريد الإلكتروني'],['basic','الراتب الأساسي'],['housing','بدل السكن'],
@@ -8,7 +8,7 @@ export const employeeRegisterFields = [
  ['iban','الآيبان'],['sponsorship','حالة الكفالة'],['opening_leave','رصيد افتتاحي للإجازات'],
  ['annual_entitlement','الاستحقاق السنوي'],['supervisor_account','رقم حساب المدير المباشر'],
  ['home_phone','هاتف الموظف في البلد الأم'],['employment_status','حالة الموظف'],
- ['salary','الأجر الشهري الإجمالي'],['project_id','اسم المشروع'],['manager','المدير المباشر'],
+ ['salary','الأجر الشهري الإجمالي'],['project_id','اسم المشروع'],
  ['current_leave','رصيد الإجازات الحالي'],['latest_leave','آخر طلب إجازة معتمد'],
  ['service_years','سنوات الخدمة المكتملة'],['accrued_leave','الإجازة المتراكمة منذ التعيين']
 ].map(([key,label])=>({key,label,type:'register'}));
