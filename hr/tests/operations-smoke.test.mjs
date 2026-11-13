@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {companies,normalize,annualLeave,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite} from '../lib/modules.mjs';
+import {companies,modules,normalize,annualLeave,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite} from '../lib/modules.mjs';
 import {employeeRegisterValue,employeeRegisterFields} from '../lib/employee-register.mjs';
+import {projectRegisterFields,projectRegisterValue} from '../lib/project-register.mjs';
 import {employeeDirectManagerOptions,normalizeManagerName} from '../lib/project-manager-roster.mjs';
 
 test('all approved direct managers are selectable before login identities are created',()=>{
@@ -56,6 +57,50 @@ test('employee register separates numeric project code, project manager, and wor
  assert.equal(saved.working_company,'رياح الاعمار');
  assert.equal(normalize('employees',{company:'مسكن الكيان',data:{name:'موظف',code:'10001',salary:1000,sponsorship:'yes'}}).working_company,'مسكن الكيان');
  assert.throws(()=>normalize('employees',{company:'مسكن الكيان',data:{name:'موظف',code:'10001',salary:1000,sponsorship:'yes',working_company:'جهة خارج القائمة'}}),/اختيار غير صالح/);
+});
+
+test('employee columns have unique keys so header and cells cannot drift after switching windows',()=>{
+ const keys=employeeRegisterFields.map(f=>f.key);
+ assert.equal(keys.filter(key=>key==='salary').length,1);
+ assert.equal(new Set(keys).size,keys.length);
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/<table key=\{module\} className=/);
+ assert.match(ui,/tableFields\.map\(f=><th key=\{module\+':'\+f\.key\}/);
+});
+
+test('all module field definitions are unique; leave phone and type stay in their own columns',()=>{
+ for(const [module,spec] of Object.entries(modules)){
+  const keys=spec.fields.map(field=>field.key);
+  assert.equal(keys.length,new Set(keys).size,`duplicate table key in ${module}`);
+ }
+ const leave=modules.leave.fields;
+ assert.equal(leave.find(f=>f.key==='leave_type')?.label,'نوع الإجازة');
+ assert.equal(leave.find(f=>f.key==='contact_phone')?.label,'هاتف التواصل أثناء الإجازة');
+});
+
+test('projects show correct numeric code, manager name and active employee salary sum from register',()=>{
+ const project={id:'p1063',module:'projects',code:'1063',company:'مسكن الكيان',data:{name:'العمل - سديم 79',code:'1063',manager_name:'م محمداحمد'}};
+ const employees=[
+  {id:'e1',module:'employees',company:'مسكن الكيان',data:{project_id:'p1063',employment_status:'active',salary:5000,manager:'م محمداحمد'}},
+  {id:'e2',module:'employees',company:'مسكن الكيان',data:{project_id:'p1063',employment_status:'inactive',salary:9000}},
+  {id:'e3',module:'employees',company:'مسكن الكيان',data:{project_id:'another',employment_status:'active',salary:2000}}
+ ];
+ const records=[project,...employees];
+ assert.equal(projectRegisterValue(project,'name',records),'العمل - سديم 79');
+ assert.equal(projectRegisterValue(project,'code',records),'1063');
+ assert.equal(projectRegisterValue(project,'manager_name',records),'م محمداحمد');
+ assert.equal(projectRegisterValue(project,'active_employee_count',records),1);
+ assert.equal(projectRegisterValue(project,'monthly_salary_total',records),5000);
+ assert.equal(employees[0].data.salary,5000);
+ assert.equal(new Set(projectRegisterFields.map(f=>f.key)).size,projectRegisterFields.length);
+ assert.equal(projectRegisterFields.some(f=>f.key==='salary'),false);
+});
+
+test('a project with disagreeing employee supervisors is flagged rather than assigned arbitrarily',()=>{
+ const project={id:'p1039',module:'projects',data:{code:'1039',name:'إدارة المشاريع'}};
+ const records=[project,...['م مجدي محجوب','م محمد المحلي'].map(manager=>({module:'employees',data:{project_id:'p1039',manager}}))];
+ assert.equal(projectRegisterValue(project,'manager_name',records),'يحتاج تحديد مدير المشروع');
+ assert.equal(projectRegisterValue({...project,data:{...project.data,manager_name:'م مجدي محجوب'}},'manager_name',records),'م مجدي محجوب');
 });
 
 test('all seven HR companies including Modern Standards are supported',()=>{
@@ -481,7 +526,7 @@ test('employee register includes bank and cash columns',()=>{
  const m=readFileSync(new URL('../lib/employee-register.mjs',import.meta.url),'utf8');
  assert.match(m,/\['bank_amount','تحويل بنكي'\]/);
  assert.match(m,/\['cash_amount','المتبقي كاش'\]/);
- assert.equal((m.match(/\['salary','الأجر الشهري الإجمالي'\]/g)||[]).length,1);
+ assert.equal((m.match(/\['salary','الراتب الشهري الإجمالي'\]/g)||[]).length,1);
 });
 
 
@@ -1521,12 +1566,13 @@ test('admin integrity report is read-only and scans linked HR modules',()=>{
  assert.match(ui,/الفحص التشغيلي وترابط البيانات/);
  assert.match(ui,/integrityReport\.issues/);
 });
-test('projects register displays manager name without duplicate manager email column',()=>{
+test('projects register separates name, numeric code, manager, and employee cost values',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- assert.match(ui,/f\.key==='manager_email'\?\{\.\.\.f,key:'manager_name',label:'اسم مدير المشروع'\}/);
- assert.match(ui,/module==='projects'&&f\.key==='manager_name'\?projectManagerName\(r\)/);
+ assert.match(ui,/projectRegisterFields as projectRegisterBaseFields,projectRegisterValue/);
+ assert.match(ui,/module==='projects'\?projectRegisterValue\(r,f\.key,rows\)/);
  assert.match(ui,/module==='employees'\?tableFields:projectRegisterFields/);
- assert.match(ui,/manager\?\.data\?\.name\|\|row\.data\?\.manager_name/);
+ assert.equal(projectRegisterFields.find(f=>f.key==='code').label,'رمز المشروع');
+ assert.equal(projectRegisterFields.find(f=>f.key==='manager_name').label,'اسم مدير المشروع');
 });
 test('manager onboarding lets projects be selected before entering email and identifies reassignments',async()=>{
  const {canSelectManagerProject,managerReassignmentConflicts}=await import('../lib/manager-assignment.mjs');

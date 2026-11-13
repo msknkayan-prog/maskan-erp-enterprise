@@ -8,7 +8,7 @@ export const employeeRegisterFields = [
  ['iban','الآيبان'],['sponsorship','حالة الكفالة'],['opening_leave','رصيد افتتاحي للإجازات'],
  ['annual_entitlement','الاستحقاق السنوي'],['supervisor_account','رقم حساب المدير المباشر'],
  ['home_phone','هاتف الموظف في البلد الأم'],['employment_status','حالة الموظف'],
- ['salary','الأجر الشهري الإجمالي'],['project_id','اسم المشروع'],
+ ['project_id','اسم المشروع'],
  ['current_leave','رصيد الإجازات الحالي'],['latest_leave','آخر طلب إجازة معتمد'],
  ['service_years','سنوات الخدمة المكتملة'],['accrued_leave','الإجازة المتراكمة منذ التعيين']
 ].map(([key,label])=>({key,label,type:'register'}));
