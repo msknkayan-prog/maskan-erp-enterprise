@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {companies,normalize,annualLeave,enumOptions,canRead,permissionChoice,permittedRead,permittedWrite} from '../lib/modules.mjs';
+import {companies,normalize,annualLeave,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite} from '../lib/modules.mjs';
 import {employeeRegisterValue,employeeRegisterFields} from '../lib/employee-register.mjs';
 
 test('all seven HR companies including Modern Standards are supported',()=>{
@@ -1461,6 +1461,19 @@ test('project register removes quick manager assignment and adds guarded deletio
  assert.match(backend,/_deleted:true,_deleted_at:now,_deleted_by:u\.email/);
  assert.match(backend,/project_deleted/);
  assert.match(backend,/const result=await db\.batch\(statements\)/);
+});
+test('procurement department role appears in user forms and validates with limited access',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/<option value="procurement">قسم المشتريات<\/option>/);
+ assert.match(ui,/\['procurement','قسم المشتريات'\]/);
+ assert.match(ui,/procurement:'قسم المشتريات'/);
+ assert.match(backend,/\['hr','administrative_assistant','finance','procurement','administrative_manager'/);
+ assert.equal(canRead('procurement','projects'),true);
+ assert.equal(canRead('procurement','company_profiles'),true);
+ assert.equal(canRead('procurement','employees'),false);
+ assert.equal(canRead('procurement','payroll'),false);
+ assert.equal(canWrite('procurement','projects'),false);
 });
 test('project manager directory supports audited, guarded deletion without removing login accounts',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
