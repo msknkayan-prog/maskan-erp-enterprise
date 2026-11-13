@@ -1430,3 +1430,22 @@ test('projects register displays manager name without duplicate manager email co
  assert.match(ui,/module==='employees'\?tableFields:projectRegisterFields/);
  assert.match(ui,/manager\?\.data\?\.name\|\|row\.data\?\.manager_name/);
 });
+test('manager onboarding lets projects be selected before entering email and identifies reassignments',async()=>{
+ const {canSelectManagerProject,managerReassignmentConflicts}=await import('../lib/manager-assignment.mjs');
+ const projects=[
+  {id:'p1',module:'projects',company:'مسكن الكيان',data:{name:'الواحة'}},
+  {id:'p2',module:'projects',company:'مسكن الكيان',data:{name:'الرمال',manager_email:'OLD@EXAMPLE.TEST'}},
+  {id:'p3',module:'projects',company:'رياح الاعمار',data:{name:'الياسمين'}}
+ ];
+ assert.equal(canSelectManagerProject(projects[0],''),true);
+ assert.equal(canSelectManagerProject(projects[1],''),true);
+ assert.equal(canSelectManagerProject(projects[2],'مسكن الكيان'),false);
+ assert.deepEqual(managerReassignmentConflicts(projects,['p1','p2'],'new@example.test').map(p=>p.id),['p2']);
+ assert.deepEqual(managerReassignmentConflicts(projects,['p2'],'old@example.test'),[]);
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/confirm_reassign:conflicts\.length>0/);
+ assert.match(ui,/onChange=\{e=>setManagerSetup\(p=>\(\{\.\.\.p,email:e\.target\.value\}\)\)\}/);
+ assert.match(backend,/transferredProjects\.set\(assigned/);
+ assert.match(backend,/scope\.filter\(\(id:string\)=>!projectIds\.includes\(id\)\)/);
+});
