@@ -421,6 +421,30 @@ if(old&&JSON.parse(old.data)?._deleted)throw Error('هذا الطلب محذوف
   if(result[0]?.meta?.changes!==1)throw Error('تغير المشروع؛ حدّث السجل قبل الحذف');
   return json({ok:true,deleted:true});
  }
+ if(body.action==='delete_project_manager'){
+  if(mod!=='project_managers'||!old||u.role!=='admin')throw Error('403');
+  const reason=String(body.reason||'').trim().slice(0,1000);
+  if(!reason)throw Error('سبب حذف سجل المدير مطلوب');
+  const previous=JSON.parse(old.data||'{}');
+  const email=String(previous.email||'').trim().toLowerCase();
+  const related=(await db.prepare("SELECT id,module,data FROM records WHERE company=? AND module IN ('projects','employees')").bind(old.company).all()).results;
+  const linked=related.find((record:any)=>{
+   const data=JSON.parse(record.data||'{}');
+   if(data._deleted)return false;
+   if(record.module==='projects')return !!email&&String(data.manager_email||'').trim().toLowerCase()===email;
+   return String(data.direct_manager_id||'')===old.id||(!!email&&String(data.manager_email||'').trim().toLowerCase()===email);
+  });
+  if(linked)throw Error('لا يمكن حذف مدير المشروع قبل نقل '+(linked.module==='projects'?'المشاريع':'الموظفين')+' المرتبطين به إلى مدير آخر');
+  const updated={...previous,_deleted:true,_deleted_at:now,_deleted_by:u.email,_delete_reason:reason};
+  const result=await db.batch([
+   db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='project_managers' AND revision=?")
+    .bind(JSON.stringify(updated),now,mutation,old.id,old.revision),
+   db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)')
+    .bind(crypto.randomUUID(),u.email,old.id,'project_manager_deleted',now,JSON.stringify({name:previous.name||'',email,company:old.company,reason}),old.id,mutation)
+  ]);
+  if(result[0]?.meta?.changes!==1)throw Error('تغير سجل المدير؛ حدّث الصفحة قبل الحذف');
+  return json({ok:true,deleted:true});
+ }
  if(body.action==='delete_draft_request'){
   if(!['leave','advances','resignations','warnings'].includes(mod))throw Error('حذف الطلب غير متاح لهذه النافذة');
   if(!old||old.status!=='draft')throw Error('يمكن حذف الطلبات المسودة فقط؛ الطلبات المعتمدة تتطلب إجراء إلغاء رسمي');
