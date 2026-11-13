@@ -522,6 +522,7 @@ if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previo
  const matchingEmployee=employees.find((e:any)=>String(e.email||'').trim().toLowerCase()===data.email);
  const managedEmployee=employees.find((e:any)=>String(e.manager_email||'').trim().toLowerCase()===data.email);
  const recordData=currentEntry?JSON.parse(currentEntry.data||'{}'):null;
+ if(recordData&&String(recordData.email||'').trim().toLowerCase()!==data.email)throw Error('لا يمكن تغيير حساب مدير مشروع مسجل إلى حساب آخر؛ افتح سجل المدير الآخر أو أنشئ سجلًا جديدًا');
  const canonicalName=String(recordData?.name||matchingEmployee?.name||managedEmployee?.manager||member.display_name||member.username||data.email).trim();
  if(!canonicalName||String(data.name||'').trim()!==canonicalName)throw Error('يجب اختيار اسم المدير من القائمة المعتمدة، ولا يمكن إدخال اسم مختلف');
  const department=String(data.department||'').trim();
