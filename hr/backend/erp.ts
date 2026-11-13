@@ -706,7 +706,7 @@ if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previo
  const canonicalName=isMagdiGeneralManagerAccount(member,data.name)?magdiProjectManagerName:String(recordData?.name||matchingEmployee?.name||managedEmployee?.manager||member.username||data.email).trim();
  if(!canonicalName||String(data.name||'').trim()!==canonicalName)throw Error('يجب اختيار اسم المدير من القائمة المعتمدة، ولا يمكن إدخال اسم مختلف');
  const department=String(data.department||'').trim();
- const registeredDepartments=new Set([...employees.map((e:any)=>String(e.department||'').trim()),...records.map((r:any)=>String(JSON.parse(r.data||'{}').department||'').trim()),'إدارة المشاريع'].filter(Boolean));
+ const registeredDepartments=new Set([...employees.map((e:any)=>String(e.department||'').trim()),...records.map((r:any)=>String(JSON.parse(r.data||'{}').department||'').trim()),'إدارة المشاريع','قسم التكييف'].filter(Boolean));
  if(!department||!registeredDepartments.has(department))throw Error('اختر الإدارة أو القسم من القائمة المسجلة');
  data.name=canonicalName;data.department=department;
  data.job=String(recordData?.job||matchingEmployee?.job||data.job||'مدير مشاريع');

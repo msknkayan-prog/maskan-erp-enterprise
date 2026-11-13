@@ -91,7 +91,7 @@ export async function POST(req){
    const periodRows=(await db.prepare("SELECT company,data FROM records WHERE module='payroll'").all()).results.map(r=>({company:r.company,data:JSON.parse(r.data)}));
    const statements=[],results=[],batchIds=[];
    for(const co of requested){
-    const employees=all.filter(e=>e.company===co&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(e.data.employment_status||e.data.employee_status||'').trim()));
+    const employees=all.filter(e=>canonicalCompany(e.data.working_company||e.company)===co&&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(e.data.employment_status||e.data.employee_status||'').trim()));
     if(!employees.length)continue;
     const activeConflict=employees.map(e=>({employee:e,existing:periodRows.find(p=>p.data.employee_id===e.id&&p.data.month===month&&!p.data.excluded)})).find(x=>x.existing);
     if(activeConflict)throw Error('يوجد قيد رواتب سابق غير مستبعد للموظف رقم '+(activeConflict.employee.data.code||activeConflict.employee.code||'')+' لدى شركة '+activeConflict.existing.company+' للشهر نفسه؛ راجع المسير السابق قبل التوليد.');
@@ -109,7 +109,7 @@ export async function POST(req){
      const status=d.employment_status||d.employee_status||'';
      const isSuspended=!['active','نشط','على رأس العمل','علي راس العمل'].includes(String(status).trim());
      const salaryMismatch=Math.abs(cents(salary)-cents(basic+housing+transport))>1;
-     const row={batch_id:id,employee_id:e.id,month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||e.code||'',employment_status:status,project_id:d.project_id||'',cost_company:companies.includes(canonicalCompany(d.working_company))?canonicalCompany(d.working_company):co,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
+     const row={batch_id:id,employee_id:e.id,source_company:e.company,working_company:co,month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||e.code||'',employment_status:status,project_id:d.project_id||'',cost_company:co,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
        basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,
        absence_days:0,absence_deduction:0,advance_deduction:0,deductions:0,
        net:salary,cash_amount:0,bank_amount:0,split_confirmed:false,
@@ -157,9 +157,10 @@ export async function POST(req){
    if(batch.data.month!==monthKsa())throw Error('لا يمكن إضافة موظف إلى شهر سابق أو لاحق');
    if(batch.revision!==Number(body.batch_revision))throw Error('تغيّر المسير؛ أعد تحميل الصفحة');
    const employeeId=String(body.employee_id||'');
-   const employee=await db.prepare("SELECT * FROM records WHERE module='employees' AND id=? AND company=?").bind(employeeId,batch.company).first();
-   if(!employee)throw Error('الموظف غير موجود في الشركة المحددة');
+   const employee=await db.prepare("SELECT * FROM records WHERE module='employees' AND id=?").bind(employeeId).first();
+   if(!employee)throw Error('الموظف غير موجود في سجل الموظفين');
    const original=parse(employee),d=original.data;
+   if(canonicalCompany(d.working_company||original.company)!==batch.company)throw Error('الموظف يتبع شركة عمل مختلفة عن شركة المسير؛ عدّل الشركة التي يعمل بها في سجل الموظفين أولًا');
    const status=String(d.employment_status||d.employee_status||'').trim();
    if(!['active','نشط','على رأس العمل','علي راس العمل'].includes(status))throw Error('لا يمكن إدراج موظف غير نشط في المسير دون مراجعة حالته بسجل الموظفين');
    if(monthly.some(r=>r.data.employee_id===employeeId))throw Error('الموظف مدرج بالفعل في هذا المسير، يمكنك إعادته إذا كان مستبعدًا');
@@ -176,7 +177,7 @@ export async function POST(req){
    const declared=rounded(d.salary??d.total_monthly_salary??salary);
    const mismatch=Math.abs(cents(declared)-cents(salary))>1;
    const rowId=crypto.randomUUID();
-   const data={batch_id:batch.id,employee_id:employeeId,month:batch.data.month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||original.code||'',employment_status:status,project_id:d.project_id||'',cost_company:companies.includes(canonicalCompany(d.working_company))?canonicalCompany(d.working_company):batch.company,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
+   const data={batch_id:batch.id,employee_id:employeeId,source_company:original.company,working_company:batch.company,month:batch.data.month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||original.code||'',employment_status:status,project_id:d.project_id||'',cost_company:batch.company,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
     basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:0,absence_deduction:0,advance_deduction:0,deductions:0,
     net:salary,cash_amount:0,bank_amount:0,split_confirmed:false,excluded:false,
     exception_note:'',needs_review:mismatch,review_reason:mismatch?'اختلاف إجمالي الراتب عن مكوناته':'',
@@ -230,6 +231,7 @@ export async function POST(req){
    // (records.company) and of the project used to route manager approvals.
    const cost_company=canonicalCompany(input.cost_company||old.cost_company||batch.company);
    if(!companies.includes(cost_company)||!allowed(u,cost_company))return err('شركة تحميل الراتب خارج نطاق الصلاحيات أو غير مسجلة',403);
+   if(managerEditing&&cost_company!==canonicalCompany(old.cost_company||batch.company))return err('تغيير شركة تحميل الراتب من صلاحية إعداد المسير فقط',403);
    const cost_project_id=String(input.cost_project_id||'').trim();
    if(!cost_project_id)throw Error('حدد مركز تكلفة المشروع الذي سيتحمل الراتب');
    const costProject=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(cost_project_id).first();
@@ -270,7 +272,7 @@ export async function POST(req){
    const included=monthly.filter(r=>!r.data.excluded);
    if(included.length){
     const employeeIds=included.map(r=>String(r.data.employee_id||''));
-    const employeeRows=(await db.prepare("SELECT id,company,data FROM records WHERE module='employees' AND company=?").bind(batch.company).all()).results.map(parse);
+    const employeeRows=(await db.prepare("SELECT id,company,data FROM records WHERE module='employees'").all()).results.map(parse);
     const activeIds=new Set(employeeRows.filter(r=>['active','نشط','على رأس العمل','علي راس العمل'].includes(String(r.data.employment_status||r.data.employee_status||'').trim())).map(r=>r.id));
     const invalid=employeeIds.find(id=>!activeIds.has(id));
     if(invalid)throw Error('يوجد موظف غير نشط في المسير؛ يجب استبعاده أو تعديل حالته إلى نشط في سجل الموظفين قبل الاعتماد أو الصرف');
@@ -283,6 +285,13 @@ export async function POST(req){
    for(const e of monthly.filter(r=>!r.data.excluded)){
     if(!e.data.split_confirmed||!Number.isFinite(Number(e.data.net))||cents(e.data.cash_amount)+cents(e.data.bank_amount)!==cents(e.data.net))throw Error('يجب مراجعة وتوزيع صافي راتب جميع الموظفين قبل الإرسال');
     if(e.data.needs_review&&!e.data.exception_note)throw Error('راجع استثناءات الموظفين غير النشطين أو اختلاف بيانات الرواتب');
+    const chargedCompany=canonicalCompany(e.data.cost_company||batch.company);
+    const chargedProjectId=String(e.data.cost_project_id||'');
+    if(!companies.includes(chargedCompany)||!chargedProjectId)throw Error('يجب تحديد شركة تحميل الراتب ومركز تكلفة المشروع لكل موظف قبل إرسال المسير');
+    const chargedProject=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(chargedProjectId).first();
+    if(!chargedProject)throw Error('مركز تكلفة مشروع أحد الموظفين غير موجود');
+    const chargedData=JSON.parse(chargedProject.data||'{}');
+    if(chargedData._deleted||chargedData._archived||(chargedProject.company!==chargedCompany&&!(Array.isArray(chargedData._shared_companies)&&chargedData._shared_companies.includes(chargedCompany))))throw Error('مركز تكلفة مشروع أحد الموظفين لا يتبع شركة تحميل راتبه');
      if(modern)await ensureAssignedPayrollManager(e.data.project_id,batch.company,e.data.employee_id);
    }
   }else if(!modern&&action==='admin_approve'){
@@ -293,7 +302,7 @@ export async function POST(req){
    if(!modern||!['admin','projects_director'].includes(u.role)||batch.status!=='manager_review')return err('يكتمل تسليم المسير لإدارة المشاريع من المدير العام أو إدارة المشاريع بعد مراجعة مدراء المشاريع',403);
    const included=monthly.filter(r=>!r.data.excluded);
    if(!included.length||included.some(r=>!r.data.manager_reviewed))throw Error('لم تكتمل مراجعة مدراء المشاريع لجميع الموظفين');
-   const employees=(await db.prepare("SELECT id,data FROM records WHERE module='employees' AND company=?").bind(batch.company).all()).results;
+   const employees=(await db.prepare("SELECT id,data FROM records WHERE module='employees'").all()).results;
    const projects=(await db.prepare("SELECT id,company,data FROM records WHERE module='projects'").all()).results;
    for(const row of included){
     const employee=employees.find(e=>e.id===row.data.employee_id);

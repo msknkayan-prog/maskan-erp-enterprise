@@ -606,7 +606,7 @@ test('monthly payroll stores salary-charged company and project cost center inde
  assert.match(ui,/مركز تكلفة المشروع/);
  assert.match(ui,/const cycleCostBreakdown=Object\.values/);
  assert.match(ui,/const head=\['الشركة التابعة لها الموظف','الشركة المحمّل عليها الراتب','رقم مركز تكلفة المشروع'/);
- assert.match(backend,/cost_company:companies\.includes\(canonicalCompany\(d\.working_company\)\)/);
+ assert.match(backend,/cost_company:co,cost_project_id:d\.project_id\|\|''/);
  assert.match(backend,/cost_project_id:d\.project_id\|\|''/);
  assert.match(backend,/const cost_company=canonicalCompany/);
  assert.match(backend,/!companies\.includes\(cost_company\)\|\|!allowed\(u,cost_company\)/);
@@ -615,6 +615,35 @@ test('monthly payroll stores salary-charged company and project cost center inde
  assert.match(backend,/managerEditing&&cost_project_id!==String\(old\.cost_project_id\|\|old\.project_id\|\|''\)/);
  assert.match(backend,/const data=\{\.\.\.old,cost_company,cost_project_id,basic/);
  assert.doesNotMatch(backend,/UPDATE records SET company=\?/);
+});
+
+test('payroll allocation cannot be changed by project managers and is validated before submission',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ assert.match(ui,/aria-label="شركة تحميل الراتب في المسير" required disabled=\{user\?\.role==='project_manager'\}/);
+ assert.match(backend,/managerEditing&&cost_company!==canonicalCompany\(old\.cost_company\|\|batch\.company\)/);
+ assert.match(backend,/const chargedCompany=canonicalCompany\(e\.data\.cost_company\|\|batch\.company\)/);
+ assert.match(backend,/if\(!chargedProject\)throw Error/);
+ assert.match(backend,/chargedProject\.company!==chargedCompany/);
+});
+
+test('air conditioning department is selectable for employees and project managers',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/employee-department-choices[\s\S]*?'قسم التكييف'/);
+ assert.match(ui,/const departments=\[\.\.\.new Set\([\s\S]*?'قسم التكييف'/);
+ assert.match(backend,/registeredDepartments=new Set\([\s\S]*?'قسم التكييف'/);
+});
+
+test('payroll generation and manual enrollment use actual work company while preserving legal company',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ assert.match(backend,/all\.filter\(e=>canonicalCompany\(e\.data\.working_company\|\|e\.company\)===co/);
+ assert.match(backend,/source_company:e\.company,working_company:co/);
+ assert.match(backend,/canonicalCompany\(d\.working_company\|\|original\.company\)!==batch\.company/);
+ assert.match(backend,/source_company:original\.company,working_company:batch\.company/);
+ assert.match(ui,/canonicalCompany\(row\.data\?\.working_company\|\|row\.company\)===payrollManagedBatch\.company/);
+ assert.match(ui,/شركة السجل\/الكفالة/);
 });
 
 
@@ -995,7 +1024,7 @@ test('inactive employees do not appear in current payroll preview or draft roste
 test('server blocks payroll approval and payment for inactive included employees',()=>{
  const server=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
  assert.match(server,/\['submit','managers_approve','projects_approve','finance_pay','admin_approve','finance_approve'\]\.includes\(action\)/);
- assert.match(server,/SELECT id,company,data FROM records WHERE module='employees' AND company=\?/);
+ assert.match(server,/SELECT id,company,data FROM records WHERE module='employees'/);
  assert.match(server,/if\(invalid\)throw Error\('يوجد موظف غير نشط في المسير/);
  assert.match(server,/if\(!\['active','نشط','على رأس العمل','علي راس العمل'\]\.includes\(status\)\)throw Error\('لا يمكن إدراج موظف غير نشط/);
 });
