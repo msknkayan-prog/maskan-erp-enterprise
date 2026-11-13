@@ -228,7 +228,7 @@ test('administrator editing opens but protects admin role and existing password 
 test('distinct login identities can share a contact email and receive a one-time temporary password',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/memberContactEmail/);
- assert.match(ui,/contact_email:memberContactEmail\|\|memberEmail/);
+ assert.match(ui,/contact_email:memberRole==='project_manager'\?projectManagerContactEmail:\(memberContactEmail\|\|memberEmail\)/);
  assert.match(ui,/action:'generate_temporary_password',email:memberEmail/);
  assert.match(ui,/newMemberCredential&&module==='members'/);
  assert.match(ui,/نسخ كلمة المرور/);
@@ -772,7 +772,7 @@ test('HR directory choices expose only active project manager identities without
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(erp,/if\(mod==='project_manager_choices'\)/);
- assert.match(erp,/SELECT email,username,display_name,role,is_active,companies FROM members WHERE role='project_manager' AND is_active=true/);
+ assert.match(erp,/SELECT email,username,contact_email,role,is_active,companies FROM members WHERE role='project_manager' AND is_active=true/);
  assert.match(erp,/\['admin','hr','projects_director'\]\.includes\(u\.role\)/);
  assert.match(ui,/user\?\.role==='admin'\?'members':'project_manager_choices'/);
 });
@@ -1474,6 +1474,29 @@ test('procurement department role appears in user forms and validates with limit
  assert.equal(canRead('procurement','employees'),false);
  assert.equal(canRead('procurement','payroll'),false);
  assert.equal(canWrite('procurement','projects'),false);
+});
+test('project manager contact email is shared while login identities remain unique',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/const projectManagerContactEmail='mskn\.kayan@gmail\.com'/);
+ assert.match(erp,/const projectManagerContactEmail='mskn\.kayan@gmail\.com'/);
+ assert.match(erp,/body\.role==='project_manager'\?projectManagerContactEmail/);
+ assert.match(erp,/username,projectManagerContactEmail\)\)/);
+ assert.match(erp,/SET role='project_manager',employee_id=\?,companies=\?,projects=\?,username=\?,contact_email=\?/);
+ assert.match(ui,/readOnly=\{memberRole==='project_manager'\}/);
+ assert.match(ui,/readOnly=\{memberEdit\.role==='project_manager'\}/);
+ assert.match(ui,/بريد التواصل: <span dir="ltr">\{m\.contact_email\|\|'غير محدد'\}/);
+});
+test('project manager directory uses actual members columns and lives within projects workspace',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.doesNotMatch(erp,/SELECT [^\n]*display_name[^\n]* FROM members/);
+ assert.match(erp,/SELECT email,role,is_active,companies,username FROM members WHERE lower\(email\)=\?/);
+ assert.match(erp,/member\.username\|\|data\.email/);
+ assert.match(ui,/allowed\.filter\(k=>modules\[k\]\.group===g&&k!=='project_managers'\)/);
+ assert.match(ui,/k==='projects'&&module==='project_managers'/);
+ assert.match(ui,/aria-label="تبويبات المشاريع ومدراء المشاريع"/);
+ assert.match(ui,/onClick=\{\(\)=>setModule\('project_managers'\)\}>مدراء المشاريع وربط الموظفين/);
 });
 test('project manager directory supports audited, guarded deletion without removing login accounts',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
