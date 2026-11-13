@@ -16,8 +16,16 @@ const db=env.DB;
 async function batchOf(id){const b=await db.prepare("SELECT * FROM records WHERE id=? AND module='payroll_batches'").bind(id).first();if(!b)throw Error('المسير غير موجود');return parse(b);}
 const isPrep=u=>['admin','administrative_assistant'].includes(u.role);
 const isManager=u=>['admin','project_manager'].includes(u.role);
-const canManageProject=async(u,project,company)=>{
+const canManageProject=async(u,project,company,employeeId='')=>{
  if(u.role==='admin')return true;
+ if(employeeId){
+  const worker=await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(employeeId,company).first();
+  if(!worker)return false;
+  const employee=JSON.parse(worker.data||'{}');
+  if(String(employee.project_id||'')!==String(project))return false;
+  const delegated=String(employee.delegated_manager_email||'').trim().toLowerCase();
+  if(delegated)return delegated===String(u.email||'').trim().toLowerCase();
+ }
  if(u.role!=='project_manager'||!project||!allowed(u,company))return false;
  if(u.projects!=='*'){
   try{if(!JSON.parse(u.projects||'[]').includes(project))return false}catch{return false}
@@ -30,13 +38,17 @@ const canManageProject=async(u,project,company)=>{
 const isFinance=u=>['admin','finance'].includes(u.role);
 const isProjectsDirector=u=>['admin','projects_director'].includes(u.role);
 const nowIso=()=>new Date().toISOString();
-const ensureAssignedPayrollManager=async(projectId,company)=>{
+const ensureAssignedPayrollManager=async(projectId,company,employeeId='')=>{
  if(!projectId)throw Error('يجب تعيين مشروع لكل موظف قبل إرسال المسير لمدراء المشاريع');
  const project=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(projectId).first();
  if(!project)throw Error('مشروع الموظف غير مسجل في المنصة');
  const p=JSON.parse(project.data);
  if(project.company!==company&&!(Array.isArray(p._shared_companies)&&p._shared_companies.includes(company)))throw Error('مشروع الموظف لا يتبع شركة المسير');
- const email=String(p.manager_email||'').trim().toLowerCase();
+ const worker=employeeId?await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(employeeId,company).first():null;
+ if(employeeId&&!worker)throw Error('لم يتم العثور على سجل الموظف المطلوب في شركة المسير');
+ if(worker&&String(JSON.parse(worker.data||'{}').project_id||'')!==String(projectId))throw Error('مشروع الموظف في المسير لا يطابق سجل الموظفين');
+ const delegated=String(worker?JSON.parse(worker.data||'{}').delegated_manager_email||'':'').trim().toLowerCase();
+ const email=delegated||String(p.manager_email||'').trim().toLowerCase();
  if(!email)throw Error('المشروع غير مرتبط بمدير مشروع مخول');
  const manager=await db.prepare('SELECT role,is_active,companies,projects FROM members WHERE lower(email)=?').bind(email).first();
  if(!manager||manager.role!=='project_manager'||manager.is_active===false)throw Error('مدير المشروع ليس لديه حساب مشروع نشط: '+email);
@@ -44,7 +56,7 @@ const ensureAssignedPayrollManager=async(projectId,company)=>{
   let eligible=false;try{eligible=JSON.parse(manager.companies).includes(company)}catch{}
   if(!eligible)throw Error('مدير المشروع لا يملك صلاحية شركة المسير: '+email);
  }
- if(manager.projects&&manager.projects!=='*'){
+ if(!delegated&&manager.projects&&manager.projects!=='*'){
   let eligible=false;try{eligible=JSON.parse(manager.projects).includes(projectId)}catch{}
   if(!eligible)throw Error('مدير المشروع لا يملك صلاحية المشروع في المسير: '+email);
  }
@@ -126,7 +138,7 @@ export async function POST(req){
      if(details.length!==Number(b.data.employee_count)||!details.some(row=>!row.data.excluded))throw Error('قائمة المسير غير مكتملة: '+b.company);
      for(const row of details.filter(row=>!row.data.excluded)){
       if(!row.data.split_confirmed||!Number.isFinite(Number(row.data.net))||cents(row.data.cash_amount)+cents(row.data.bank_amount)!==cents(row.data.net)||row.data.needs_review&&!row.data.exception_note)throw Error('مراجعة الأجور غير مكتملة: '+b.company);
-       await ensureAssignedPayrollManager(row.data.project_id,b.company);
+       await ensureAssignedPayrollManager(row.data.project_id,b.company,row.data.employee_id);
      }
      stmts.push(db.prepare("UPDATE records SET status='manager_review',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='payroll_batches' AND revision=? AND status='draft'").bind(now,mutation,id,b.revision));
      stmts.push(db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,id,'payroll_batch_bulk_submit',now,JSON.stringify({company:b.company,month:b.data.month})));
@@ -209,7 +221,7 @@ export async function POST(req){
    if(managerEditing){
      const linked=await db.prepare("SELECT data FROM records WHERE id=? AND module='employees'").bind(employee.data.employee_id||'').first();
      const projectId=employee.data.project_id||(linked?JSON.parse(linked.data).project_id:'');
-     if(!await canManageProject(u,projectId,batch.company))return err('الموظف خارج مشاريع مدير المشروع المخوّل',403);
+     if(!await canManageProject(u,projectId,batch.company,employee.data.employee_id))return err('الموظف خارج تكليف مدير المشروع المخوّل',403);
    }
    const input=body.data||{},old=employee.data;
    const basic=amount(input.basic,'الراتب الأساسي');
@@ -258,7 +270,7 @@ export async function POST(req){
    for(const e of monthly.filter(r=>!r.data.excluded)){
     if(!e.data.split_confirmed||!Number.isFinite(Number(e.data.net))||cents(e.data.cash_amount)+cents(e.data.bank_amount)!==cents(e.data.net))throw Error('يجب مراجعة وتوزيع صافي راتب جميع الموظفين قبل الإرسال');
     if(e.data.needs_review&&!e.data.exception_note)throw Error('راجع استثناءات الموظفين غير النشطين أو اختلاف بيانات الرواتب');
-     if(modern)await ensureAssignedPayrollManager(e.data.project_id,batch.company);
+     if(modern)await ensureAssignedPayrollManager(e.data.project_id,batch.company,e.data.employee_id);
    }
   }else if(!modern&&action==='admin_approve'){
    if(!['admin','administrative_manager'].includes(u.role)||batch.status!=='admin_review')return err('الاعتماد الإداري ليس ضمن صلاحيتك أو المرحلة',403);
@@ -275,7 +287,8 @@ export async function POST(req){
     const projectId=String(row.data.project_id||employee&&JSON.parse(employee.data).project_id||'');
     const assigned=projects.find(p=>p.id===projectId);
     if(!assigned)throw Error('المسير يتضمن موظفًا دون مشروع مسجل: '+row.data.employee_name);
-    const managerEmail=String(JSON.parse(assigned.data).manager_email||'').toLowerCase();
+    const delegated=String(employee?JSON.parse(employee.data||'{}').delegated_manager_email||'':'').trim().toLowerCase();
+    const managerEmail=delegated||String(JSON.parse(assigned.data).manager_email||'').toLowerCase();
     if(!managerEmail||String(row.data.manager_reviewed_by||'').toLowerCase()!==managerEmail&&row.data.manager_reviewed_by!==u.email&&u.role!=='admin')throw Error('تحتاج مراجعة موظف من مدير مشروعه المخوّل: '+row.data.employee_name);
    }
    // Each manager may review only their assigned projects; final handoff requires every included row marked reviewed.

@@ -4,7 +4,8 @@ export const preferredProjectManagers=[
  {id:'mohamed_yousef',name:'م محمد يوسف',aliases:['محمد يوسف']},
  {id:'musab',name:'أ مصعب عبد القيوم',aliases:['مصعب عبد القيوم','مصعب عبدالقيوم']},
  {id:'magdi',name:'م مجدي محجوب',aliases:['مجدي محجوب']},
- {id:'othman',name:'أ عثمان محمداحمد',aliases:['عثمان محمداحمد','عثمان محمد احمد']}
+ {id:'othman',name:'أ. عثمان محمد أحمد',aliases:['عثمان محمداحمد','عثمان محمد احمد','أ عثمان محمداحمد']},
+ {id:'amjad_fouad',name:'م. أمجد فؤاد',aliases:['أمجد فؤاد','امجد فؤاد','امجد فواد','أمجد فواد']}
 ];
 
 export function normalizeManagerName(value){

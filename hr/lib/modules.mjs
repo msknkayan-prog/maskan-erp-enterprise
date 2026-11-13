@@ -135,11 +135,19 @@ export function visible(user,row,all=[]){
  const projectScope=safeScope(user.projects);
  const isPayroll=['payroll','payroll_batches'].includes(row.module);
  const project=isPayroll?null:row.module==='projects'?row.id:row.data?.project_id||all.find(r=>r.id===row.data?.employee_id)?.data?.project_id;
+  const accountEmail=String(user.email||'').trim().toLowerCase();
+  const employee=row.module==='employees'?row:all.find(e=>e.module==='employees'&&e.id===row.data?.employee_id);
+  const delegated=String(employee?.data?.delegated_manager_email||'').trim().toLowerCase();
+  if(delegated&&(row.module==='employees'||!!row.data?.employee_id))return delegated===accountEmail;
+  if(row.module==='projects'&&all.some(e=>e.module==='employees'&&e.company===row.company&&e.data?.project_id===row.id&&String(e.data?.delegated_manager_email||'').trim().toLowerCase()===accountEmail))return true;
  if(user.role==='project_manager'){
   if(row.module==='payroll_batches'){
    return all.some(pay=>{
     if(pay.module!=='payroll'||pay.data?.batch_id!==row.id||pay.data?.excluded)return false;
     const projectId=String(pay.data?.project_id||all.find(e=>e.module==='employees'&&e.id===pay.data?.employee_id)?.data?.project_id||'');
+    const worker=all.find(e=>e.module==='employees'&&e.id===pay.data?.employee_id);
+    const reviewer=String(worker?.data?.delegated_manager_email||'').trim().toLowerCase();
+    if(reviewer)return reviewer===accountEmail&&pay.company===row.company;
     if(!projectId)return false;
     if(projectScope&&!projectScope.includes(projectId))return false;
     const assigned=all.find(p=>p.module==='projects'&&p.id===projectId);

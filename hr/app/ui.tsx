@@ -47,6 +47,41 @@ function ManagerProjectPicker({projects,companies,managerEmail,mode,selected,onM
  <small>تظهر المشاريع المعيّن لها هذا الحساب فقط، مرة واحدة لكل رقم مشروع. إذا لم يظهر مشروع، عيّن مديره أولًا في سجل المشاريع.</small>
  </>:<small>يعرض فقط المشاريع التي تم تعيين الحساب مديرًا لها في سجل المشاريع وبنطاق شركاته.</small>}
  </fieldset>;
+function ManagerEmployeePicker({records,member,disabled=false,onAssign}){
+ const [query,setQuery]=useState('');
+ const managerEmail=String(member.original_email||'').trim().toLowerCase();
+ const allowedCompanies=member.companies==='*'?null:(()=>{try{return JSON.parse(member.companies||'[]')}catch{return []}})();
+ const projects=records.filter(r=>r.module==='projects'&&!r.data?._deleted);
+ const employees=records.filter(r=>{
+  if(r.module!=='employees'||r.data?._archived||r.data?._deleted||!r.data?.project_id)return false;
+  if(allowedCompanies&&!allowedCompanies.includes(r.company))return false;
+  const project=projects.find(p=>p.id===r.data.project_id);
+  return project&&(project.company===r.company||Array.isArray(project.data?._shared_companies)&&project.data._shared_companies.includes(r.company));
+ });
+ const [selected,setSelected]=useState(()=>employees.filter(r=>String(r.data.delegated_manager_email||'').trim().toLowerCase()===managerEmail).map(r=>r.id));
+ const normalized=value=>String(value||'').normalize('NFKC').toLowerCase();
+ const matching=employees.filter(r=>{
+  const project=projects.find(p=>p.id===r.data.project_id);
+  return normalized([r.data.name,r.data.code,project?.data?.name,r.company].join(' ')).includes(normalized(query));
+ });
+ const toggle=(id,checked)=>setSelected(old=>checked?[...new Set([...old,id])]:old.filter(item=>item!==id));
+ const conflicts=employees.filter(r=>selected.includes(r.id)&&r.data.delegated_manager_email&&String(r.data.delegated_manager_email).toLowerCase()!==managerEmail);
+ return <fieldset className="member-project-access" dir="rtl" disabled={disabled}>
+  <legend>تحديد الموظفين التابعين لمدير المشروع بالاسم</legend>
+  <p>يمكن تخصيص موظفي «المكتب الفني» أو أي مشروع لمدير محدد لمراجعة طلباتهم ومسيرهم. لا يتغير حقل المدير المباشر في سجل الموظف.</p>
+  <label>البحث باسم الموظف أو رقمه أو المشروع<input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="اسم الموظف / الرقم الوظيفي / المكتب الفني"/></label>
+  <div className="member-scope-actions"><span>المختارون {selected.length} من {employees.length} · نتائج البحث {matching.length}</span>
+   <button type="button" disabled={!matching.length} onClick={()=>setSelected(old=>[...new Set([...old,...matching.map(r=>r.id)])])}>تحديد النتائج</button>
+   <button type="button" disabled={!matching.length} onClick={()=>setSelected(old=>old.filter(id=>!matching.some(r=>r.id===id)))}>إلغاء تحديد النتائج</button>
+  </div>
+  <div className="member-project-list" role="group" aria-label="الموظفون المكلف بهم مدير المشروع" style={{maxHeight:280}}>
+   {matching.map(r=>{const project=projects.find(p=>p.id===r.data.project_id);const assigned=String(r.data.delegated_manager_email||'').trim().toLowerCase();return <label className="member-project-option" key={r.id}><input type="checkbox" checked={selected.includes(r.id)} onChange={e=>toggle(r.id,e.target.checked)}/><span><strong>{r.data.name||'موظف بلا اسم'} · {r.data.code||'—'}</strong><small>{project?.data?.name||'—'} · {r.company}{assigned&&assigned!==managerEmail?' · مكلّف لمدير آخر':''}</small></span></label>})}
+   {!matching.length&&<p>لا توجد أسماء مطابقة في نطاق شركات المدير. راجع البحث أو بيانات المشروع في سجل الموظفين.</p>}
+  </div>
+  <small>يظل تكليف الموظفين الحالي محفوظًا إلى أن تضغط «حفظ تكليف الموظفين». إذا اخترت موظفًا مكلفًا لمدير آخر، سيُطلب تأكيد نقل التكليف.</small>
+  <button type="button" className="primary" disabled={disabled} onClick={()=>onAssign(selected,conflicts)}>حفظ تكليف الموظفين ({selected.length})</button>
+ </fieldset>;
+}
 }
 // The employee register is the source of direct-manager assignments. Keep the
 // project-manager directory as the canonical identity for saving assignments.
@@ -633,8 +668,10 @@ const managerDirectoryForRequest=(record,companyName)=>{
  const projectId=record?.data?.project_id||employeeData.project_id;
  const project=rows.find(r=>r.id===projectId&&r.module==='projects'&&(r.company===companyName||Array.isArray(r.data?._shared_companies)&&r.data._shared_companies.includes(companyName)));
  if(!project)return {project:'غير محدد',name:'',email:'',phone:'',direct_name:directRow?.data.name||employeeData.manager||'',direct_email:directRow?.data.email||employeeData.manager_email||''};
- const projectManager=rows.find(r=>r.module==='project_managers'&&r.company===companyName&&String(r.data.email||'').toLowerCase()===String(project.data.manager_email||'').toLowerCase());
- return {project:project.data.name||'',name:projectManager?.data.name||project.data.manager_name||'',email:project.data.manager_email||'',phone:projectManager?.data.phone||project.data.manager_phone||'',direct_name:projectManager?.data.name||project.data.manager_name||directRow?.data.name||employeeData.manager||'',direct_email:project.data.manager_email||directRow?.data.email||employeeData.manager_email||''};
+ const effectiveEmail=String(employeeData.delegated_manager_email||project.data.manager_email||'').trim().toLowerCase();
+ const projectManager=rows.find(r=>r.module==='project_managers'&&r.company===companyName&&String(r.data.email||'').toLowerCase()===effectiveEmail);
+ const activeAccount=members.find(m=>String(m.email||'').toLowerCase()===effectiveEmail);
+ return {project:project.data.name||'',name:projectManager?.data.name||activeAccount?.display_name||activeAccount?.username||project.data.manager_name||'',email:effectiveEmail,phone:projectManager?.data.phone||'',direct_name:directRow?.data.name||employeeData.manager||'',direct_email:directRow?.data.email||employeeData.manager_email||''};
 };
 function startEdit(row){
  setFormError('');
@@ -747,12 +784,12 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
       const suggested=m?suggestedProjectsForManager(rows,m.profileId,m.company,m.email):[];
       setManagerSetup(p=>({...p,choiceKey:m?keyOf(m):'',employeeId:employee?.id||'',name:identity.name||m?.name||'',email:m?.email||'',phone:m?.phone||identity.phone||'',username:account?.username||'',ids:suggested,showDetails:!m?.email||!account,selectedCompany:m?.company||'',managerSearch:''}));
     }}>
-     <option value="">اختر أحد المدراء الستة…</option>
+     <option value="">اختر أحد المدراء السبعة…</option>
      {found.map(m=><option key={keyOf(m)} value={keyOf(m)}>{m.label} — {companyDisplayName(m.company)}{m.ambiguous?' · راجع تكرار البريد':!m.email?' · يتطلب ربط بريد':''}</option>)}
      {selected&&!found.some(m=>keyOf(m)===keyOf(selected))&&<option value={keyOf(selected)}>{selected.label} — {companyDisplayName(selected.company)}</option>}
     </select>
    </label>
-   <small>{found.length} خيار مطابق من قائمة المدراء الستة. تُحدد مشاريع المدير تلقائيًا بناءً على «المدير المباشر» في سجل الموظفين، ويمكن مراجعتها وتعديلها قبل الحفظ. لا يُنشأ حساب دون بريد حقيقي.</small>
+   <small>{found.length} خيار مطابق من قائمة المدراء السبعة. تُحدد مشاريع المدير تلقائيًا بناءً على «المدير المباشر» في سجل الموظفين، ويمكن مراجعتها وتعديلها قبل الحفظ. لا يُنشأ حساب دون بريد حقيقي.</small>
   </div>;
  })()}
  {managerSetup.email&&!managerSetup.showDetails&&<div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',background:'#f7f2e7',padding:10,borderRadius:8,fontSize:13}}>
@@ -842,7 +879,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {integrityReport.issues?.length>0&&<div style={{maxHeight:250,overflowY:'auto'}}><table><thead><tr><th>الشركة</th><th>النافذة</th><th>السجل</th><th>الملاحظة</th></tr></thead><tbody>{integrityReport.issues.slice(0,100).map((issue,i)=><tr key={issue.record_id+'-'+issue.type+'-'+i}><td>{issue.company}</td><td>{modules[issue.module]?.label||issue.module}</td><td>{issue.name||issue.code||issue.record_id.slice(0,8)}</td><td>{issue.message}</td></tr>)}</tbody></table></div>}
  {!integrityReport.issues?.length&&<small>لا توجد مشاكل ترابط مكتشفة ضمن أنواع البيانات المفحوصة. هذا لا يغني عن اختبار الحسابات والتدفقات فعليًا.</small>}
  </div>}</section>}<div className="stats">{[['الموظفون',employeeCount,'موظف مسجل',Users],['الإجازات المعتمدة',projectCount,'طلب إجازة معتمد',CalendarDays],['صافي الرواتب المسجلة',money(contractTotal),'ريال سعودي · كل الأشهر',Wallet],['بانتظار الاعتماد',pending,'معاملة ضمن مسار الاعتماد',FileText]].map(([label,value,note,Icon],i)=><div className="stat" key={label}><div className={'stat-icon i'+i}><Icon size={21}/></div><span>{label}</span><strong>{value}</strong><small>{note}</small></div>)}</div><div className="dashboard-grid"><section className="panel"><div className="panel-head"><h2>الشركات التابعة</h2><span>رؤية مستقلة لكل شركة</span></div><div className="companies">{companies.map((c,i)=><button key={c} className="company-card" onClick={()=>setCompany(c)}><span className="company-monogram">{['ر','م','ب','ط'][i]}</span><div><b>{companyDisplayName(c)}</b><small>{rows.filter(r=>r.company===c&&r.module==='employees').length} موظف · {rows.filter(r=>r.company===c&&r.module==='leave').length} طلب إجازة</small></div><ArrowUpLeft size={18}/></button>)}</div></section><section className="panel next"><span className="eyebrow">من أين تبدأ؟</span><h2>حوّل بياناتك إلى عمل.</h2><p>اختر الشركة، أضف الموظفين، ثم تابع الإجازات والسلف والرواتب والطلبات.</p><button className="primary" onClick={()=>setModule(allowed.includes('employees')?'employees':allowed[0])}>فتح السجلات <ArrowUpLeft size={17}/></button><span className="start-note">تبدأ المنصة بدون بيانات تجريبية.</span></section></div><section className="panel"><div className="panel-head"><h2>آخر التحديثات</h2><span>من السجلات الفعلية</span></div>{scoped.length===0?<div className="empty"><FileText size={32}/><h3>المساحة جاهزة لأول سجل</h3><p>أضف بيانات الشركة أو استورد الموظفين من قالب CSV.</p></div>:<div className="activity-list">{scoped.slice(0,7).map(r=><button key={r.id} onClick={()=>setModule(r.module)}><span className="activity-dot"/><div><b>{title(r)}</b><small>{r.company} · {modules[r.module].label}</small></div><span className={'badge '+r.status}>{states[r.status]}</span><small>{new Date(r.updated_at).toLocaleDateString('ar-SA')}</small></button>)}</div>}</section><div className="footnote">الرواتب والسلف المسجلة لا تنفذ تحويلات بنكية. نقل بيانات النسخة المحلية يتطلب استيرادها.</div></>}
-{spec&&<>{module!=='payroll'&&<div className="toolbar"><div className="search"><Search size={17}/><input type="search" dir="rtl" aria-label="البحث في السجلات" autoComplete="off" placeholder="ابحث بالاسم أو رقم الموظف أو نوع الإجازة…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="search-clear" aria-label="مسح البحث" onClick={()=>setSearch('')}>×</button>}</div><div className="tools"><button onClick={exportRows}><Download size={16}/>تصدير Excel</button><button onClick={printModuleRegister}><FileText size={16}/>طباعة النموذج الرسمي</button>{(permittedWrite(user||{},module))&&<><button onClick={template}><Download size={16}/>قالب Excel شامل</button>{module==='employees'&&<label className="upload"><Upload size={16}/>استيراد Excel / CSV<input type="file" accept=".csv,.xlsx" onChange={e=>readImport(e.target.files?.[0])}/></label>}<button className="primary" onClick={()=>startEdit(null)}><Plus size={17}/>إضافة {spec.singular}</button></>}</div></div>}
+{spec&&<>{module!=='payroll'&&<div className="toolbar"><div className="search"><Search size={17}/><input type="search" dir="rtl" aria-label="البحث في السجلات" autoComplete="off" placeholder="ابحث بالاسم أو رقم الموظف أو نوع الإجازة…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="search-clear" aria-label="مسح البحث" onClick={()=>setSearch('')}>×</button>}</div><div className="tools"><button onClick={exportRows}><Download size={16}/>تصدير Excel</button><button onClick={printModuleRegister}><FileText size={16}/>طباعة النموذج الرسمي</button>{(permittedWrite(user||{},module))&&<><button onClick={template}><Download size={16}/>قالب Excel شامل</button>{module==='employees'&&<label className="upload"><Upload size={16}/>استيراد Excel / CSV<input type="file" accept=".csv,.xlsx" onChange={e=>readImport(e.target.files?.[0])}/></label>}{module==='projects'&&<button type="button" onClick={()=>{if(!company)return notify('اختر الشركة أولًا لإضافة قسم الدفاع المدني');if(rows.some(r=>r.module==='projects'&&r.company===company&&!r.data?._deleted&&r.data?.name==='قسم الدفاع المدني'))return notify('قسم الدفاع المدني مسجل بالفعل لهذه الشركة');startEdit(null);setEdit(old=>old?{...old,data:{...old.data,name:'قسم الدفاع المدني',code:'CIVIL-DEFENSE'}}:old)}}><Plus size={16}/>إضافة قسم الدفاع المدني</button>}<button className="primary" onClick={()=>startEdit(null)}><Plus size={17}/>إضافة {spec.singular}</button></>}</div></div>}
 {module==='employees'&&<div className="employee-register-actions"><button type="button" onClick={()=>setEmployeeFilterOpen(true)}><Search size={16}/> فلاتر تفصيلية لكل حقل {activeEmployeeFilters.length?'('+activeEmployeeFilters.length+')':''}</button>{activeEmployeeFilters.length>0&&<button type="button" onClick={()=>setEmployeeFieldFilters({})}>مسح جميع الفلاتر</button>}<button type="button" onClick={()=>setShowArchivedEmployees(v=>!v)}>{showArchivedEmployees?'عرض الموظفين الحاليين':'عرض أرشيف الموظفين'}</button><small>{showArchivedEmployees?'الأرشيف للرجوع والاستعادة دون حذف البيانات المالية':'اضغط عرض للاطلاع، أو تعديل لتغيير بيانات الموظف، أو حذف لنقله للأرشيف'}</small></div>}
 {module==='payroll'&&<section className="panel" style={{padding:20,marginBottom:18}}>
  <div className="panel-head payroll-main-heading"><div><h2>مركز مراجعة واعتماد مسيرات الرواتب</h2><span>لوحة موحدة لجميع الشركات · مراحل واضحة ومتابعة مباشرة</span></div><strong className="payroll-month-pill">شهر المسير: {new Date(payrollMonth+'-01T00:00:00').toLocaleDateString('ar-SA',{month:'long',year:'numeric'})}</strong></div>
@@ -975,6 +1012,12 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    <label>نطاق الشركات<select disabled={memberEdit.role==='admin'} value={memberEdit.companyMode} onChange={e=>setMemberEdit(p=>({...p,companyMode:e.target.value}))}><option value="all">جميع الشركات</option><option value="selected">شركات محددة</option></select></label>
    {memberEdit.companyMode==='selected'&&<fieldset className="member-scope-picker"><legend>حدد الشركات المسموحة</legend>{companies.map(c=><label key={c}><input type="checkbox" disabled={memberEdit.role==='admin'} checked={memberEdit.selectedCompanies.includes(c)} onChange={e=>setMemberEdit(p=>({...p,selectedCompanies:e.target.checked?[...p.selectedCompanies,c]:p.selectedCompanies.filter(x=>x!==c)}))}/>{c}</label>)}</fieldset>}
    {memberEdit.role!=='project_manager'&&<label>نطاق المشاريع<select disabled={memberEdit.role==='admin'} value={memberEdit.projectMode} onChange={e=>setMemberEdit(p=>({...p,projectMode:e.target.value}))}><option value="all">جميع المشاريع</option><option value="selected">مشاريع محددة</option></select></label>}
+   {memberEdit.role==='project_manager'&&<ManagerEmployeePicker key={memberEdit.original_email} records={rows} member={memberEdit} disabled={memberBusy||memberEdit.email!==memberEdit.original_email} onAssign={async(ids,conflicts)=>{
+    if(conflicts.length&&!window.confirm('يوجد '+conflicts.length+' موظف مكلّف لمدير آخر. هل تؤكد نقل مسؤولية اعتماد طلباتهم ومسيرهم إلى هذا المدير؟'))return;
+    setMemberBusy(true);
+    try{const result=await post({module:'employees',action:'assign_manager_employees',email:memberEdit.original_email,employee_ids:ids,confirm_reassign:conflicts.length>0});await refresh();notify('تم حفظ تكليف '+result.selected+' موظف وتحديث '+result.changed+' سجلًا');}
+    catch(error){notify(error.message||'تعذر حفظ تكليف الموظفين')}finally{setMemberBusy(false)}
+   }}/>}
    {memberEdit.role==='project_manager'&&<ManagerProjectPicker projects={rows} managerEmail={memberEdit.email} companies={memberEdit.companyMode==='all'?'*':memberEdit.selectedCompanies} mode={memberEdit.projectMode} selected={memberEdit.selectedProjects} disabled={memberBusy} onModeChange={mode=>setMemberEdit(p=>({...p,projectMode:mode}))} onSelectedChange={ids=>setMemberEdit(p=>({...p,selectedProjects:ids}))}/>}
    {memberEdit.role!=='project_manager'&&memberEdit.projectMode==='selected'&&<fieldset className="member-scope-picker"><legend>حدد المشاريع المسموحة</legend>{rows.filter(x=>x.module==='projects'&&(memberEdit.companyMode==='all'||memberEdit.selectedCompanies.includes(x.company))).map(x=><label key={x.id}><input type="checkbox" disabled={memberEdit.role==='admin'} checked={memberEdit.selectedProjects.includes(x.id)} onChange={e=>setMemberEdit(p=>({...p,selectedProjects:e.target.checked?[...p.selectedProjects,x.id]:p.selectedProjects.filter(id=>id!==x.id)}))}/>{x.data.name||x.code||x.id}</label>)}{!rows.some(x=>x.module==='projects')&&<span>لا توجد مشاريع ظاهرة في السجلات.</span>}</fieldset>}
   </div>
@@ -1040,8 +1083,8 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
 <div className="form-grid">{fieldsFor.filter(f=>module!=='project_managers'||['name','email','department'].includes(f.key)).map(f=><label className={f.type==='textarea'?'full':''} key={f.key}>{f.label}{f.required&&!((module==='employees'||module==='projects')&&!edit.id&&f.key==='code')&&<span className="required"> *</span>}{module==='projects'&&f.key==='manager_email'?<div style={{display:'grid',gap:8}}>
  <strong>مدير المشروع المسؤول</strong>
  <input type="search" aria-label="فلتر مدير المشروع" placeholder="ابحث باسم المدير أو بريده الإلكتروني" value={projectManagerSearch} onChange={e=>setProjectManagerSearch(e.target.value)}/>
- <select aria-label="اختيار مدير المشروع" value={edit.data.manager_email||''} onChange={e=>{setEdit({...edit,data:{...edit.data,manager_email:e.target.value}});setProjectManagerSearch('')}}><option value="">اختر من المدراء الستة المعتمدين…</option>{directManagerChoices(rows,members,edit.company).filter(m=>!projectManagerSearch.trim()||normalizeSearch([m.name,m.email].join(' ')).includes(normalizeSearch(projectManagerSearch))||m.email===edit.data.manager_email).map(m=><option value={m.email||'pending:'+m.id} key={m.id} disabled={!m.eligible}>{m.name}{m.eligible?' — '+m.email:m.ambiguous?' — يحتاج مراجعة حسابات مكررة':' — يحتاج ربط بريد وصلاحية مدير مشروع'}</option>)}{edit.data.manager_email&&!directManagerChoices(rows,members,edit.company).some(m=>m.email===String(edit.data.manager_email).toLowerCase())&&<option value={edit.data.manager_email}>{edit.data.manager_name||edit.data.manager_email} — تعيين سابق</option>}</select>
- <small>الأسماء الستة معتمدة للاختيار. المدير غير المفعّل يظهر في القائمة لكنه يحتاج ربط حساب وبريد وصلاحية قبل حفظ تعيينه. عند التعيين يتحدّث المدير المباشر لموظفي المشروع تلقائيًا.</small>
+ <select aria-label="اختيار مدير المشروع" value={edit.data.manager_email||''} onChange={e=>{setEdit({...edit,data:{...edit.data,manager_email:e.target.value}});setProjectManagerSearch('')}}><option value="">اختر من المدراء السبعة المعتمدين…</option>{directManagerChoices(rows,members,edit.company).filter(m=>!projectManagerSearch.trim()||normalizeSearch([m.name,m.email].join(' ')).includes(normalizeSearch(projectManagerSearch))||m.email===edit.data.manager_email).map(m=><option value={m.email||'pending:'+m.id} key={m.id} disabled={!m.eligible}>{m.name}{m.eligible?' — '+m.email:m.ambiguous?' — يحتاج مراجعة حسابات مكررة':' — يحتاج ربط بريد وصلاحية مدير مشروع'}</option>)}{edit.data.manager_email&&!directManagerChoices(rows,members,edit.company).some(m=>m.email===String(edit.data.manager_email).toLowerCase())&&<option value={edit.data.manager_email}>{edit.data.manager_name||edit.data.manager_email} — تعيين سابق</option>}</select>
+ <small>الأسماء السبعة معتمدة للاختيار. المدير غير المفعّل يظهر في القائمة لكنه يحتاج ربط حساب وبريد وصلاحية قبل حفظ تعيينه. عند التعيين يتحدّث المدير المباشر لموظفي المشروع تلقائيًا.</small>
  </div>:module==='project_managers'&&f.key==='name'?(()=>{
  const directory=rows.filter(r=>r.module==='project_managers'&&r.company===edit.company);
  const staff=rows.filter(r=>r.module==='employees'&&r.company===edit.company&&!r.data?._archived);
@@ -1071,7 +1114,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    }else setEdit({...edit,data:{...edit.data,name:m.name,email:m.email,department:edit.data.department||m.department,phone:edit.data.phone||m.phone,job:edit.data.job||m.job}});
    setManagerRecordSearch('');
   }}><option value="">اختر مدير المشروع…</option>{preferredProjectManagers.map(p=>{const matching=choices.filter(m=>preferredManagerForName(m.name)?.id===p.id),active=matching.length===1?matching[0]:null;return <option key={p.id} value={active?.email||'pending:'+p.id} disabled={!active}>{p.name}{active?' — '+active.email:matching.length>1?' — حسابات متكررة تحتاج مراجعة':' — يحتاج ربط حساب نشط'}</option>})}{current&&!preferredManagerForName(current.name)&&<option value={current.email}>{current.name} — {current.email}</option>}{edit.data.email&&!current&&<option value={edit.data.email}>{edit.data.name||edit.data.email} — حساب غير متاح أو غير نشط</option>}</select>
-  <small>الاسم المحدد: <b>{edit.data.name||'لم يُحدّد بعد'}</b> · حسابات مدراء متاحة: {choices.length}. تظهر الأسماء الستة كاملة، ولا يمكن اختيار اسم دون حساب نشط ومخوّل للشركة.</small>
+  <small>الاسم المحدد: <b>{edit.data.name||'لم يُحدّد بعد'}</b> · حسابات مدراء متاحة: {choices.length}. تظهر الأسماء السبعة كاملة، ولا يمكن اختيار اسم دون حساب نشط ومخوّل للشركة.</small>
   {formError&&<div role="alert" style={{color:'#a12724',background:'#fff1ee',border:'1px solid #dfaaa2',borderRadius:8,padding:'9px 12px',fontSize:13}}>{formError}</div>}
  </div>;
 })():module==='project_managers'&&f.key==='email'?<input type="email" dir="ltr" readOnly aria-label="بريد حساب المدير المحدد" value={edit.data.email||''} placeholder="يُملأ عند اختيار الاسم"/>:module==='project_managers'&&f.key==='department'?(()=>{

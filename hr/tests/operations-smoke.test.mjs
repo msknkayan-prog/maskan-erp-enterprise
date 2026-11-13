@@ -604,6 +604,34 @@ test('the deployed shared visibility rule restricts managers to their assigned p
  assert.equal(visible({...u,projects:'[]'},r1,rows),false);
  assert.equal(visible({...u,companies:'["شركة البلد المتحدة"]'},r1,rows),false);
 });
+test('named employee delegation overrides project owner for both visibility rules, including technical office and payroll',async()=>{
+ const project={id:'technical',module:'projects',company:'مسكن الكيان',data:{name:'المكتب الفني',manager_email:'owner@example.test'}};
+ const delegated={id:'worker1',module:'employees',company:'مسكن الكيان',data:{name:'موظف المكتب الفني',project_id:'technical',delegated_manager_email:'new@example.test'}};
+ const legacy={id:'worker2',module:'employees',company:'مسكن الكيان',data:{name:'موظف آخر',project_id:'technical'}};
+ const request={id:'leave1',module:'leave',company:'مسكن الكيان',data:{employee_id:delegated.id,project_id:project.id}};
+ const salary={id:'pay1',module:'payroll',company:'مسكن الكيان',data:{employee_id:delegated.id,project_id:project.id,batch_id:'batch1'}};
+ const batch={id:'batch1',module:'payroll_batches',company:'مسكن الكيان',data:{}};
+ const rows=[project,delegated,legacy,request,salary,batch];
+ const newManager={role:'project_manager',email:'new@example.test',companies:'*',projects:'[]'};
+ const owner={...newManager,email:'owner@example.test',projects:'["technical"]'};
+ for(const modulePath of ['../lib/modules.mjs','../backend/modules.mjs']){
+  const {visible}=await import(modulePath);
+  for(const record of [project,delegated,request,salary,batch])assert.equal(visible(newManager,record,rows),true,modulePath+' '+record.module);
+  for(const record of [delegated,request,salary,batch])assert.equal(visible(owner,record,rows),false,modulePath+' '+record.module);
+  assert.equal(visible(owner,legacy,rows),true,modulePath+' legacy worker');
+  assert.equal(visible({...newManager,companies:'["رياح الاعمار"]'},request,rows),false,'company isolation');
+ }
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const payroll=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ assert.match(ui,/function ManagerEmployeePicker\(/);
+ assert.match(ui,/حفظ تكليف الموظفين/);
+ assert.match(erp,/assign_manager_employees/);
+ assert.match(erp,/delegated_manager_email/);
+ assert.match(payroll,/ensureAssignedPayrollManager\(e\.data\.project_id,batch\.company,e\.data\.employee_id\)/);
+ assert.match(ui,/إضافة قسم الدفاع المدني/);
+});
+
 
 test('manager account company permissions are checked at project linking and request dispatch',()=>{
  const source=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
@@ -764,7 +792,7 @@ test('project assignment and employee request details use project manager direct
  assert.match(ui,/managerDirectoryForRequest\(edit,edit\.company\)/);
  assert.match(erp,/سجّل بيانات مدير المشروع أولًا في دليل مدراء المشاريع للشركة/);
  assert.match(erp,/data\.project_manager=\{name:manager\?\.name/);
- assert.match(erp,/details\.project_manager=\{name:dir\.name/);
+ assert.match(erp,/details\.project_manager=\{name:dir\?\.name\|\|managerEmail/);
  assert.match(erp,/UPDATE records SET status=\?,data=\?,revision=revision\+1/);
 });
 
@@ -1303,9 +1331,9 @@ test('payroll approval requires authorized project managers for every staff row 
  const cycle=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(cycle,/ensureAssignedPayrollManager/);
- assert.match(cycle,/await ensureAssignedPayrollManager\(row\.data\.project_id,b\.company\)/);
- assert.match(cycle,/await ensureAssignedPayrollManager\(e\.data\.project_id,batch\.company\)/);
- assert.match(cycle,/await canManageProject\(u,projectId,batch\.company\)/);
+ assert.match(cycle,/await ensureAssignedPayrollManager\(row\.data\.project_id,b\.company,row\.data\.employee_id\)/);
+ assert.match(cycle,/await ensureAssignedPayrollManager\(e\.data\.project_id,batch\.company,e\.data\.employee_id\)/);
+ assert.match(cycle,/await canManageProject\(u,projectId,batch\.company,employee\.data\.employee_id\)/);
  assert.match(cycle,/manager\.role!=='project_manager'/);
  assert.match(cycle,/manager_reviewed_by/);
  assert.match(cycle,/\['admin','projects_director'\]\.includes\(u\.role\)/);
@@ -1369,7 +1397,7 @@ test('direct manager and project manager use the same canonical project assignme
  assert.match(ui,/const linkedManager=available\.find/);
  assert.match(ui,/value=\{linkedManager\?\.id\|\|''\}/);
  assert.match(ui,/direct_manager_id:manager\?\.id\|\|''/);
- assert.match(ui,/direct_name:projectManager\?\.data\.name\|\|project\.data\.manager_name/);
+ assert.match(ui,/direct_name:directRow\?\.data\.name\|\|employeeData\.manager/);
 });
 
 test('manager assignment supports one director for multiple projects with employee-name previews',()=>{
@@ -1525,9 +1553,11 @@ test('project manager editor shows selected name and preserves registered accoun
  assert.match(erp,/if\(recordData&&String\(recordData\.email/);
  assert.match(erp,/لا يمكن تغيير حساب مدير مشروع مسجل إلى حساب آخر/);
 });
-test('six approved project managers are selectable and linked to employee project assignments',async()=>{
+test('seven approved project managers are selectable without duplicating Othman',async()=>{
  const {preferredProjectManagers,preferredManagerForName,suggestedProjectsForManager}=await import('../lib/project-manager-roster.mjs');
- assert.deepEqual(preferredProjectManagers.map(p=>p.name),['م محمداحمد','م الهادي الرحيمة','م محمد يوسف','أ مصعب عبد القيوم','م مجدي محجوب','أ عثمان محمداحمد']);
+ assert.deepEqual(preferredProjectManagers.map(p=>p.name),['م محمداحمد','م الهادي الرحيمة','م محمد يوسف','أ مصعب عبد القيوم','م مجدي محجوب','أ. عثمان محمد أحمد','م. أمجد فؤاد']);
+ assert.equal(preferredManagerForName('أ.عثمان محمداحمد')?.id,'othman');
+ assert.equal(preferredManagerForName('م امجد فؤاد')?.id,'amjad_fouad');
  for(const name of ['م محمد أحمد','م الهادي الرحمة','م الهادي الرحيمة','أ.مصعب عبد القيوم','أ عثمان محمد أحمد'])assert.ok(preferredManagerForName(name),name);
  assert.equal(preferredManagerForName('م الهادي الرحمة')?.id,preferredManagerForName('م الهادي الرحيمة')?.id);
  assert.equal(preferredManagerForName('اسم غير معتمد'),null);
@@ -1544,7 +1574,7 @@ test('six approved project managers are selectable and linked to employee projec
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  assert.match(ui,/suggestedProjectsForManager\(rows,m\.profileId,m\.company,m\.email\)/);
  assert.match(ui,/ids:suggested/);
- assert.match(ui,/اختر أحد المدراء الستة/);
+ assert.match(ui,/اختر أحد المدراء السبعة/);
  assert.match(erp,/updatedEmployee=\{\.\.\.d,manager:String\(directory\.name/);
  assert.match(erp,/employees_linked:syncEmployees\.length/);
 });
