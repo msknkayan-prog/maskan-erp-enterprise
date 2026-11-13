@@ -224,6 +224,25 @@ async function deleteProject(row){
  }catch(err){notify(err.message||'تعذر حذف المشروع');}
  finally{setSaving(false)}
 }
+async function deleteProjectManager(row){
+ if(!row||row.module!=='project_managers'||user?.role!=='admin')return notify('حذف سجل مدير المشروع متاح للمدير العام فقط');
+ const email=String(row.data?.email||'').trim().toLowerCase();
+ const name=String(row.data?.name||email||'مدير المشروع');
+ const linkedProject=rows.some(r=>r.module==='projects'&&r.company===row.company&&String(r.data?.manager_email||'').trim().toLowerCase()===email);
+ const linkedEmployee=rows.some(r=>r.module==='employees'&&r.company===row.company&&(String(r.data?.direct_manager_id||'')===row.id||(email&&String(r.data?.manager_email||'').trim().toLowerCase()===email)));
+ if(linkedProject||linkedEmployee)return notify('لا يمكن حذف «'+name+'» قبل نقل المشاريع والموظفين المرتبطين به إلى مدير آخر');
+ if(!window.confirm('هل تؤكد حذف «'+name+'» من دليل مدراء المشاريع؟ سيُحفظ سجل تدقيق، ولن يُحذف حساب الدخول.'))return;
+ const reason=window.prompt('أدخل سبب حذف سجل المدير «'+name+'» للتوثيق:');
+ if(reason===null)return;
+ if(!reason.trim())return notify('سبب حذف سجل المدير مطلوب');
+ setSaving(true);
+ try{
+  await post({action:'delete_project_manager',module:'project_managers',id:row.id,revision:row.revision,reason:reason.trim()});
+  if(edit?.id===row.id)setEdit(null);
+  await refresh();notify('تم حذف المدير من الدليل وتوثيق العملية؛ حساب الدخول لم يتغير');
+ }catch(err){notify(err.message||'تعذر حذف سجل مدير المشروع')}
+ finally{setSaving(false)}
+}
  async function save(e){e.preventDefault();if(module==='employees'&&employeeReadOnly){notify('انتقل إلى وضع التعديل أولًا');return;}
  if(module==='employees'&&edit.dual_source_id){
  if(!companies.includes(edit.company)||edit.company===edit.dual_source_company){notify('اختر شركة ثانية مختلفة عن الشركة الأصلية');return;}
@@ -920,7 +939,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <button type="button" onClick={()=>openEmployee(row,true)}>عرض</button>
  {permittedWrite(user||{},'employees')&&<button type="button" onClick={()=>openEmployee(row,false)}>تعديل</button>}
  {permittedWrite(user||{},'employees')&&['admin','hr'].includes(user?.role)&&<button type="button" disabled={saving} onClick={()=>archiveEmployee(row,Boolean(row.data?._archived))}>{row.data?._archived?'استعادة الموظف':'حذف'}</button>}
- </>:<><button onClick={()=>setEdit({...row,data:{...row.data}})}>{row.status==='draft'&&(permittedWrite(user||{},module))?'فتح / تعديل':'عرض'}</button>{module==='projects'&&user?.role==='admin'&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteProject(row)}>حذف المشروع</button>}{row.status==='draft'&&['leave','advances','resignations','warnings'].includes(module)&&['admin','hr'].includes(user?.role)&&permittedWrite(user||{},module)&&permission(user||{},module,'edit')&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteDraftRequest(row)}>حذف الطلب</button>}{module==='advances'&&row.status==='approved'&&['admin','finance'].includes(user?.role)&&<button disabled={saving} onClick={()=>disburse(row)}>توثيق صرف السلفة</button>}{approvable&&<button disabled={saving} onClick={()=>transition(row)}>{row.status==='draft'?'إرسال للاعتماد':'اعتماد المرحلة'}</button>}{approvable&&row.status!=='draft'&&<button disabled={saving} onClick={()=>{const note=window.prompt('سبب الإعادة للمراجعة');if(note)transition(row,'return',note)}}>إعادة للمراجعة</button>}{approvable&&row.status!=='draft'&&<button disabled={saving} onClick={()=>{const note=window.prompt('سبب الرفض');if(note)transition(row,'reject',note)}}>رفض</button>}</>}</div></td></tr>})}</tbody></table></div>}</section>}{module!=='payroll'&&<div className="footnote">{module==='leave'?'المتبقي = المتراكم منذ التعيين + تسوية الرصيد الافتتاحي − الإجازات المعتمدة. راجع الافتتاحي لمنع تكرار الاستحقاق.':module==='payroll'?'صافي الراتب = الأجر الشهري + المكافآت − الخصميات المدخلة. هذا سجل مستحقات ولا ينفذ دفعًا بنكيًا.':'التعديل متاح للمسودات. تسلسل الاعتماد: مدير المشروع ← إدارة المشاريع ← شؤون الموظفين ← الإدارة المالية.'}</div>}</>}
+ </>:<><button onClick={()=>setEdit({...row,data:{...row.data}})}>{row.status==='draft'&&(permittedWrite(user||{},module))?'فتح / تعديل':'عرض'}</button>{module==='projects'&&user?.role==='admin'&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteProject(row)}>حذف المشروع</button>}{module==='project_managers'&&user?.role==='admin'&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteProjectManager(row)}>حذف المدير</button>}{row.status==='draft'&&['leave','advances','resignations','warnings'].includes(module)&&['admin','hr'].includes(user?.role)&&permittedWrite(user||{},module)&&permission(user||{},module,'edit')&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteDraftRequest(row)}>حذف الطلب</button>}{module==='advances'&&row.status==='approved'&&['admin','finance'].includes(user?.role)&&<button disabled={saving} onClick={()=>disburse(row)}>توثيق صرف السلفة</button>}{approvable&&<button disabled={saving} onClick={()=>transition(row)}>{row.status==='draft'?'إرسال للاعتماد':'اعتماد المرحلة'}</button>}{approvable&&row.status!=='draft'&&<button disabled={saving} onClick={()=>{const note=window.prompt('سبب الإعادة للمراجعة');if(note)transition(row,'return',note)}}>إعادة للمراجعة</button>}{approvable&&row.status!=='draft'&&<button disabled={saving} onClick={()=>{const note=window.prompt('سبب الرفض');if(note)transition(row,'reject',note)}}>رفض</button>}</>}</div></td></tr>})}</tbody></table></div>}</section>}{module!=='payroll'&&<div className="footnote">{module==='leave'?'المتبقي = المتراكم منذ التعيين + تسوية الرصيد الافتتاحي − الإجازات المعتمدة. راجع الافتتاحي لمنع تكرار الاستحقاق.':module==='payroll'?'صافي الراتب = الأجر الشهري + المكافآت − الخصميات المدخلة. هذا سجل مستحقات ولا ينفذ دفعًا بنكيًا.':'التعديل متاح للمسودات. تسلسل الاعتماد: مدير المشروع ← إدارة المشاريع ← شؤون الموظفين ← الإدارة المالية.'}</div>}</>}
 {module==='client_finance'&&clientFinanceAuthorized&&<ClientFinance user={user} company={company} profiles={rows} companyList={companies} projectManagers={rows.filter(r=>r.module==='project_managers').map(r=>r.data?.name||r.data?.display_name).filter(Boolean)}/>}
 {module==='attendance'&&<Attendance rows={rows} user={user} company={company} notify={notify}/>}
 {module==='migration'&&user?.role==='admin'&&<Migration notify={notify} onDone={refresh}/>}
