@@ -395,6 +395,32 @@ if(body.action==='set_member_status'){
 if(body.action==='remove_member'){if(u.role!=='admin')throw Error('403');const target=String(body.email||'').trim().toLowerCase();const existing=await db.prepare('SELECT role FROM members WHERE email=?').bind(target).first();if(!existing||existing.role==='admin'||target===u.email.toLowerCase())throw Error('لا يمكن إزالة حساب المدير');await db.prepare('DELETE FROM members WHERE email=?').bind(target).run();return json({ok:true});}
 const mod=body.module;if(!(modules as any)[mod])throw Error('نافذة غير معروفة');const old=body.id?await db.prepare('SELECT * FROM records WHERE id=? AND module=?').bind(body.id,mod).first<any>():null;if(body.id&&!old)throw Error('السجل غير موجود');if(old&&!visible(u,parse(old),(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(old&&old.revision!==body.revision)throw Error('تغير السجل؛ حدّث الصفحة');
 if(old&&JSON.parse(old.data)?._deleted)throw Error('هذا الطلب محذوف ولا يمكن تعديله أو إرساله للاعتماد');
+ if(body.action==='delete_project'){
+  if(mod!=='projects'||!old||u.role!=='admin')throw Error('403');
+  const reason=String(body.reason||'').trim().slice(0,1000);
+  if(!reason)throw Error('سبب حذف المشروع مطلوب');
+  const dependentRows=(await db.prepare('SELECT id,module,company,data FROM records WHERE id<>?').bind(old.id).all()).results;
+  const linked=dependentRows.find((r:any)=>{
+   const data=JSON.parse(r.data||'{}');
+   return !data._deleted&&(String(data.project_id||'')===old.id||Array.isArray(data.project_ids)&&data.project_ids.includes(old.id));
+  });
+  if(linked)throw Error('لا يمكن حذف المشروع لوجود سجلات مرتبطة به ('+linked.module+'). انقل الموظفين والمعاملات إلى مشروع آخر أولًا');
+  const original=JSON.parse(old.data||'{}');
+  const updated={...original,_deleted:true,_deleted_at:now,_deleted_by:u.email,_delete_reason:reason};
+  const accounts=(await db.prepare('SELECT email,projects FROM members WHERE projects IS NOT NULL AND projects<>?').bind('*').all()).results;
+  const statements:any[]=[db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='projects' AND revision=?")
+   .bind(JSON.stringify(updated),now,mutation,old.id,old.revision)];
+  for(const account of accounts){
+   let scope:any=[];try{scope=JSON.parse(account.projects||'[]')}catch{}
+   if(!Array.isArray(scope)||!scope.includes(old.id))continue;
+   statements.push(db.prepare('UPDATE members SET projects=? WHERE email=?').bind(JSON.stringify(scope.filter((id:string)=>id!==old.id)),account.email));
+  }
+  statements.push(db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)')
+   .bind(crypto.randomUUID(),u.email,old.id,'project_deleted',now,JSON.stringify({project:original.name||old.code,company:old.company,reason}),old.id,mutation));
+  const result=await db.batch(statements);
+  if(result[0]?.meta?.changes!==1)throw Error('تغير المشروع؛ حدّث السجل قبل الحذف');
+  return json({ok:true,deleted:true});
+ }
  if(body.action==='delete_draft_request'){
   if(!['leave','advances','resignations','warnings'].includes(mod))throw Error('حذف الطلب غير متاح لهذه النافذة');
   if(!old||old.status!=='draft')throw Error('يمكن حذف الطلبات المسودة فقط؛ الطلبات المعتمدة تتطلب إجراء إلغاء رسمي');
@@ -479,6 +505,7 @@ if(mod==='employees'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 if(mod==='projects'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 const data={...(previous||{}),...normalize(mod,body)};
 if(mod==='projects'&&old)data.code=String(previous.code||old.code||'');
+if(mod==='projects'&&old&&String(data.manager_email||'').trim().toLowerCase()!==String(previous.manager_email||'').trim().toLowerCase())throw Error('احفظ تعيين مدير المشروع من نافذة المشروع باستخدام إجراء الربط المعتمد');
 
 if(mod==='employees'&&previous&&body.salary_edit_source!=='basic'&&Number(previous.salary??previous.total_monthly_salary)===Number(data.salary))for(const key of ['basic','housing','transport'])if(previous[key]!==undefined)data[key]=previous[key];if(mod==='employees'){data._review_flags=[...(!data.hire_date?['تاريخ التعيين يحتاج استكمال']:[]),...(data.company==='غير محددة'?['الشركة تحتاج مراجعة']:[])];}if(mod==='warnings'&&data.warning_type!=='notice'&&!Number(data.sequence)){data.sequence=({first:1,second:2,final:3} as any)[data.warning_type];}if(!visible(u,{module:mod,company:body.company,data},(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(mod==='project_managers'){
  if(!['admin','hr'].includes(u.role))throw Error('403');
