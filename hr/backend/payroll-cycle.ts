@@ -3,7 +3,7 @@
 // No bank transfer or actual cash payment is performed by this service.
 import {env} from './runtime.ts';
 import {identity} from './erp.ts';
-import {companies,permission} from './modules.mjs';
+import {companies,canonicalCompany,permission} from './modules.mjs';
 import {isAuthorizedProjectManagerAccount,magdiProjectManagerName} from './project-manager-roster.mjs';
 const response=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 const err=(message,status=400)=>response({error:message},status);
@@ -109,7 +109,7 @@ export async function POST(req){
      const status=d.employment_status||d.employee_status||'';
      const isSuspended=!['active','نشط','على رأس العمل','علي راس العمل'].includes(String(status).trim());
      const salaryMismatch=Math.abs(cents(salary)-cents(basic+housing+transport))>1;
-     const row={batch_id:id,employee_id:e.id,month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||e.code||'',employment_status:status,project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
+     const row={batch_id:id,employee_id:e.id,month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||e.code||'',employment_status:status,project_id:d.project_id||'',cost_company:companies.includes(canonicalCompany(d.working_company))?canonicalCompany(d.working_company):co,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
        basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,
        absence_days:0,absence_deduction:0,advance_deduction:0,deductions:0,
        net:salary,cash_amount:0,bank_amount:0,split_confirmed:false,
@@ -176,7 +176,7 @@ export async function POST(req){
    const declared=rounded(d.salary??d.total_monthly_salary??salary);
    const mismatch=Math.abs(cents(declared)-cents(salary))>1;
    const rowId=crypto.randomUUID();
-   const data={batch_id:batch.id,employee_id:employeeId,month:batch.data.month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||original.code||'',employment_status:status,project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
+   const data={batch_id:batch.id,employee_id:employeeId,month:batch.data.month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||original.code||'',employment_status:status,project_id:d.project_id||'',cost_company:companies.includes(canonicalCompany(d.working_company))?canonicalCompany(d.working_company):batch.company,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
     basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:0,absence_deduction:0,advance_deduction:0,deductions:0,
     net:salary,cash_amount:0,bank_amount:0,split_confirmed:false,excluded:false,
     exception_note:'',needs_review:mismatch,review_reason:mismatch?'اختلاف إجمالي الراتب عن مكوناته':'',
@@ -226,6 +226,17 @@ export async function POST(req){
      if(!await canManageProject(u,projectId,batch.company,employee.data.employee_id))return err('الموظف خارج تكليف مدير المشروع المخوّل',403);
    }
    const input=body.data||{},old=employee.data;
+   // Payroll cost allocation is independent of the employee's legal employer
+   // (records.company) and of the project used to route manager approvals.
+   const cost_company=canonicalCompany(input.cost_company||old.cost_company||batch.company);
+   if(!companies.includes(cost_company)||!allowed(u,cost_company))return err('شركة تحميل الراتب خارج نطاق الصلاحيات أو غير مسجلة',403);
+   const cost_project_id=String(input.cost_project_id||'').trim();
+   if(!cost_project_id)throw Error('حدد مركز تكلفة المشروع الذي سيتحمل الراتب');
+   const costProject=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(cost_project_id).first();
+   if(!costProject)throw Error('مركز تكلفة المشروع غير موجود في سجل المشاريع');
+   const costProjectData=JSON.parse(costProject.data||'{}');
+   if(costProjectData._deleted||costProjectData._archived||costProject.company!==cost_company&&!(Array.isArray(costProjectData._shared_companies)&&costProjectData._shared_companies.includes(cost_company)))throw Error('مركز التكلفة لا يتبع شركة تحميل الراتب المختارة');
+   if(managerEditing&&cost_project_id!==String(old.cost_project_id||old.project_id||''))return err('تغيير مركز تكلفة المشروع من صلاحية إعداد المسير؛ يمكن لمدير المشروع مراجعة تكليف موظفيه فقط',403);
    const basic=amount(input.basic,'الراتب الأساسي');
    const housing=amount(input.housing,'بدل السكن');
    const transport=amount(input.transport,'بدل النقل');
@@ -246,10 +257,10 @@ export async function POST(req){
    if(cents(cash_amount)+cents(bank_amount)!==cents(net))throw Error('إجمالي الكاش والتحويل يجب أن يساوي صافي الراتب');
    const exception_note=String(input.exception_note||'').trim().slice(0,1000);
    if(old.needs_review&&!exception_note)throw Error('الموظف غير النشط يحتاج توضيح قرار إدراجه في مسير الرواتب');
-   const data={...old,basic,housing,transport,salary,bonus,extra_allowance,overtime_hours,absence_days,overtime,absence_deduction,advance_deduction,deductions,net,cash_amount,bank_amount,split_confirmed:true,exception_note,notes:String(input.notes||'').slice(0,2000),method:cash_amount&&bank_amount?'mixed':cash_amount?'cash':'bank',reviewed_by:u.email,reviewed_at:now,manager_reviewed:managerEditing?true:false,manager_notes:managerEditing?String(input.manager_notes||'').trim().slice(0,2000):old.manager_notes||'',manager_reviewed_by:managerEditing?u.email:null,manager_reviewed_at:managerEditing?now:null};
+   const data={...old,cost_company,cost_project_id,basic,housing,transport,salary,bonus,extra_allowance,overtime_hours,absence_days,overtime,absence_deduction,advance_deduction,deductions,net,cash_amount,bank_amount,split_confirmed:true,exception_note,notes:String(input.notes||'').slice(0,2000),method:cash_amount&&bank_amount?'mixed':cash_amount?'cash':'bank',reviewed_by:u.email,reviewed_at:now,manager_reviewed:managerEditing?true:false,manager_notes:managerEditing?String(input.manager_notes||'').trim().slice(0,2000):old.manager_notes||'',manager_reviewed_by:managerEditing?u.email:null,manager_reviewed_at:managerEditing?now:null};
    const res=await db.batch([db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND module='payroll' AND EXISTS(SELECT 1 FROM records b WHERE b.id=? AND b.status=?)")
     .bind(JSON.stringify(data),now,mutation,employee.id,employee.revision,batch.id,batch.status),
-    db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,employee.id,'payroll_employee_edit',now,JSON.stringify({batch_id:batch.id,month:batch.data.month}))]);
+    db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,employee.id,'payroll_employee_edit',now,JSON.stringify({batch_id:batch.id,month:batch.data.month,cost_company,cost_project_id,previous_cost_company:old.cost_company||batch.company,previous_cost_project_id:old.cost_project_id||old.project_id||''}))]);
    if(!res[0].meta.changes)throw Error('المسير تغير؛ أعد التحميل');
    return response({ok:true});
   }

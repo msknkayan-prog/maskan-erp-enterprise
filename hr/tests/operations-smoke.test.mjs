@@ -593,6 +593,30 @@ test('payroll Excel bank-transfer column is explicit and remaining cash is calcu
  assert.match(ui,/Number\(d.net\|\|0\)-Number\(d.bank_amount\|\|0\)/);
 });
 
+test('monthly payroll stores salary-charged company and project cost center independently of legal employer',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ assert.match(ui,/aria-label="شركة تحميل الراتب في المسير"/);
+ assert.match(ui,/aria-label="مركز تكلفة المشروع في المسير"/);
+ assert.match(ui,/cycleEdit\.data\.cost_company/);
+ assert.match(ui,/cost_project_id:e\.target\.value/);
+ assert.match(ui,/cycleCostProjectOptions\.map\(project=>/);
+ assert.match(ui,/cost_company:co,cost_project_id:valid\?current:''/);
+ assert.match(ui,/شركة تحميل الراتب/);
+ assert.match(ui,/مركز تكلفة المشروع/);
+ assert.match(ui,/const cycleCostBreakdown=Object\.values/);
+ assert.match(ui,/const head=\['الشركة التابعة لها الموظف','الشركة المحمّل عليها الراتب','رقم مركز تكلفة المشروع'/);
+ assert.match(backend,/cost_company:companies\.includes\(canonicalCompany\(d\.working_company\)\)/);
+ assert.match(backend,/cost_project_id:d\.project_id\|\|''/);
+ assert.match(backend,/const cost_company=canonicalCompany/);
+ assert.match(backend,/!companies\.includes\(cost_company\)\|\|!allowed\(u,cost_company\)/);
+ assert.match(backend,/if\(!costProject\)throw Error/);
+ assert.match(backend,/costProject\.company!==cost_company/);
+ assert.match(backend,/managerEditing&&cost_project_id!==String\(old\.cost_project_id\|\|old\.project_id\|\|''\)/);
+ assert.match(backend,/const data=\{\.\.\.old,cost_company,cost_project_id,basic/);
+ assert.doesNotMatch(backend,/UPDATE records SET company=\?/);
+});
+
 
 test('employee profile bank and calculated cash always reconcile to monthly salary',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
