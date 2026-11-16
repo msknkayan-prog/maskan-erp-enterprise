@@ -43,7 +43,26 @@ export function isRequestStageActor(user,stage){
 }
 export const states={draft:'مسودة',project_manager:'مدير المشروع',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
 export const saudiDate=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,10);
-export function annualLeave(hire,at=saudiDate()){if(!/^\d{4}-\d{2}-\d{2}$/.test(hire||''))return null;if(isNaN(Date.parse(hire))||new Date(hire).toISOString().slice(0,10)!==hire)return null;let [y,m,d]=hire.split('-').map(Number);const anniversary=n=>{let yy=y+n;let dd=Math.min(d,new Date(Date.UTC(yy,m,0)).getUTCDate());return new Date(Date.UTC(yy,m-1,dd))};const now=new Date(at+'T00:00:00Z');if(now<anniversary(0))return {years:0,annual:21,accrued:0};let years=now.getUTCFullYear()-y;if(anniversary(years)>now)years--;let annual=years>=4?30:21;return {years,annual,accrued:Math.round((Math.min(years,4)*21+Math.max(years-4,0)*30+annual*(+now-+anniversary(years))/(+anniversary(years+1)-+anniversary(years)))*100)/100};}
+export function annualLeave(hire,at=saudiDate()){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(hire||''))return null;
+ if(isNaN(Date.parse(hire))||new Date(hire).toISOString().slice(0,10)!==hire)return null;
+ const [y,m,d]=hire.split('-').map(Number);
+ const anniversary=n=>{const yy=y+n;const dd=Math.min(d,new Date(Date.UTC(yy,m,0)).getUTCDate());return new Date(Date.UTC(yy,m-1,dd))};
+ const now=new Date(at+'T00:00:00Z');
+ if(now<anniversary(0))return {years:0,annual:21,accrued:0};
+ let years=now.getUTCFullYear()-y;
+ if(anniversary(years)>now)years--;
+ const annual=years>=4?30:21;
+ if(years===0)return {years,annual,accrued:0};
+ const yearStart=anniversary(years);
+ const monthDate=n=>{const yy=yearStart.getUTCFullYear(),mm=yearStart.getUTCMonth()+n;const last=new Date(Date.UTC(yy,mm+1,0)).getUTCDate();return new Date(Date.UTC(yy,mm,Math.min(yearStart.getUTCDate(),last)))};
+ let months=(now.getUTCFullYear()-yearStart.getUTCFullYear())*12+now.getUTCMonth()-yearStart.getUTCMonth();
+ if(monthDate(months)>now)months--;
+ const from=monthDate(months),to=monthDate(months+1);
+ const monthFraction=(+now-+from)/(+to-+from);
+ const accrued=Math.min(years,4)*21+Math.max(years-4,0)*30+annual*(months+monthFraction)/12;
+ return {years,annual,accrued:Math.round(accrued*100)/100};
+}
 const numValue=v=>Number(v||0);
 export function normalize(module,input){const spec=modules[module];if(!spec)throw Error('نافذة غير معروفة');if(!companies.includes(input.company))throw Error('حدد الشركة');const out={};for(const field of spec.fields){let v=String(input.data?.[field.key]??'').trim();if(module==='leave'&&field.key==='ticket'){if(v==='نعم')v='yes';if(v==='لا')v='no';}if(v.length>4000)throw Error('بيانات طويلة');if(enumOptions[field.type]&&v&&!enumOptions[field.type].some(o=>o[0]===v))throw Error('اختيار غير صالح: '+field.label);if(field.required&&!v)throw Error('أكمل '+field.label);if(field.type==='number'){let n=Number(v||0);if(!Number.isFinite(n)||Math.abs(n)>1e9||(n<0&&field.key!=='opening_leave'))throw Error('قيمة غير صالحة: '+field.label);out[field.key]=n;}else{if(field.type==='email'&&v&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))throw Error('بريد إلكتروني غير صحيح');if(field.type==='coordinate'&&v){let n=Number(v),limit=field.key==='latitude'?90:180;if(!Number.isFinite(n)||Math.abs(n)>limit)throw Error('إحداثيات غير صحيحة');}if(['date','month'].includes(field.type)&&v){const re=field.type==='month'?/^\d{4}-(0[1-9]|1[0-2])$/:/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/;if(!re.test(v)||(field.type==='date'&&(isNaN(Date.parse(v))||new Date(v).toISOString().slice(0,10)!==v)))throw Error('تاريخ غير صالح');}out[field.key]=v;}}
 if(module==='employees'&&/^(?:مراقب|مشرف)(?:\s*[-–/]\s*(?:مراقب|مشرف))?$/.test(String(out.job||'').trim()))out.job='مشرف';
