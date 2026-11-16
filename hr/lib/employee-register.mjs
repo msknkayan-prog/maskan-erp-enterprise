@@ -1,4 +1,4 @@
-import {annualLeave,nextContractExpiry,companyDisplayName} from './modules.mjs';
+import {annualLeave,nextContractExpiry,serviceDuration,companyDisplayName} from './modules.mjs';
 export const employeeRegisterFields = [
  ['working_company','الشركة التي يعمل بها'],['code','الرقم الوظيفي'],['name','اسم الموظف'],['manager','المدير المباشر'],['project_code','رمز المشروع'],['project_manager_name','اسم مدير المشروع'],
  ['hire_date','تاريخ التعيين'],['job','المسمى الوظيفي'],['department','القسم'],
@@ -10,7 +10,7 @@ export const employeeRegisterFields = [
  ['home_phone','هاتف الموظف في البلد الأم'],['employment_status','حالة الموظف'],
  ['project_id','اسم المشروع'],
  ['current_leave','رصيد الإجازات الحالي'],['latest_leave','آخر طلب إجازة معتمد'],
- ['service_years','سنوات الخدمة المكتملة'],['accrued_leave','الإجازة المتراكمة منذ التعيين']
+ ['service_years','مدة الخدمة (سنوات / أشهر / أيام)'],['service_total_days','إجمالي أيام الخدمة'],['accrued_leave','الإجازة المتراكمة منذ التعيين']
 ].map(([key,label])=>({key,label,type:'register'}));
 export function employeeRegisterValue(row,key,rows){
  const data=row.data||{};
@@ -28,7 +28,8 @@ export function employeeRegisterValue(row,key,rows){
  if(key==='project_id')return project?.data.name||data.project_name||data['اسم المشروع']||'';
  if(key==='contract_expiry')return nextContractExpiry(data.hire_date)||'أكمل تاريخ التعيين';
  if(key==='annual_entitlement')return service?.annual??'أكمل تاريخ التعيين';
- if(key==='service_years')return service?.years??'أكمل تاريخ التعيين';
+ if(key==='service_years'){const span=serviceDuration(data.hire_date);return span?span.years+' سنة، '+span.months+' شهر، '+span.days+' يوم':'أكمل تاريخ التعيين';}
+ if(key==='service_total_days')return serviceDuration(data.hire_date)?.totalDays??'أكمل تاريخ التعيين';
  if(key==='accrued_leave')return service?.accrued??'أكمل تاريخ التعيين';
  if(key==='current_leave'){const carry=data.opening_leave_confirmed==='yes'?Number(data.opening_leave||0):0;return service||data.opening_leave_confirmed==='yes'?Math.round(((service?.accrued||0)+carry-used)*100)/100:'أكمل تاريخ التعيين';}
  if(key==='latest_leave'){

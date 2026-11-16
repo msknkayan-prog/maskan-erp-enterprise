@@ -63,6 +63,21 @@ export function annualLeave(hire,at=saudiDate()){
  const accrued=Math.min(years,4)*21+Math.max(years-4,0)*30+annual*(months+monthFraction)/12;
  return {years,annual,accrued:Math.round(accrued*100)/100};
 }
+export function serviceDuration(hire,at=saudiDate()){
+ const service=annualLeave(hire,at);
+ if(!service)return null;
+ const start=new Date(hire+'T00:00:00Z'),today=new Date(at+'T00:00:00Z');
+ if(isNaN(+today)||today<start)return {years:0,months:0,days:0,totalDays:0};
+ const [y,m,d]=hire.split('-').map(Number);
+ const year=service.years;
+ const yy=y+year,dd=Math.min(d,new Date(Date.UTC(yy,m,0)).getUTCDate());
+ const yearStart=new Date(Date.UTC(yy,m-1,dd));
+ const monthly=n=>{const month=yearStart.getUTCMonth()+n;const last=new Date(Date.UTC(yy,month+1,0)).getUTCDate();return new Date(Date.UTC(yy,month,Math.min(dd,last)))};
+ let months=(today.getUTCFullYear()-yy)*12+today.getUTCMonth()-yearStart.getUTCMonth();
+ if(monthly(months)>today)months--;
+ const days=Math.round((+today-+monthly(months))/86400000);
+ return {years:year,months,days,totalDays:Math.round((+today-+start)/86400000)};
+}
 export function nextContractExpiry(hire,at=saudiDate()){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(hire||'')||!/^\d{4}-\d{2}-\d{2}$/.test(at||''))return '';
  const start=new Date(hire+'T00:00:00Z'),today=new Date(at+'T00:00:00Z');
