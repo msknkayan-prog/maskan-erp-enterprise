@@ -6,7 +6,7 @@ export const employeeRegisterFields = [
  ['email','البريد الإلكتروني'],['basic','الراتب الأساسي'],['housing','بدل السكن'],
  ['transport','بدل النقل'],['salary','الراتب الشهري الإجمالي'],['bank_amount','تحويل بنكي'],['cash_amount','المتبقي كاش'],['payment_method','طريقة الصرف'],['bank','البنك'],
  ['iban','الآيبان'],['sponsorship','حالة الكفالة'],['opening_leave','رصيد افتتاحي للإجازات'],
- ['annual_entitlement','الاستحقاق السنوي'],['supervisor_account','رقم حساب المدير المباشر'],
+ ['supervisor_account','رقم حساب المدير المباشر'],
  ['home_phone','هاتف الموظف في البلد الأم'],['employment_status','حالة الموظف'],
  ['project_id','اسم المشروع'],
  ['current_leave','رصيد الإجازات الحالي'],['latest_leave','آخر طلب إجازة معتمد'],
@@ -27,7 +27,6 @@ export function employeeRegisterValue(row,key,rows){
  if(key==='project_manager_name')return project?.data.manager_name||data.project_manager_name||'';
  if(key==='project_id')return project?.data.name||data.project_name||data['اسم المشروع']||'';
  if(key==='contract_expiry')return nextContractExpiry(data.hire_date)||'أكمل تاريخ التعيين';
- if(key==='annual_entitlement')return service?.annual??'أكمل تاريخ التعيين';
  if(key==='service_years'){const span=serviceDuration(data.hire_date);return span?span.years+' سنة، '+span.months+' شهر، '+span.days+' يوم':'أكمل تاريخ التعيين';}
  if(key==='service_total_days')return serviceDuration(data.hire_date)?.totalDays??'أكمل تاريخ التعيين';
  if(key==='accrued_leave')return service?.accrued??'أكمل تاريخ التعيين';
