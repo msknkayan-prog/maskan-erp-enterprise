@@ -1,4 +1,4 @@
-import {annualLeave,companyDisplayName} from './modules.mjs';
+import {annualLeave,nextContractExpiry,companyDisplayName} from './modules.mjs';
 export const employeeRegisterFields = [
  ['working_company','الشركة التي يعمل بها'],['code','الرقم الوظيفي'],['name','اسم الموظف'],['manager','المدير المباشر'],['project_code','رمز المشروع'],['project_manager_name','اسم مدير المشروع'],
  ['hire_date','تاريخ التعيين'],['job','المسمى الوظيفي'],['department','القسم'],
@@ -26,10 +26,11 @@ export function employeeRegisterValue(row,key,rows){
  }
  if(key==='project_manager_name')return project?.data.manager_name||data.project_manager_name||'';
  if(key==='project_id')return project?.data.name||data.project_name||data['اسم المشروع']||'';
+ if(key==='contract_expiry')return nextContractExpiry(data.hire_date)||'أكمل تاريخ التعيين';
  if(key==='annual_entitlement')return service?.annual??'أكمل تاريخ التعيين';
  if(key==='service_years')return service?.years??'أكمل تاريخ التعيين';
  if(key==='accrued_leave')return service?.accrued??'أكمل تاريخ التعيين';
- if(key==='current_leave')return service?Math.round((service.accrued+Number(data.opening_leave||0)-used)*100)/100:'أكمل تاريخ التعيين';
+ if(key==='current_leave')return service?Math.round((service.accrued-used)*100)/100:'أكمل تاريخ التعيين';
  if(key==='latest_leave'){
   const latest=[...leaves].sort((a,b)=>String(b.data.request_date||b.data.start||b.created_at).localeCompare(String(a.data.request_date||a.data.start||a.created_at)))[0];
   return latest?[latest.data.request_date||latest.data.start,latest.code].filter(Boolean).join(' · '):data.last_leave_request||data.extra_fields?.['آخر طلب إجازة معتمد']||'';
