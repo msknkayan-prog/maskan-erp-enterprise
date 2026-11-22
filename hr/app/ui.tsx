@@ -389,8 +389,26 @@ let scoped=rows.filter(r=>!company||r.company===company),spec=modules[module];
 const searchWords=normalizeSearch(search).split(' ').filter(Boolean);
 const employeeFilterFields=[{key:'company',label:'الشركة'},...employeeRegisterFields,...(modules.employees.fields||[]).filter(f=>['iqama_expiry','contract_expiry','notes'].includes(f.key))];
 const availableEmployeeFields=employeeFilterFields.filter(f=>f.key==='company'||!['project_manager','projects_director'].includes(user?.role)||['name','code','job','department','project_id','employment_status'].includes(f.key));
-const activeEmployeeFilters=Object.entries(employeeFieldFilters).filter(([key,value])=>value&&availableEmployeeFields.some(f=>f.key===key));
+const managerProjectDirectory=(()=>{
+ const projects=rows.filter(r=>r.module==='projects'&&!r.data?._deleted&&(!company||r.company===company));
+ const choices=new Map();
+ for(const project of projects){
+  const email=String(project.data?.manager_email||'').trim().toLowerCase();
+  const related=rows.find(r=>r.module==='project_managers'&&r.company===project.company&&email&&String(r.data?.email||'').trim().toLowerCase()===email);
+  const managerName=String(related?.data?.name||project.data?.manager_name||'').trim();
+  if(!email&&!managerName)continue;
+  const key=project.company+'|'+(email||normalizeSearch(managerName));
+  const item=choices.get(key)||{key,company:project.company,name:managerName||email,projects:[]};
+  item.projects.push({id:project.id,name:String(project.data?.name||project.code||'مشروع غير مسمى')});
+  choices.set(key,item);
+ }
+ return [...choices.values()].sort((a,b)=>companyDisplayName(a.company).localeCompare(companyDisplayName(b.company),'ar')||a.name.localeCompare(b.name,'ar'));
+})();
+const projectFilterChoices=rows.filter(r=>r.module==='projects'&&!r.data?._deleted&&(!company||r.company===company)&&(!employeeFieldFilters.project_manager_filter||managerProjectDirectory.some(m=>m.key===employeeFieldFilters.project_manager_filter&&m.projects.some(p=>p.id===r.id)))).sort((a,b)=>String(a.data?.name||'').localeCompare(String(b.data?.name||''),'ar'));
+const activeEmployeeFilters=Object.entries(employeeFieldFilters).filter(([key,value])=>value&&(['project_manager_filter','project_filter'].includes(key)||availableEmployeeFields.some(f=>f.key===key)));
 const employeeFilterMatch=(r)=>activeEmployeeFilters.every(([key,expected])=>{
+ if(key==='project_manager_filter')return managerProjectDirectory.some(m=>m.key===expected&&m.company===r.company&&m.projects.some(p=>p.id===r.data?.project_id));
+ if(key==='project_filter')return String(r.data?.project_id||'')===expected;
  const raw=key==='company'?r.company:employeeRegisterValue(r,key,rows);
  const field=modules.employees.fields.find(f=>f.key===key);
  const shown=field&&enumOptions[field.type]?(enumOptions[field.type].find(o=>o[0]===raw)?.[1]||raw):raw;
@@ -935,7 +953,24 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {!integrityReport.issues?.length&&<small>لا توجد مشاكل ترابط مكتشفة ضمن أنواع البيانات المفحوصة. هذا لا يغني عن اختبار الحسابات والتدفقات فعليًا.</small>}
  </div>}</section>}<div className="stats">{[['الموظفون',employeeCount,'موظف مسجل',Users],['الإجازات المعتمدة',projectCount,'طلب إجازة معتمد',CalendarDays],['صافي الرواتب المسجلة',money(contractTotal),'ريال سعودي · كل الأشهر',Wallet],['بانتظار الاعتماد',pending,'معاملة ضمن مسار الاعتماد',FileText]].map(([label,value,note,Icon],i)=><div className="stat" key={label}><div className={'stat-icon i'+i}><Icon size={21}/></div><span>{label}</span><strong>{value}</strong><small>{note}</small></div>)}</div><div className="dashboard-grid"><section className="panel"><div className="panel-head"><h2>الشركات التابعة</h2><span>رؤية مستقلة لكل شركة</span></div><div className="companies">{companies.map((c,i)=><button key={c} className="company-card" onClick={()=>setCompany(c)}><span className="company-monogram">{['ر','م','ب','ط'][i]}</span><div><b>{companyDisplayName(c)}</b><small>{rows.filter(r=>r.company===c&&r.module==='employees').length} موظف · {rows.filter(r=>r.company===c&&r.module==='leave').length} طلب إجازة</small></div><ArrowUpLeft size={18}/></button>)}</div></section><section className="panel next"><span className="eyebrow">من أين تبدأ؟</span><h2>حوّل بياناتك إلى عمل.</h2><p>اختر الشركة، أضف الموظفين، ثم تابع الإجازات والسلف والرواتب والطلبات.</p><button className="primary" onClick={()=>setModule(allowed.includes('employees')?'employees':allowed[0])}>فتح السجلات <ArrowUpLeft size={17}/></button><span className="start-note">تبدأ المنصة بدون بيانات تجريبية.</span></section></div><section className="panel"><div className="panel-head"><h2>آخر التحديثات</h2><span>من السجلات الفعلية</span></div>{scoped.length===0?<div className="empty"><FileText size={32}/><h3>المساحة جاهزة لأول سجل</h3><p>أضف بيانات الشركة أو استورد الموظفين من قالب CSV.</p></div>:<div className="activity-list">{scoped.slice(0,7).map(r=><button key={r.id} onClick={()=>setModule(r.module)}><span className="activity-dot"/><div><b>{title(r)}</b><small>{r.company} · {modules[r.module].label}</small></div><span className={'badge '+r.status}>{states[r.status]}</span><small>{new Date(r.updated_at).toLocaleDateString('ar-SA')}</small></button>)}</div>}</section><div className="footnote">الرواتب والسلف المسجلة لا تنفذ تحويلات بنكية. نقل بيانات النسخة المحلية يتطلب استيرادها.</div></>}
 {spec&&<>{module!=='payroll'&&<div className="toolbar"><div className="search"><Search size={17}/><input type="search" dir="rtl" aria-label="البحث في السجلات" autoComplete="off" placeholder="ابحث بالاسم أو رقم الموظف أو نوع الإجازة…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="search-clear" aria-label="مسح البحث" onClick={()=>setSearch('')}>×</button>}</div><div className="tools"><button onClick={exportRows}><Download size={16}/>تصدير Excel</button><button onClick={printModuleRegister}><FileText size={16}/>طباعة النموذج الرسمي</button>{(permittedWrite(user||{},module))&&<><button onClick={template}><Download size={16}/>قالب Excel شامل</button>{module==='employees'&&<label className="upload"><Upload size={16}/>استيراد Excel / CSV<input type="file" accept=".csv,.xlsx" onChange={e=>readImport(e.target.files?.[0])}/></label>}{module==='projects'&&<button type="button" onClick={()=>{if(!company)return notify('اختر الشركة أولًا لإضافة قسم الدفاع المدني');if(rows.some(r=>r.module==='projects'&&r.company===company&&!r.data?._deleted&&r.data?.name==='قسم الدفاع المدني'))return notify('قسم الدفاع المدني مسجل بالفعل لهذه الشركة');startEdit(null);setEdit(old=>old?{...old,data:{...old.data,name:'قسم الدفاع المدني',code:'CIVIL-DEFENSE'}}:old)}}><Plus size={16}/>إضافة قسم الدفاع المدني</button>}<button className="primary" onClick={()=>startEdit(null)}><Plus size={17}/>إضافة {spec.singular}</button></>}</div></div>}
-{module==='employees'&&<div className="employee-register-actions"><button type="button" onClick={()=>setEmployeeFilterOpen(true)}><Search size={16}/> فلاتر تفصيلية لكل حقل {activeEmployeeFilters.length?'('+activeEmployeeFilters.length+')':''}</button>{activeEmployeeFilters.length>0&&<button type="button" onClick={()=>setEmployeeFieldFilters({})}>مسح جميع الفلاتر</button>}<button type="button" onClick={()=>setShowArchivedEmployees(v=>!v)}>{showArchivedEmployees?'عرض الموظفين الحاليين':'عرض أرشيف الموظفين'}</button><small>{showArchivedEmployees?'الأرشيف للرجوع والاستعادة دون حذف البيانات المالية':'اضغط عرض للاطلاع، أو تعديل لتغيير بيانات الموظف، أو حذف لنقله للأرشيف'}</small></div>}
+{module==='employees'&&<div className="employee-register-actions" dir="rtl" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+ <label style={{display:'flex',alignItems:'center',gap:5,fontSize:12}}>مدير المشروع
+  <select aria-label="فلترة باسم مدير المشروع" value={employeeFieldFilters.project_manager_filter||''} onChange={e=>setEmployeeFieldFilters(old=>({...old,project_manager_filter:e.target.value,project_filter:''}))} style={{minWidth:180,maxWidth:310,padding:'6px 8px'}}>
+   <option value="">جميع مدراء المشاريع</option>
+   {managerProjectDirectory.map(m=><option key={m.key} value={m.key}>{m.name} — {m.projects.map(p=>p.name).join('، ')}{!company?' · '+companyDisplayName(m.company):''}</option>)}
+  </select>
+ </label>
+ <label style={{display:'flex',alignItems:'center',gap:5,fontSize:12}}>المشروع
+  <select aria-label="فلترة باسم المشروع" value={projectFilterChoices.some(p=>p.id===employeeFieldFilters.project_filter)?employeeFieldFilters.project_filter:''} onChange={e=>setEmployeeFieldFilters(old=>({...old,project_filter:e.target.value}))} style={{minWidth:170,maxWidth:290,padding:'6px 8px'}}>
+   <option value="">جميع المشاريع</option>
+   {projectFilterChoices.map(p=><option key={p.id} value={p.id}>{p.data?.name||p.code||'غير محدد'}{!company?' — '+companyDisplayName(p.company):''}</option>)}
+  </select>
+ </label>
+ <button type="button" onClick={()=>setEmployeeFilterOpen(true)}><Search size={16}/> فلاتر تفصيلية لكل حقل {activeEmployeeFilters.length?'('+activeEmployeeFilters.length+')':''}</button>
+ {activeEmployeeFilters.length>0&&<button type="button" onClick={()=>setEmployeeFieldFilters({})}>مسح جميع الفلاتر</button>}
+ <button type="button" onClick={()=>setShowArchivedEmployees(v=>!v)}>{showArchivedEmployees?'عرض الموظفين الحاليين':'عرض أرشيف الموظفين'}</button>
+ <small>{list.length} موظف مطابق · {showArchivedEmployees?'الأرشيف للرجوع والاستعادة دون حذف البيانات المالية':'اضغط عرض للاطلاع أو تعديل لتغيير بيانات الموظف أو حذف لنقله للأرشيف'}</small>
+ </div>}
 {module==='payroll'&&<section className="panel" style={{padding:20,marginBottom:18}}>
  <div className="panel-head payroll-main-heading"><div><h2>مركز مراجعة واعتماد مسيرات الرواتب</h2><span>لوحة موحدة لجميع الشركات · مراحل واضحة ومتابعة مباشرة</span></div><strong className="payroll-month-pill">شهر المسير: {new Date(payrollMonth+'-01T00:00:00').toLocaleDateString('ar-SA',{month:'long',year:'numeric'})}</strong></div>
  <div className="payroll-approval-flow" aria-label="تسلسل اعتماد مسير الرواتب">{payrollStageLabels.map((stage,i)=><div key={stage} className="payroll-flow-step"><span className="payroll-flow-num">{i+1}</span><span>{stage}</span></div>)}</div><div className="payroll-legend"><span><i className="dot complete"/>تم الاعتماد</span><span><i className="dot active"/>تحت الإجراء</span><span><i className="dot upcoming"/>مرحلة لاحقة</span></div>
