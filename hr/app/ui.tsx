@@ -5,7 +5,7 @@ import {employeeRegisterFields,employeeRegisterValue} from '../lib/employee-regi
 import {projectRegisterFields as projectRegisterBaseFields,projectRegisterValue} from '../lib/project-register.mjs';
 import {requestApprovalStages,requestStageView,requestStageTimestamp} from '../lib/request-approval.mjs';
 import {LayoutDashboard,Users,Building2,FileText,Wallet,ShoppingCart,CalendarDays,TriangleAlert,ChartNoAxesCombined,Search,Plus,ArrowUpLeft,Cloud,ChevronLeft,Download,Upload,X,Check,ShieldCheck,LogOut,RefreshCw,ArrowRight,MapPin} from 'lucide-react';
-import {companies,canonicalCompany,companyDisplayName,modules,states,annualLeave,nextContractExpiry,canRead,canWrite,workflow,enumOptions,relationModules,operationalModules,saudiDate,fixedLeaveDays,leaveEndDate,leaveNextDate,leaveCalendarDays,leaveChargedDays,permission,permissionChoice,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners} from '../lib/modules.mjs';
+import {companies,canonicalCompany,companyDisplayName,modules,states,annualLeave,leaveAccrualAsOf,nextContractExpiry,canRead,canWrite,workflow,enumOptions,relationModules,operationalModules,saudiDate,fixedLeaveDays,leaveEndDate,leaveNextDate,leaveCalendarDays,leaveChargedDays,permission,permissionChoice,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners} from '../lib/modules.mjs';
 import {Attendance,Migration,Attachments,RecordPaper,RecordHistory} from './operations';
 import ClientFinance from './client-finance';
 import {companyLogoPath,companyOfficialName} from '../lib/company-brand.mjs';
@@ -497,7 +497,7 @@ const fieldsFor=spec?spec.fields.filter(f=>f.type!=='internal'&&(module!=='leave
 const leaveBalanceFor=(employeeId,companyName,request=null)=>{
  const employee=rows.find(x=>x.module==='employees'&&x.id===employeeId&&x.company===companyName);
  if(!employee)return {entitled:null,used:null,remaining:null,after:null,reason:'بيانات الموظف غير متاحة'};
- const d=employee.data||{},service=annualLeave(d.hire_date);
+ const d=employee.data||{},service=annualLeave(d.hire_date,leaveAccrualAsOf(d));
  if(d.leave_balance_mode!=='manual'&&!service&&d.opening_leave_confirmed!=='yes')return {entitled:null,used:null,remaining:null,after:null,reason:'يجب استكمال تاريخ التعيين أو اعتماد رصيد مرحّل'};
  const entitled=d.leave_balance_mode==='manual'?Number(d.manual_leave_entitlement||0):(service?.accrued||0)+(d.opening_leave_confirmed==='yes'?Number(d.opening_leave||0):0);
  const used=rows.filter(x=>x.module==='leave'&&x.company===companyName&&x.status==='approved'&&x.data?.employee_id===employeeId&&(x.data.balance_deducted??(!x.data.leave_type||x.data.leave_type==='annual'))).reduce((sum,x)=>sum+Number((x.data.paid_days??x.data.days) || 0),0);
