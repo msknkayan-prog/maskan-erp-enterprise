@@ -2005,3 +2005,19 @@ test('advance repayment ledger is embedded and sidebar hides redundant repayment
  assert.match(modules,/repayments:\{label:'سداد السلف'/);
  assert.match(modules,/leave_dues:\{label:'مستحقات الإجازة'/);
 });
+
+test('leave dues require general manager approval before finance payout with immutable login roles',()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const schema=readFileSync(new URL('../backend/modules.mjs',import.meta.url),'utf8');
+ assert.match(backend,/body.action==='leave_dues_workflow'/);
+ assert.match(backend,/decision==='submit'&&state==='draft'&&canSubmit/);
+ assert.match(backend,/decision==='approve'&&state==='projects_director'&&isDirector/);
+ assert.match(backend,/decision==='pay'&&state==='approved'&&isFinance/);
+ assert.match(backend,/if\(mod==='leave_dues'\)throw Error\('مستحقات الإجازة تعتمد حصريًا/);
+ assert.match(backend,/advance_installments|leave_dues_workflow/);
+ assert.match(ui,/مسار مستحقات الإجازة: مدير إدارة المشاريع/);
+ assert.match(ui,/توثيق صرف المستحقات/);
+ assert.match(schema,/f\('deduction_reason','بيان الخصومات'\)/);
+ assert.match(schema,/f\('other_description','تفاصيل الإضافات'\)/);
+});
