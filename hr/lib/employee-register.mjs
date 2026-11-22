@@ -1,4 +1,4 @@
-import {annualLeave,nextContractExpiry,serviceDuration,companyDisplayName} from './modules.mjs';
+import {annualLeave,leaveAccrualAsOf,nextContractExpiry,serviceDuration,companyDisplayName} from './modules.mjs';
 export const employeeRegisterFields = [
  ['working_company','الشركة التي يعمل بها'],['code','الرقم الوظيفي'],['name','اسم الموظف'],['manager','المدير المباشر'],['project_code','رمز المشروع'],['project_manager_name','اسم مدير المشروع'],
  ['hire_date','تاريخ التعيين'],['job','المسمى الوظيفي'],['department','القسم'],
@@ -15,10 +15,10 @@ export const employeeRegisterFields = [
 export function employeeRegisterValue(row,key,rows){
  const data=row.data||{};
  const project=rows.find(item=>item.id===data.project_id&&item.module==='projects');
- const service=annualLeave(data.hire_date);
+ const service=annualLeave(data.hire_date,leaveAccrualAsOf(data));
  const leaves=rows.filter(item=>item.module==='leave'&&item.status==='approved'&&item.data.employee_id===row.id);
  const annual=leaves.filter(item=>item.data.balance_deducted??(!item.data.leave_type||item.data.leave_type==='annual'));
- const used=annual.reduce((total,item)=>total+Number(item.data.days||0),0);
+ const used=annual.reduce((total,item)=>total+Number(item.data.paid_days??Math.max(0,Number(item.data.days||0)-Number(item.data.unpaid_days||0))),0);
  if(key==='working_company')return companyDisplayName(data.working_company||row.company);
  if(key==='project_code'){
   const code=String(project?.data.code||data.project_number||data.project_code||data.extra_fields?.['رقم المشروع']||'').trim();
@@ -26,11 +26,11 @@ export function employeeRegisterValue(row,key,rows){
  }
  if(key==='project_manager_name')return project?.data.manager_name||data.project_manager_name||'';
  if(key==='project_id')return project?.data.name||data.project_name||data['اسم المشروع']||'';
- if(key==='contract_expiry')return nextContractExpiry(data.hire_date)||'أكمل تاريخ التعيين';
+ if(key==='contract_expiry')return data.contract_expiry_mode==='manual'?(data.contract_expiry||'حدد تاريخ انتهاء العقد'):nextContractExpiry(data.hire_date)||'أكمل تاريخ التعيين';
  if(key==='service_years'){const span=serviceDuration(data.hire_date);return span?span.years+' سنة، '+span.months+' شهر، '+span.days+' يوم':'أكمل تاريخ التعيين';}
  if(key==='service_total_days')return serviceDuration(data.hire_date)?.totalDays??'أكمل تاريخ التعيين';
- if(key==='accrued_leave')return service?.accrued??'أكمل تاريخ التعيين';
- if(key==='current_leave'){const carry=data.opening_leave_confirmed==='yes'?Number(data.opening_leave||0):0;return service||data.opening_leave_confirmed==='yes'?Math.round(((service?.accrued||0)+carry-used)*100)/100:'أكمل تاريخ التعيين';}
+ if(key==='accrued_leave')return data.leave_balance_mode==='manual'?Number(data.manual_leave_entitlement||0):service?.accrued??'أكمل تاريخ التعيين';
+ if(key==='current_leave'){const carry=data.opening_leave_confirmed==='yes'?Number(data.opening_leave||0):0;return service||data.leave_balance_mode==='manual'||data.opening_leave_confirmed==='yes'?Math.round(((data.leave_balance_mode==='manual'?Number(data.manual_leave_entitlement||0):(service?.accrued||0)+carry)-used)*100)/100:'أكمل تاريخ التعيين';}
  if(key==='latest_leave'){
   const latest=[...leaves].sort((a,b)=>String(b.data.request_date||b.data.start||b.created_at).localeCompare(String(a.data.request_date||a.data.start||a.created_at)))[0];
   return latest?[latest.data.request_date||latest.data.start,latest.code].filter(Boolean).join(' · '):data.last_leave_request||data.extra_fields?.['آخر طلب إجازة معتمد']||'';
