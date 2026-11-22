@@ -654,53 +654,37 @@ if(body.action==='record_opening_advance_repayment'){
   return json({ok:true,deleted:true});
  }
  if(body.action==='disburse'){if(mod!=='advances'||!old||old.status!=='approved'||!isRequestFinanceActor(u)||!permission(u,mod,'approve'))throw Error('403');const reference=String(body.reference||'').trim();if(!reference||reference.length>200)throw Error('مرجع الصرف مطلوب');const data={...JSON.parse(old.data),payment_reference:reference,paid_at:now};const result=await db.batch([db.prepare("UPDATE records SET data=?,status='paid',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=?").bind(JSON.stringify(data),now,mutation,old.id,old.revision),db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,old.id,'record_disbursement',now,JSON.stringify({reference}),old.id,mutation)]);if(!result[0].meta.changes)throw Error('تغير السجل؛ حدّث الصفحة');return json({ok:true});}
-if(body.action==='transition'){if(['payroll','payroll_batches'].includes(mod))throw Error('اعتماد المسيرات الشهرية يتم حصريًا من نافذة المسير الشهري');if(!permission(u,mod,'approve'))throw Error('403');if(!old)throw Error('السجل غير موجود');if(operationalModules.includes(mod)||['repayments'].includes(mod))throw Error('هذا السجل لا يتطلب مسار اعتماد');const current=old.status;let next=mod==='payroll'?(current==='draft'?'hr':current==='hr'?'finance':current==='finance'?'approved':null):(current==='draft'?workflow[1]:workflow[workflow.indexOf(current)+1]);const decision=body.decision||'approve';if(decision==='return')next='draft';if(decision==='reject')next='rejected';if(!['approve','return','reject'].includes(decision))throw Error('قرار غير صالح');if(decision!=='approve'&&!String(body.note||'').trim())throw Error('سبب الإعادة أو الرفض مطلوب');if(!next)throw Error('السجل مغلق');if(current==='draft'&&decision!=='approve')throw Error('القرار غير متاح للمسودة');const routedRequest=['leave','advances'].includes(mod);if(current==='draft'){if(!permittedWrite(u,mod))throw Error('403');}else if(routedRequest?(u.role!=='admin'&&!isRequestStageActor(u,current)):(u.role!=='admin'&&u.role!==current))throw Error('403');const details=JSON.parse(old.data);
-if(current==='draft'&&decision==='approve'&&next==='project_manager'){
- const employeeRecord=details.employee_id?await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(details.employee_id,old.company).first<any>():null;
- const projectId=String(details.project_id|| (employeeRecord?JSON.parse(employeeRecord.data).project_id:'') ||'').trim();
- if(!projectId)throw Error('يجب ربط الموظف بمشروع قبل إرسال الطلب إلى مدير المشروع');
- const project=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(projectId).first<any>();
- if(!project)throw Error('المشروع غير مسجل في وحدة المشاريع والتكليفات');
- const pd=JSON.parse(project.data||'{}');
- if(project.company!==old.company&&!(pd._shared_companies||[]).includes(old.company))throw Error('المشروع لا يتبع شركة الموظف');
- const employeeData=employeeRecord?JSON.parse(employeeRecord.data||'{}'):{};
- const delegatedEmail=String(employeeData.delegated_manager_email||'').trim().toLowerCase();
- const managerEmail=delegatedEmail||String(pd.manager_email||'').trim().toLowerCase();
- if(!managerEmail)throw Error('يجب تعيين مدير المشروع في ملف المشروع قبل إرسال الطلب');
- const manager=await db.prepare('SELECT email,role,is_active,companies FROM members WHERE email=?').bind(managerEmail).first<any>();
- if(!isAuthorizedProjectManagerAccount({...manager,email:managerEmail},pd.manager_name||magdiProjectManagerName))throw Error('مدير المشروع المعيّن ليس لديه حساب نشط بدور مدير مشروع');
+if(body.action==='transition'){if(['payroll','payroll_batches'].includes(mod))throw Error('اعتماد المسيرات الشهرية يتم حصريًا من نافذة المسير الشهري');if(!permission(u,mod,'approve'))throw Error('403');if(!old)throw Error('السجل غير موجود');if(operationalModules.includes(mod)||['repayments'].includes(mod))throw Error('هذا السجل لا يتطلب مسار اعتماد');const current=old.status;let next=mod==='payroll'?(current==='draft'?'hr':current==='hr'?'finance':current==='finance'?'approved':null):(current==='draft'?workflow[1]:workflow[workflow.indexOf(current)+1]);const decision=body.decision||'approve';if(decision==='return')next='draft';if(decision==='reject')next='rejected';if(!['approve','return','reject'].includes(decision))throw Error('قرار غير صالح');if(decision!=='approve'&&!String(body.note||'').trim())throw Error('سبب الإعادة أو الرفض مطلوب');if(!next)throw Error('السجل مغلق');if(current==='draft'&&decision!=='approve')throw Error('القرار غير متاح للمسودة');const routedRequest=['leave','advances','resignations'].includes(mod);if(current==='draft'){if(!permittedWrite(u,mod))throw Error('403');}else if(routedRequest?(u.role!=='admin'&&!isRequestStageActor(u,current)):(u.role!=='admin'&&u.role!==current))throw Error('403');const details=JSON.parse(old.data);
+
+if(routedRequest&&details.employee_id&&((current==='draft'&&decision==='approve'&&next==='project_manager')||(current==='project_manager'&&decision==='approve'&&u.role!=='admin'))){
+ const employeeRecord=await db.prepare("SELECT id,company,data FROM records WHERE id=? AND module='employees' AND company=?").bind(String(details.employee_id),old.company).first<any>();
+ if(!employeeRecord)throw Error('لم يتم العثور على الموظف أو أن شركته لا تطابق شركة الطلب');
+ const employeeData=JSON.parse(employeeRecord.data||'{}');
+ if(employeeData._archived||employeeData._deleted)throw Error('الموظف غير نشط في سجل الموظفين');
+ const directEmail=String(employeeData.manager_email||employeeData.supervisor_account||'').trim().toLowerCase();
+ if(!directEmail)throw Error('يجب تحديد المدير المباشر المخوّل في سجل الموظف قبل إرسال الطلب للاعتماد');
+ const manager=await db.prepare('SELECT email,role,is_active,companies,username FROM members WHERE lower(email)=?').bind(directEmail).first<any>();
+ if(!isAuthorizedProjectManagerAccount({...manager,email:directEmail},employeeData.manager||''))throw Error('المدير المباشر المحدد ليس لديه حساب اعتماد نشط');
  if(manager.companies&&manager.companies!=='*'){
-  let authorized=false;
-  try{authorized=JSON.parse(manager.companies).includes(old.company)}catch{}
-  if(!authorized)throw Error('مدير المشروع لا يمتلك صلاحية الشركة التابعة للطلب');
+  let scope:any=[];try{scope=JSON.parse(manager.companies)}catch{}
+  if(!Array.isArray(scope)||!scope.includes(old.company))throw Error('المدير المباشر لا يمتلك صلاحية الشركة التابعة للموظف');
  }
- const dir=(await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(old.company).all()).results.map((r:any)=>JSON.parse(r.data)).find((r:any)=>String(r.email||'').trim().toLowerCase()===managerEmail);
- if(!dir&&!delegatedEmail&&!isMagdiGeneralManagerAccount({...manager,email:managerEmail},pd.manager_name))throw Error('بيانات مدير المشروع غير مسجلة في دليل مدراء المشاريع');
- details.project_id=projectId;
- details.project_manager={name:isMagdiGeneralManagerAccount({...manager,email:managerEmail},pd.manager_name)?magdiProjectManagerName:dir?.name||pd.manager_name||managerEmail,email:managerEmail,phone:dir?.phone||'',project_name:pd.name||''};
- // A project manager prepares and sends their own or their team's request.
- // HR/admin-created drafts still wait for the assigned manager's sign-off.
- if(routedRequest&&isRequestStageActor(u,'project_manager')&&String(u.email||'').trim().toLowerCase()===managerEmail){
-  if(u.projects&&u.projects!=='*'&&!JSON.parse(u.projects).includes(projectId))throw Error('المشروع خارج نطاق صلاحية مدير المشروع');
-  next='projects_director';
-  details.manager_submitted_by=u.email;
-  details.manager_submitted_at=now;
- }
-}
-if(current==='project_manager'&&u.role!=='admin'){
- const employeeRecord=details.employee_id?await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(details.employee_id,old.company).first<any>():null;
- const projectId=String(details.project_id||(employeeRecord?JSON.parse(employeeRecord.data).project_id:'')||'').trim();
- if(!projectId)throw Error('الطلب غير مرتبط بمشروع محدد');
- const project=await db.prepare("SELECT data FROM records WHERE id=? AND module='projects'").bind(projectId).first<any>();
- const employeeData=employeeRecord?JSON.parse(employeeRecord.data||'{}'):{};
- const explicitManager=String(employeeData.delegated_manager_email||'').trim().toLowerCase();
- const assignedEmail=String(explicitManager||details.project_manager?.email||JSON.parse(project?.data||'{}').manager_email||'').trim().toLowerCase();
- if(!project||assignedEmail!==String(u.email||'').trim().toLowerCase())throw Error('الطلب يخص مدير مشروع آخر');
- if(!explicitManager&&u.projects&&u.projects!=='*'&&!JSON.parse(u.projects).includes(projectId))throw Error('ليس لديك صلاحية مراجعة طلبات هذا المشروع');
- if(explicitManager&&details.project_manager?.email!==explicitManager){
-  const directory=await db.prepare("SELECT data FROM records WHERE module='project_managers' AND company=?").bind(old.company).all();
-  const assigned=directory.results.map((r:any)=>JSON.parse(r.data||'{}')).find((d:any)=>String(d.email||'').trim().toLowerCase()===explicitManager);
-  details.project_manager={...details.project_manager,email:explicitManager,name:assigned?.name||explicitManager,phone:assigned?.phone||''};
+ const validManagers=await availableEmployeeDirectManagers(db,old.company);
+ const direct=validManagers.find((item:any)=>item.hasLogin&&item.email===directEmail);
+ if(!direct)throw Error('المدير المباشر غير موجود ضمن قائمة المدراء المخولين للاعتماد؛ عيّنه من سجل الموظف');
+ if(current==='draft'){
+  details.direct_manager={name:direct.name,email:directEmail,phone:direct.phone||'',employee_id:details.employee_id,assigned_at:now};
+  details.project_manager={name:direct.name,email:directEmail,phone:direct.phone||'',project_name:'',approval_role:'direct_manager'};
+  if(employeeData.project_id)details.project_id=employeeData.project_id;
+  if(String(u.email||'').trim().toLowerCase()===directEmail){
+   next='projects_director';
+   details.manager_submitted_by=u.email;
+   details.manager_submitted_at=now;
+  }
+ }else{
+  const approvedEmail=String(details.direct_manager?.email||details.project_manager?.email||directEmail).trim().toLowerCase();
+  if(approvedEmail!==String(u.email||'').trim().toLowerCase())throw Error('هذا الطلب بانتظار اعتماد المدير المباشر المخوّل، وليس مدير المشروع');
+  if(approvedEmail!==directEmail)throw Error('تغير المدير المباشر بعد إحالة الطلب؛ أعد الطلب للتجهيز وأرسله إلى المدير الحالي');
  }
 }
 if(routedRequest){
