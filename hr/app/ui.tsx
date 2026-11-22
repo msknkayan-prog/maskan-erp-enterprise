@@ -17,7 +17,7 @@ const money=n=>Number(n||0).toLocaleString('ar-SA',{maximumFractionDigits:2});
 const projectManagerContactEmail='mskn.kayan@gmail.com';
 function ApprovalStageCell({row,stage,managerName}){
  const state=requestStageView(row,stage.id);
- const name=stage.id==='project_manager'?(row.data?.project_manager?.name||managerName||'مدير المشروع'):stage.name;
+ const name=stage.id==='project_manager'?(row.data?.direct_manager?.name||row.data?.project_manager?.name||managerName||'المدير المباشر'):stage.name;
  const at=requestStageTimestamp(row,stage.id);
  const time=at&&!Number.isNaN(Date.parse(at))?new Date(at).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
  return <div className="approval-track-cell" aria-label={stage.title+': '+state.label}>
@@ -27,7 +27,7 @@ function ApprovalStageCell({row,stage,managerName}){
  </div>;
 }
 function ApprovalCompactStrip({row,managerName,approvable=false,saving=false,onApprove,onReturn,onReject}){
- const title=stage=>stage.id==='project_manager'?(row.data?.project_manager?.name||managerName||stage.name):stage.name;
+ const title=stage=>stage.id==='project_manager'?(row.data?.direct_manager?.name||row.data?.project_manager?.name||managerName||stage.name):stage.name;
  return <div dir="rtl" role="group" aria-label="مراحل اعتماد الطلب" style={{display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',minWidth:'max-content',padding:'4px 2px'}}>
   {requestApprovalStages.map(stage=>{
    const current=requestStageView(row,stage.id);
@@ -379,34 +379,21 @@ async function deleteProjectManager(row){
  }
  }catch(err){if(assignmentSaved){setEdit(null);await refresh();notify('تم حفظ تعيين المدير وتحديث الموظفين، لكن تعذر حفظ باقي تعديلات المشروع: '+err.message)}else{setFormError(err.message||'تعذر حفظ السجل');notify(err.message||'تعذر حفظ السجل')}}finally{setSaving(false)}}
 function draftManagerProblem(request){
- if(!['leave','advances'].includes(request.module)||request.status!=='draft')return null;
+ if(!['leave','advances','resignations'].includes(request.module)||request.status!=='draft')return null;
  const employee=rows.find(r=>r.module==='employees'&&r.id===request.data?.employee_id&&r.company===request.company);
- const projectId=String(request.data?.project_id||employee?.data?.project_id||'');
- if(!projectId)return {kind:'employee',employee,message:'الموظف غير مرتبط بمشروع'};
- const project=rows.find(r=>r.module==='projects'&&r.id===projectId);
- if(!project)return {kind:'missing_project',employee,message:'مشروع الموظف غير موجود في السجلات'};
- if(project.company!==request.company&&!project.data?._shared_companies?.includes(request.company))return {kind:'wrong_company',employee,project,message:'المشروع لا يتبع شركة الطلب'};
- const delegated=String(employee?.data?.delegated_manager_email||'').trim();
- if(!delegated&&!String(project.data?.manager_email||'').trim())return {kind:'project',employee,project,message:'لم يُعيّن مدير مشروع لهذا الطلب'};
+ if(!employee)return {kind:'employee',message:'لا يوجد موظف مرتبط بهذا الطلب'};
+ const email=String(employee.data?.manager_email||employee.data?.supervisor_account||'').trim().toLowerCase();
+ const authorized=(employeeManagerOptions[request.company]||[]).find(m=>m.email===email&&m.hasLogin);
+ if(!email||!authorized)return {kind:'direct',employee,message:'يجب اختيار المدير المباشر المخوّل من سجل الموظف'};
  return null;
 }
 function repairDraftManager(request){
  const issue=draftManagerProblem(request);
  if(!issue)return;
- if(user?.role!=='admin')return notify('إصلاح تكليف مدير المشروع يتطلب صلاحية مسؤول النظام');
- if(issue.kind==='employee'&&issue.employee){
-  setRepairRequest({id:request.id,module:request.module});
-  setEmployeeReadOnly(false);setModule('employees');setEdit({...issue.employee,data:{...issue.employee.data}});
-  return;
- }
- if(issue.kind==='project'&&issue.project){
-  setRepairRequest({id:request.id,module:request.module,projectId:issue.project.id});
-  setModule('projects');setEdit({...issue.project,data:{...issue.project.data}});
-  return;
- }
- notify('راجع سجل الموظف والمشروع المرتبط به في وحدة المشاريع والتكليفات؛ لن يتم تجاوز المراحل أو تعيين مدير غير موثّق.');
+ if(!['admin','hr'].includes(user?.role))return notify('تعيين المدير المباشر متاح لمسؤول النظام وشؤون الموظفين');
+ if(issue.employee){setRepairRequest({id:request.id,module:request.module});setEmployeeReadOnly(false);setModule('employees');setEdit({...issue.employee,data:{...issue.employee.data}});return;}
+ notify('اربط الطلب بموظف مسجل أولاً، ثم حدد المدير المباشر المخوّل للاعتماد');
 }
-
 async function saveEmployeeDirectManager(row,choice){
  if(!['admin','hr'].includes(user?.role)||!permittedWrite(user||{},'employees'))return false;
  setSaving(true);
@@ -804,10 +791,10 @@ const managerDirectoryForRequest=(record,companyName)=>{
  const projectId=record?.data?.project_id||employeeData.project_id;
  const project=rows.find(r=>r.id===projectId&&r.module==='projects'&&(r.company===companyName||Array.isArray(r.data?._shared_companies)&&r.data._shared_companies.includes(companyName)));
  if(!project)return {project:'غير محدد',name:'',email:'',phone:'',direct_name:directRow?.data.name||employeeData.manager||'',direct_email:directRow?.data.email||employeeData.manager_email||''};
- const effectiveEmail=String(employeeData.delegated_manager_email||project.data.manager_email||'').trim().toLowerCase();
+ const effectiveEmail=String(employeeData.manager_email||employeeData.supervisor_account||'').trim().toLowerCase();
  const projectManager=rows.find(r=>r.module==='project_managers'&&r.company===companyName&&String(r.data.email||'').toLowerCase()===effectiveEmail);
  const activeAccount=members.find(m=>String(m.email||'').toLowerCase()===effectiveEmail);
- return {project:project.data.name||'',name:projectManager?.data.name||activeAccount?.display_name||activeAccount?.username||project.data.manager_name||'',email:effectiveEmail,phone:projectManager?.data.phone||'',direct_name:directRow?.data.name||employeeData.manager||'',direct_email:directRow?.data.email||employeeData.manager_email||''};
+ return {project:project.data.name||'',name:projectManager?.data.name||activeAccount?.display_name||activeAccount?.username||employeeData.manager||'',email:effectiveEmail,phone:projectManager?.data.phone||'',direct_name:directRow?.data.name||employeeData.manager||'',direct_email:directRow?.data.email||employeeData.manager_email||''};
 };
 function startEdit(row){
  setFormError('');
@@ -861,9 +848,9 @@ const allowed=Object.keys(modules).filter(k=>k!=='payroll_batches'&&user&&permit
 const clientFinanceAuthorized=user&&financePermissions(user.role,user.permissions,'view');
 const pendingRequestTypes=['leave','advances','payroll_batches','resignations','returns','terminations','leave_dues','settlements','warnings','appointments'];
 const accessiblePendingTypes=pendingRequestTypes.filter(k=>user&&permittedRead(user,k));
-const approvalStages=[{id:'project_manager',label:'مدير المشروع\nإعداد وإرسال الطلب'},{id:'projects_director',label:'إدارة المشاريع\nمجدي محجوب'},{id:'hr',label:'شؤون الموظفين\nم. محمد يوسف'},{id:'finance',label:'المالية والصرف\nمصعب عبد القيوم'}];
+const approvalStages=[{id:'project_manager',label:'المدير المباشر\nإعداد وإرسال الطلب'},{id:'projects_director',label:'إدارة المشاريع\nمجدي محجوب'},{id:'hr',label:'شؤون الموظفين\nم. محمد يوسف'},{id:'finance',label:'المالية والصرف\nمصعب عبد القيوم'}];
  const approvalStateIndex=stage=>stage==='approved'||stage==='paid'?approvalStages.length:stage==='draft'?0:Math.max(0,approvalStages.findIndex(x=>x.id===stage));
- const requestCanApprove=(row)=>['leave','advances'].includes(row.module)?row.status==='draft'?permittedWrite(user||{},row.module):user?.role==='admin'||isRequestStageActor(user,row.status):user?.role==='admin'||row.status==='draft'&&permittedWrite(user||{},row.module)||row.status===user?.role;
+ const requestCanApprove=(row)=>['leave','advances','resignations'].includes(row.module)?row.status==='draft'?permittedWrite(user||{},row.module):user?.role==='admin'||isRequestStageActor(user,row.status):user?.role==='admin'||row.status==='draft'&&permittedWrite(user||{},row.module)||row.status===user?.role;
  const requestVisibleInInbox=(r)=>user?.role!=='project_manager'||r.module==='payroll_batches'&&r.status==='manager_review'||['draft','project_manager'].includes(r.status)||isRequestFinanceActor(user)&&['leave','advances'].includes(r.module)&&r.status==='finance';
  const pendingStages=['draft','returned','project_manager','projects_director','hr','finance','manager_review','projects_review','finance_review'];
 const pendingRecordIndex=new Map(rows.map(r=>[r.id,r]));
@@ -873,7 +860,7 @@ const pendingRequestRows=rows.filter(requestVisibleInInbox).filter(r=>accessible
  return normalizeSearch([r.company,modules[r.module]?.label,r.code,states[r.status]||cycleStatus[r.status],r.data?.month,emp?.data?.name,emp?.data?.code,r.data?.name,r.data?.notes].join(' ')).includes(normalizeSearch(pendingSearch));
 }).sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
 const adminApprovalRows=rows.filter(r=>accessiblePendingTypes.includes(r.module)&&pendingStages.includes(r.status)&&(!company||r.company===company)&&!r.data?._deleted).filter(r=>r.module!=='payroll_batches'||rows.some(item=>item.module==='payroll'&&item.data?.batch_id===r.id&&!item.data?.excluded)).sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
-const adminStageGroups=[...requestApprovalStages.map(stage=>({id:stage.id,title:stage.title,owner:stage.name,records:adminApprovalRows.filter(r=>r.status===stage.id)})),{id:'draft',title:'إعداد الطلب وإرساله',owner:'مدير المشروع / منشئ الطلب',records:adminApprovalRows.filter(r=>r.status==='draft'||r.status==='returned')},{id:'other',title:'موافقات ومسيرات أخرى',owner:'حسب دورة اعتماد المسير',records:adminApprovalRows.filter(r=>!['draft','returned',...requestApprovalStages.map(x=>x.id)].includes(r.status))}];
+const adminStageGroups=[...requestApprovalStages.map(stage=>({id:stage.id,title:stage.title,owner:stage.name,records:adminApprovalRows.filter(r=>r.status===stage.id)})),{id:'draft',title:'إعداد الطلب وإرساله',owner:'المدير المباشر / منشئ الطلب',records:adminApprovalRows.filter(r=>r.status==='draft'||r.status==='returned')},{id:'other',title:'موافقات ومسيرات أخرى',owner:'حسب دورة اعتماد المسير',records:adminApprovalRows.filter(r=>!['draft','returned',...requestApprovalStages.map(x=>x.id)].includes(r.status))}];
 const pendingEmployeeName=r=>{
  const id=r.data?.employee_id||pendingRecordIndex.get(r.data?.leave_id)?.data?.employee_id;
  const employee=pendingRecordIndex.get(id);
@@ -1028,7 +1015,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    const open=()=>{if(isPayroll){setPayrollMonth(request.data?.month||payrollMonth);setPayrollCompany(request.company);setPayrollManageBatchId(request.id);setModule('payroll')}else{setModule(request.module);setEdit({...request,data:{...request.data}})}};
    return <tr key={request.id}><td>{companyDisplayName(request.company)}</td><td>{modules[request.module]?.singular||request.module}</td><td>{pendingEmployeeName(request)}</td><td><span className={'badge '+request.status}>{states[request.status]||cycleStatus[request.status]||request.status}</span></td><td><div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
     <button type="button" onClick={open} disabled={saving}>عرض</button>
-    {user?.role==='admin'&&draftManagerProblem(request)&&<button type="button" disabled={saving} onClick={()=>repairDraftManager(request)} style={{fontSize:11}}>إصلاح تكليف مدير المشروع</button>}
+    {user?.role==='admin'&&draftManagerProblem(request)&&<button type="button" disabled={saving} onClick={()=>repairDraftManager(request)} style={{fontSize:11}}>تعيين المدير المباشر</button>}
     {canDirect&&<><button type="button" className="primary" disabled={saving} onClick={()=>transition(request)}>{request.status==='draft'?'إرسال للاعتماد':'اعتماد نيابة عن المخوّل'}</button>
     {request.status!=='draft'&&<><button type="button" disabled={saving} onClick={()=>{const note=window.prompt('سبب إعادة الطلب للمراجعة');if(note?.trim())transition(request,'return',note.trim())}}>إعادة</button><button type="button" className="danger-action" disabled={saving} onClick={()=>{const note=window.prompt('سبب رفض الطلب');if(note?.trim())transition(request,'reject',note.trim())}}>رفض</button></>}</>}
     {isPayroll&&<small>تُعتمد الرواتب من نافذة المسير</small>}
@@ -1477,10 +1464,15 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   </div>
  </section>
 </div>}
-{edit&&spec&&<div className="modal-backdrop" onClick={()=>!saving&&setEdit(null)}><section className="modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="eyebrow">{edit.id?'بيانات السجل':'سجل جديد'}</span><h2>{module==='employees'?(edit.id?(employeeReadOnly?'عرض بيانات الموظف':'تعديل بيانات الموظف'):'إضافة موظف جديد'):spec.singular}</h2></div><button disabled={saving} onClick={()=>setEdit(null)} aria-label="إغلاق"><X/></button></div>{['leave','advances'].includes(module)&&edit.id&&edit.status==='draft'&&user?.role==='admin'&&draftManagerProblem({...edit,module})&&<div dir="rtl" role="alert" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:9,flexWrap:'wrap',padding:'9px 12px',margin:'8px 0',background:'#fff7e6',border:'1px solid #e0bd76',borderRadius:8}}>
- <span style={{fontSize:12,color:'#745020'}}><strong>تكليف مدير المشروع:</strong> {draftManagerProblem({...edit,module}).message} — يلزم تصحيحه قبل إرسال الطلب للاعتماد.</span>
- <button type="button" disabled={saving} onClick={()=>repairDraftManager({...edit,module})}>{draftManagerProblem({...edit,module}).kind==='project'?'تعيين / تعديل مدير المشروع':'تعديل مشروع الموظف'}</button>
+{edit&&spec&&<div className="modal-backdrop" onClick={()=>!saving&&setEdit(null)}><section className="modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="eyebrow">{edit.id?'بيانات السجل':'سجل جديد'}</span><h2>{module==='employees'?(edit.id?(employeeReadOnly?'عرض بيانات الموظف':'تعديل بيانات الموظف'):'إضافة موظف جديد'):spec.singular}</h2></div><button disabled={saving} onClick={()=>setEdit(null)} aria-label="إغلاق"><X/></button></div>{['leave','advances','resignations'].includes(module)&&edit.id&&edit.status==='draft'&&draftManagerProblem({...edit,module})&&<div dir="rtl" role="alert" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:9,flexWrap:'wrap',padding:'9px 12px',margin:'8px 0',background:'#fff7e6',border:'1px solid #e0bd76',borderRadius:8}}>
+ <span style={{fontSize:12,color:'#745020'}}><strong>اعتماد المدير المباشر:</strong> {draftManagerProblem({...edit,module}).message} — يلزم تصحيحه قبل إرسال الطلب للاعتماد.</span>
+ <button type="button" disabled={saving} onClick={()=>repairDraftManager({...edit,module})}>فتح سجل الموظف</button>
  </div>}
+{['leave','advances','resignations'].includes(module)&&edit.id&&edit.status==='draft'&&['admin','hr'].includes(user?.role)&&(()=>{const employee=rows.find(r=>r.module==='employees'&&r.id===edit.data?.employee_id&&r.company===edit.company);return employee?<div dir="rtl" style={{padding:'10px 12px',margin:'8px 0',background:'#f5f9f5',border:'1px solid #c7dac7',borderRadius:8}}>
+ <strong style={{display:'block',marginBottom:6}}>المدير المباشر المخوّل لاعتماد هذا الطلب</strong>
+ <EmployeeDirectManagerCell key={employee.id+':'+String(employee.revision)} employee={employee} rows={rows} managers={employeeManagerOptions[employee.company]||[]} disabled={saving||!permittedWrite(user||{},'employees')} onSave={saveEmployeeDirectManager}/>
+ <small style={{display:'block',marginTop:6}}>يُختار المدير من الحسابات المخوّلة المسجلة بالمنصة. سيُحفظ التكليف في سجل الموظف لجميع طلباته الجديدة، ولا يلزم أن يكون هو مدير المشروع.</small>
+ </div>:null;})()}
 {module==='employees'&&edit.id&&<div className="employee-edit-mode"><span>{employeeReadOnly?'وضع العرض: الحقول للقراءة فقط':'وضع التعديل: يمكن تغيير البيانات ثم حفظ السجل'}</span>{employeeReadOnly&&permittedWrite(user||{},'employees')&&<button type="button" disabled={saving} onClick={()=>setEmployeeReadOnly(false)}>تفعيل تعديل بيانات الموظف</button>}</div>}{module==='employees'&&edit.id&&['admin','hr'].includes(user?.role)&&permittedWrite(user||{},'employees')&&<div style={{padding:'8px 0 12px',display:'flex',gap:8,flexWrap:'wrap'}}><button type="button" className="primary" disabled={saving} onClick={()=>cloneEmployeeToSecondCompany(edit)}>إضافة الموظف إلى شركة ثانية (سجل مستقل)</button><small>للنقل الكامل: فعّل التعديل، ثم اختر الشركة الجديدة من حقل الشركة. يحتفظ النظام بمعاملات الشركة السابقة.</small></div>}{module==='employees'&&edit.dual_source_id&&<div className="employee-company-transfer-note" role="status"><strong>إضافة توظيف ثانٍ مستقل</strong><span>الأصل: {edit.dual_source_company} / رقم {edit.dual_source_code}. اختر شركة مختلفة؛ وسيتم توليد رقم وظيفي جديد تلقائيًا عند الحفظ. بيانات الهوية منسوخة للمراجعة، بينما الراتب والبدلات والتحويل البنكي قابلة للتعديل باستقلال. لن يتغير سجل الشركة الأولى.</span></div>}{module==='employees'&&edit.id&&<div style={{padding:'12px 0',display:'flex',gap:8,flexWrap:'wrap'}}>{[['leave','الإجازات'],['advances','السلف'],['warnings','الإنذارات'],['resignations','الاستقالات'],['returns','المباشرة'],['terminations','إنهاء الخدمة'],['leave_dues','مستحقات الإجازة'],['settlements','المخالصات']].filter(([key])=>allowed.includes(key)).map(([key,label])=><button key={key} type="button" disabled={saving} onClick={()=>{setLinkedEmployee({id:edit.id,name:edit.data.name||edit.data.employee_name||edit.data.code||'الموظف'});setEdit(null);setModule(key);}}>{label} ({rows.filter(x=>x.module===key&&x.data?.employee_id===edit.id).length})</button>)}</div>}{edit&&['leave','advances','resignations','returns','terminations','leave_dues','settlements','warnings','appointments'].includes(module)&&managerDirectoryForRequest(edit,edit.company)&&<div className="employee-payout-summary" role="status"><strong>مسؤولية المدير والموافقات</strong><div>المدير المباشر للموظف: {managerDirectoryForRequest(edit,edit.company).direct_name||'لم يربط بعد'}</div><div>بريد المدير المباشر: {managerDirectoryForRequest(edit,edit.company).direct_email||'غير محدد'}</div><div>{'المشروع: '+managerDirectoryForRequest(edit,edit.company).project}</div><div>{'مدير المشروع: '+(managerDirectoryForRequest(edit,edit.company).name||'لم يتم تعيينه')}</div><div>{'بريد المدير: '+(managerDirectoryForRequest(edit,edit.company).email||'غير محدد')}</div><small>تُرسل الإجازات والسلف إلى مدير المشروع المعين على مشروع الموظف، حتى إن اختلف عن المدير المباشر؛ يراجع المدير المخوّل فقط ثم إدارة المشاريع وشؤون الموظفين والمالية.</small></div>}{edit&&['leave','advances'].includes(module)&&<div className="request-approval-summary" role="status"><strong>دورة اعتماد الطلب</strong>
  <div className="request-approval-flow approval-modal-tracking">{requestApprovalStages.map((stage,i)=>{const state=requestStageView(edit,stage.id);return <div key={stage.id} className={'request-approval-step '+(state.kind==='done'?'done':state.kind==='waiting'?'current':'future')}><span>{state.kind==='done'?'✓':i+1}</span><div><b>{stage.title}</b><ApprovalStageCell row={edit} stage={stage} managerName={managerDirectoryForRequest(edit,edit.company)?.name}/></div></div>})}</div>
  <small>المدير المخوّل: {managerDirectoryForRequest(edit,edit.company)?.name||'غير محدد؛ عيّن مدير مشروع نشطًا على المشروع قبل الإرسال'} · المرحلة: {states[edit.status||'draft']||'إعداد الطلب'}</small></div>}
