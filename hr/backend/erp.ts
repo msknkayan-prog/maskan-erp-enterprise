@@ -483,6 +483,44 @@ if(body.action==='remove_member'){if(u.role!=='admin')throw Error('403');const t
 const mod=body.module;if(!(modules as any)[mod])throw Error('نافذة غير معروفة');const old=body.id?await db.prepare('SELECT * FROM records WHERE id=? AND module=?').bind(body.id,mod).first<any>():null;if(body.id&&!old)throw Error('السجل غير موجود');if(old&&!visible(u,parse(old),(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(old&&old.revision!==body.revision)throw Error('تغير السجل؛ حدّث الصفحة');
 if(old&&JSON.parse(old.data)?._deleted)throw Error('هذا الطلب محذوف ولا يمكن تعديله أو إرساله للاعتماد');
 
+
+if(body.action==='configure_advance_schedule'){
+ if(mod!=='advances'||!old||!['admin','finance'].includes(u.role)||!permission(u,'advances','edit'))throw Error('ليس لديك صلاحية تعديل جدولة السلف');
+ if(!['approved','paid'].includes(old.status))throw Error('تعديل الجدولة متاح للسلف المعتمدة أو المصروفة فقط');
+ const data=JSON.parse(old.data||'{}'),kind=String(body.kind||''),month=String(body.month||'');
+ const todayMonth=saudiDate().slice(0,7);
+ if(!['set_mode','defer_installment','defer_loan','resume'].includes(kind))throw Error('إجراء الجدولة غير صالح');
+ if(kind==='set_mode'){
+  if(!['auto','manual'].includes(body.schedule_mode))throw Error('اختر جدولة تلقائية أو سدادًا يدويًا');
+  if(body.schedule_mode==='auto'&&(!Number(data.installments)||!data.first_month))throw Error('حدد عدد الأقساط وشهر أول قسط قبل تفعيل الجدولة');
+  data.schedule_mode=body.schedule_mode;
+ }else{
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)||month<todayMonth)throw Error('حدد شهرًا حاليًا أو مستقبلًا صحيحًا');
+  const endIndex=Number(month.slice(0,4))*12+Number(month.slice(5,7));
+  const startIndex=Number(todayMonth.slice(0,4))*12+Number(todayMonth.slice(5,7));
+  if(endIndex-startIndex>24)throw Error('لا يمكن جدولة التأجيل لأكثر من 24 شهرًا مقدمًا');
+  const toMonth=n=>String(Math.floor((n-1)/12)).padStart(4,'0')+'-'+String((n-1)%12+1).padStart(2,'0');
+  const requested=kind==='defer_loan'||kind==='resume'?Array.from({length:endIndex-startIndex+1},(_,i)=>toMonth(startIndex+i)):[month];
+  const inPayroll=(await db.prepare("SELECT data FROM records WHERE module='payroll' AND data::jsonb->>'employee_id'=? AND data::jsonb->>'month'>=? AND data::jsonb->>'month'<=?").bind(String(data.employee_id||''),todayMonth,month).all()).results;
+  const batchIds=[...new Set(inPayroll.map((r:any)=>JSON.parse(r.data||'{}').batch_id).filter(Boolean))];
+  if(batchIds.length){
+   const batches=(await db.prepare("SELECT id,status FROM records WHERE module='payroll_batches'").all()).results;
+   if(batches.some((b:any)=>batchIds.includes(b.id)&&b.status!=='paid'))throw Error('يوجد مسير شهري منشأ للفترة المطلوبة؛ عدّل أو أجّل الخصم من المسير الحالي أولًا');
+   if(kind!=='resume'&&inPayroll.some((r:any)=>{const x=JSON.parse(r.data||'{}');return !x.excluded&&Number(x.advance_deduction||0)>0&&Array.isArray(x.advance_allocations)&&x.advance_allocations.some((a:any)=>a.advance_id===old.id)}))throw Error('لا يمكن تأجيل قسط سبق خصمه بمسير معتمد');
+  }
+  const prior=new Set(Array.isArray(data.deferred_months)?data.deferred_months:[]);
+  if(kind==='resume')requested.forEach((m:string)=>prior.delete(m));
+  else requested.forEach((m:string)=>prior.add(m));
+  data.deferred_months=[...prior].sort();
+ }
+ const res=await db.batch([
+  db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='advances' AND revision=? AND status IN ('paid','approved')").bind(JSON.stringify(data),now,mutation,old.id,old.revision),
+  db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,old.id,'advance_schedule_change',now,JSON.stringify({kind,month:month||null,schedule_mode:data.schedule_mode,deferred_months:data.deferred_months||[]}))
+ ]);
+ if(!res[0].meta.changes)throw Error('تم تعديل السلفة من مستخدم آخر؛ حدث الصفحة');
+ return json({ok:true,deferred_months:data.deferred_months||[],schedule_mode:data.schedule_mode||'auto'});
+}
+
 if(body.action==='record_opening_advance_repayment'){
  if(mod!=='repayments'||!['admin','finance','hr'].includes(u.role))throw Error('403');
  const companyName=String(body.company||'').trim();
