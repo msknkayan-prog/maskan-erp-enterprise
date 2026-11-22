@@ -95,7 +95,7 @@ if(module==='employees'){
  out.leave_balance_mode=out.leave_balance_mode||'auto';
  out.contract_expiry_mode=out.contract_expiry_mode||'auto';
  if(!['auto','manual'].includes(out.leave_balance_mode)||!['auto','manual'].includes(out.contract_expiry_mode))throw Error('طريقة الاحتساب غير صالحة');
- if(out.leave_balance_mode==='manual'&&(!Number.isFinite(out.manual_leave_entitlement)||out.manual_leave_entitlement<0))throw Error('أدخل إجمالي رصيد الإجازات المستحق يدويًا');
+ if(out.leave_balance_mode==='manual'&&(String(input.data?.manual_leave_entitlement??'').trim()===''||!Number.isFinite(out.manual_leave_entitlement)||out.manual_leave_entitlement<0))throw Error('أدخل إجمالي رصيد الإجازات المستحق يدويًا');
  if(out.contract_expiry_mode==='manual'){
   if(!out.contract_expiry)throw Error('حدد تاريخ انتهاء العقد اليدوي');
   if(out.hire_date&&out.contract_expiry<=out.hire_date)throw Error('تاريخ انتهاء العقد يجب أن يكون بعد تاريخ التعيين');
