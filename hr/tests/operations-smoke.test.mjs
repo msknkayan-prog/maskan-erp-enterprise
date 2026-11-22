@@ -1945,6 +1945,7 @@ test('payroll installment posting remains tied to confirmed finance payment and 
  assert.match(payroll,/advance_allocations\.reduce\(\(n,a\)=>n\+cents\(a\.amount\),0\)!==cents\(d\.advance_deduction\)/);
  assert.match(erp,/action==='configure_advance_schedule'/);
  assert.match(erp,/advance_schedule_change/);
+ assert.match(erp,/_payroll_batch_id\)throw Error/);
  assert.match(payroll,/status='paid' AND mutation=\?/);
  assert.match(payroll,/NOT EXISTS\(SELECT 1 FROM records WHERE module='repayments' AND code=\?\)/);
 });
