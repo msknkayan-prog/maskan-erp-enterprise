@@ -34,7 +34,7 @@ test('Musab receives finance requests across projects, while other project data 
  assert.equal(visible(other,atFinance,records),true); // Its assigned project manager remains eligible.
  assert.equal(visible(musab,{...worker,id:'not-in-finance',data:{project_id:'project2'}},records),false);
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- assert.match(backend,/routedRequest\?\!isRequestStageActor\(u,current\)/);
+ assert.match(backend,/routedRequest\?\(u\.role!=='admin'&&\!isRequestStageActor\(u,current\)\)/);
  assert.match(backend,/next='projects_director';\s*details.manager_submitted_by=u.email/);
  assert.match(backend,/!isRequestFinanceActor\(u\)/);
  const backendModules=await import('../backend/modules.mjs');
@@ -839,7 +839,7 @@ test('request workflow requires an assigned active manager before routing and ch
  assert.match(backend,/يجب ربط الموظف بمشروع قبل إرسال الطلب/);
  assert.match(backend,/يجب تعيين مدير المشروع في ملف المشروع/);
  assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:managerEmail\}/);
- assert.match(backend,/current==='project_manager'&&\(routedRequest\|\|u\.role!=='admin'\)/);
+ assert.match(backend,/current==='project_manager'&&u\.role!=='admin'/);
  assert.match(backend,/الطلب يخص مدير مشروع آخر/);
  assert.match(ui,/module==='projects'&&f\.key==='manager_email'/);
  assert.match(ui,/directManagerChoices\(rows,members,edit\.company\)/);
