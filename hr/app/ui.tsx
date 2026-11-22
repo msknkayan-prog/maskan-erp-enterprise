@@ -407,7 +407,7 @@ async function archiveEmployee(row,restore=false){
  }catch(err){notify(err.message)}finally{setSaving(false)}
 }
 async function disburse(row){const reference=window.prompt('مرجع صرف السلفة الفعلي — لا يتم تنفيذ تحويل بنكي');if(!reference)return;setSaving(true);try{await post({action:'disburse',module,id:row.id,revision:row.revision,reference});notify('تم توثيق الصرف');await refresh()}catch(e){notify(e.message)}finally{setSaving(false)}}
-async function transition(row,decision='approve',note=''){setSaving(true);try{await post({action:'transition',module,id:row.id,revision:row.revision,decision,note,medical_verified:row.data.leave_type==='sick'?window.confirm('هل راجعت المرفق الطبي وتحققت من صحته؟'):false});notify('تم تحديث مرحلة الاعتماد');await refresh()}catch(e){notify(e.message)}finally{setSaving(false)}}
+async function transition(row,decision='approve',note=''){setSaving(true);try{await post({action:'transition',module:row.module,id:row.id,revision:row.revision,decision,note,medical_verified:row.module==='leave'&&row.data.leave_type==='sick'?window.confirm('هل راجعت المرفق الطبي وتحققت من صحته؟'):false});notify('تم تحديث مرحلة الاعتماد');await refresh()}catch(e){notify(e.message)}finally{setSaving(false)}}
 const normalizeSearch=value=>String(value??'').normalize('NFKC').toLocaleLowerCase('ar').replace(/[\u064B-\u065F\u0670]/g,'').replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/ـ/g,'').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/\s+/g,' ').trim();
 let scoped=rows.filter(r=>!company||r.company===company),spec=modules[module];
 const searchWords=normalizeSearch(search).split(' ').filter(Boolean);
@@ -967,6 +967,30 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {pendingRequestRows.map(r=><tr key={r.id}><td>{companyDisplayName(r.company)}</td><td>{modules[r.module]?.singular||r.module}</td><td>{pendingEmployeeName(r)}</td><td><span className={'badge '+r.status}>{states[r.status]||cycleStatus[r.status]||r.status}</span></td><td>{r.module==='payroll_batches'?'حسب المشاريع المرتبطة بالمسير':r.data?.project_manager?.name||managerDirectoryForRequest(r,r.company)?.name||'غير محدد'}</td><td>{r.updated_at?new Date(r.updated_at).toLocaleDateString('ar-SA'):'—'}</td><td><button type="button" onClick={()=>{if(r.module==='payroll_batches'){setPayrollMonth(r.data?.month||payrollMonth);setPayrollCompany(r.company);setPayrollManageBatchId(r.id);setModule('payroll');}else{setModule(r.module);setEdit({...r,data:{...r.data}})}}}>فتح الطلب ومراجعته</button></td></tr>)}
  {pendingRequestRows.length===0&&<tr><td colSpan={7} style={{padding:24,textAlign:'center'}}>لا توجد طلبات قيد الإجراء تطابق الفلاتر.</td></tr>}
  </tbody></table></div>
+ </section>}
+{module==='overview'&&user?.role==='admin'&&<section className="panel" dir="rtl" style={{padding:14,marginBottom:15,border:'1px solid #dac391'}}>
+ <div className="panel-head" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap',marginBottom:10}}>
+  <div><h2 style={{margin:0}}>مركز موافقات مسؤول النظام</h2><small>جميع الطلبات المعلّقة ضمن نطاق حسابك — اعتماد المرحلة الحالية مباشرة مع حفظ اسم المعتمد والوقت</small></div>
+  <div style={{display:'flex',alignItems:'center',gap:8}}><strong style={{padding:'5px 12px',borderRadius:20,background:'#fff1d2',color:'#7c5518'}}>{pendingRequestRows.length} طلب قيد الإجراء</strong><button type="button" onClick={()=>{setPendingType('');setPendingStage('');setPendingSearch('');setModule('pending_requests')}}>فتح جميع الطلبات</button></div>
+ </div>
+ <div className="table-wrap" style={{maxHeight:410,overflow:'auto'}}><table><thead><tr><th>الشركة</th><th>الطلب</th><th>الموظف / الشهر</th><th>الحالة الحالية</th><th>القرار</th></tr></thead><tbody>
+ {pendingRequestRows.map(request=>{
+ const canDirect=['leave','advances'].includes(request.module)&&['draft','project_manager','projects_director','hr','finance'].includes(request.status)&&permission(user,'leave'===request.module?'leave':'advances','approve')&&(request.status!=='draft'||permittedWrite(user,request.module));
+ const isPayroll=request.module==='payroll_batches';
+ const open=()=>{if(isPayroll){setPayrollMonth(request.data?.month||payrollMonth);setPayrollCompany(request.company);setPayrollManageBatchId(request.id);setModule('payroll')}else{setModule(request.module);setEdit({...request,data:{...request.data}})}};
+ return <tr key={request.id}><td>{companyDisplayName(request.company)}</td><td>{modules[request.module]?.singular||request.module}</td><td>{pendingEmployeeName(request)}</td><td><span className={'badge '+request.status}>{states[request.status]||cycleStatus[request.status]||request.status}</span></td>
+ <td><div style={{display:'flex',flexDirection:'row',gap:5,alignItems:'center',flexWrap:'nowrap',whiteSpace:'nowrap'}}>
+ <button type="button" onClick={open} disabled={saving}>عرض</button>
+ {canDirect&&<><button type="button" className="primary" disabled={saving} onClick={()=>transition(request)}>{request.status==='draft'?'إرسال للاعتماد':'اعتماد المرحلة'}</button>
+ {request.status!=='draft'&&<><button type="button" disabled={saving} onClick={()=>{const note=window.prompt('سبب إعادة الطلب إلى المراجعة');if(note?.trim())transition(request,'return',note.trim())}}>إعادة</button>
+ <button type="button" className="danger-action" disabled={saving} onClick={()=>{const note=window.prompt('سبب رفض الطلب');if(note?.trim())transition(request,'reject',note.trim())}}>رفض</button></>}</>}
+ {isPayroll&&<small>يعتمد من نافذة مسير الرواتب</small>}
+ {!canDirect&&!isPayroll&&<small>افتح الطلب لمراجعته</small>}
+ </div></td></tr>;
+ })}
+ {!pendingRequestRows.length&&<tr><td colSpan={5} style={{textAlign:'center',padding:22}}>لا توجد طلبات معلّقة ضمن الشركات وصلاحيات حسابك.</td></tr>}
+ </tbody></table></div>
+ <small style={{display:'block',marginTop:8,color:'#7d6b50'}}>اعتماد مسؤول النظام يوثَّق داخل المرحلة الحالية، وتظل المراحل التالية مستقلة. لا يتم اعتماد طلبات الرواتب أو صرفها من هذا الجدول.</small>
  </section>}
 {module==='overview'&&<>{user?.role==='admin'&&<section className="panel" dir="rtl" style={{padding:16,marginBottom:16}}>
  <div style={{display:'flex',gap:12,alignItems:'center',justifyContent:'space-between',flexWrap:'wrap'}}>
