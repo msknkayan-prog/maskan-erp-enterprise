@@ -1219,6 +1219,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    <div className="table-wrap"><table><thead><tr><th>التاريخ</th><th>المبلغ</th><th>حالة السلفة</th><th>الإجراء</th></tr></thead><tbody>{visibleLoans.map(loan=><tr key={loan.id}><td>{loan.data?.date||'—'}</td><td>{money(loan.data?.amount)} ر.س</td><td>{states[loan.status]||loan.status}</td><td><div className="row-actions" style={{display:'flex',gap:6,flexWrap:'nowrap'}}>
     <button type="button" onClick={()=>{setAdvanceManager(null);setLinkedEmployee(null);setEdit({...loan,data:{...loan.data}})}}>{loan.status==='draft'&&canChange?'تعديل':'عرض'}</button>
     {loan.status==='draft'&&canRemove&&<button type="button" className="danger-action" disabled={saving} onClick={async()=>{await deleteDraftRequest(loan);setAdvanceManager(null);}}>حذف</button>}
+    {loan.status==='paid'&&<button type="button" onClick={()=>{setAdvanceManager(null);setLinkedFinance({kind:'repayments',parentId:loan.id,amount:'',date:saudiDate(),reference:'',method:'cash',travel_amount:'0',other_amount:'0',deductions:'0',notes:''})}}>سداد / السجل</button>}
     {loan.status!=='draft'&&<small>معتمد/قيد إجراء — لا يُحذف</small>}
    </div></td></tr>)}</tbody></table></div>}
   {advanceManager.mode==='delete'&&!canRemove&&<p className="footnote">حذف المسودات يتطلب صلاحية المدير العام أو شؤون الموظفين وصلاحية التعديل.</p>}
