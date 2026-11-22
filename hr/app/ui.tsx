@@ -161,6 +161,7 @@ const [linkedFinance,setLinkedFinance]=useState(null);
 const [repairRequest,setRepairRequest]=useState(null);
 const advanceTableScrollRef=useRef(null);
 const [advanceManager,setAdvanceManager]=useState(null),[openingForm,setOpeningForm]=useState(null);
+const [schedulePanel,setSchedulePanel]=useState(null);
 const employeeManagerOptions=useMemo(()=>Object.fromEntries(companies.map(c=>[c,employeeDirectManagerOptions(rows,members,c)])),[rows,members]);
 const notify=t=>{setToast(t);setTimeout(()=>setToast(''),4500)};
 const refreshGeneration=useRef(0),lastBackgroundRefresh=useRef(0);
@@ -818,7 +819,7 @@ function startEdit(row){
  // A genuinely new employee must never inherit an existing record id, revision, or transfer details.
  const defaultData=Object.fromEntries(spec.fields.map(f=>[f.key,f.type==='number'?'0':f.type==='date'?saudiDate():f.type==='month'?saudiDate().slice(0,7):f.key==='opening_leave_confirmed'?'no':f.type==='sponsorship'?'yes':f.type==='method'?'bank':f.type==='employment'?'active':f.type==='leave_type'?'annual':f.type==='warning_type'?'first':f.type==='case_status'?'draft':'']));
  if(module==='employees'){defaultData.working_company=company;defaultData.leave_balance_mode='auto';defaultData.contract_expiry_mode='auto';defaultData.manual_leave_entitlement='';}
- if(module==='leave'){defaultData.holiday_policy='include';defaultData.holiday_dates='';defaultData.leave_payment='paid';defaultData.unpaid_days='0';defaultData.days='1';defaultData.ticket='no';defaultData.ticket_due_date='';defaultData.expected_return=leaveNextDate(defaultData.end);}if(module==='advances'){defaultData.installments='1';defaultData.first_month=saudiDate().slice(0,7);}setLeaveHolidayCandidate('');setEdit({company,data:defaultData});
+ if(module==='leave'){defaultData.holiday_policy='include';defaultData.holiday_dates='';defaultData.leave_payment='paid';defaultData.unpaid_days='0';defaultData.days='1';defaultData.ticket='no';defaultData.ticket_due_date='';defaultData.expected_return=leaveNextDate(defaultData.end);}if(module==='advances'){defaultData.installments='1';defaultData.first_month=saudiDate().slice(0,7);defaultData.schedule_mode='auto';}setLeaveHolidayCandidate('');setEdit({company,data:defaultData});
 }
 function exportRows(){const fields=module==='employees'?tableFields:projectRegisterFields,extras=[...new Set(list.flatMap(r=>Object.keys(r.data.extra_fields||{})))];const financial=false;const headers=['الشركة',...fields.map(f=>f.label),...(financial?['الراتب الأساسي (65%)','بدل السكن (25%)','بدل الترحيل (10%)','الاستحقاق السنوي الحالي','الرصيد المتبقي الحالي']:[]),...extras,'مرحلة الاعتماد'];const data=list.map(r=>{const used=rows.filter(x=>x.module==='leave'&&x.status==='approved'&&(x.data.balance_deducted??(!x.data.leave_type||x.data.leave_type==='annual'))&&x.data.employee_id===r.id).reduce((n,x)=>n+Number(x.data.days),0);const service=annualLeave(r.data.hire_date);const balance=service||r.data.opening_leave_confirmed==='yes'?(service?.accrued||0)+(r.data.opening_leave_confirmed==='yes'?Number(r.data.opening_leave||0):0)-used:'أكمل تاريخ التعيين';return [r.company,...fields.map(f=>module==='employees'&&f.key==='contract_expiry'&&r.data?.contract_expiry_mode!=='manual'?nextContractExpiry(r.data?.hire_date,today):module==='employees'?employeeRegisterValue(r,f.key,rows):module==='projects'?projectRegisterValue(r,f.key,rows):r.data[f.key]??''),...(financial?[Number(r.data.basic||0),Number(r.data.housing||0),Number(r.data.transport||0),r.data.sponsorship==='yes'?(service?.annual??''):r.data.annual_days||'',balance]:[]),...extras.map(k=>r.data.extra_fields?.[k]??''),states[r.status]||r.status]});const bytes=workbookBytes([headers,...data]);const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));a.download=module+'-export.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
@@ -1155,6 +1156,12 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   </label>
   <small style={{gridColumn:'1 / -1'}}>تُسجل تكلفة صافي راتب هذا الموظف على الشركة والمشروع المختارين، دون نقل تبعيته الوظيفية أو تغيير مشروع مسار الاعتماد. تغيير مركز تكلفة المشروع متاح أثناء تجهيز المسير.</small>
  </div>
+ <div role="status" style={{padding:'10px 12px',border:'1px solid #dbc492',borderRadius:9,background:'#fff9eb',margin:'10px 0'}}>
+ <strong>أقساط السلف المرتبطة بهذا المسير</strong>
+ <div style={{fontSize:12,marginTop:5}}>خصم السلف في الشهر الحالي: <b>{money(cycleEdit.data.advance_deduction||0)} ر.س</b> · يمكن تعديل المبلغ أو جعله صفرًا لتأجيل خصم هذا الشهر قبل اعتماد المسير.</div>
+ {Array.isArray(cycleEdit.data.advance_allocations)&&cycleEdit.data.advance_allocations.length>0&&<div style={{fontSize:12,marginTop:5}}>تفاصيل الخصم المقترح: {cycleEdit.data.advance_allocations.map(a=>money(a.amount)+' ر.س · السلفة '+String(a.advance_id).slice(0,8)).join(' | ')}</div>}
+ <small>لا يُثبت السداد في رصيد السلفة عند توليد المسير؛ يُثبت فقط بعد تأكيد صرف المسير ماليًا. إذا غيّرت قيمة الخصم، يوزّعها النظام على السلف المصروفة القائمة وفق المتبقي.</small>
+ </div>
  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(175px,1fr))',gap:10}}>
  { [['basic','الراتب الأساسي'],['housing','بدل السكن'],['transport','بدل النقل'],['bonus','مكافآت'],['extra_allowance','بدلات أخرى'],['overtime_hours','ساعات إضافية'],['absence_days','أيام الغياب'],['absence_deduction','خصم الغياب'],['advance_deduction','خصم السلف'],['deductions','خصومات أخرى'],['bank_amount','مبلغ التحويل البنكي فقط']].map(([key,label])=><label key={key}>{label}<input type="number" min="0" step="0.01" required value={cycleEdit.data[key]??0} onChange={e=>setCycleEdit(p=>({...p,data:{...p.data,[key]:e.target.value}}))}/></label>)}<label>المتبقي للصرف كاش (محسوب تلقائيًا)<input type="text" readOnly value={money(cycleSalarySummary(cycleEdit.data).cash)} title="صافي الاستحقاق مطروحًا منه مبلغ التحويل البنكي"/></label>
  </div>
@@ -1255,12 +1262,43 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    <div className="table-wrap"><table><thead><tr><th>التاريخ</th><th>المبلغ</th><th>حالة السلفة</th><th>الإجراء</th></tr></thead><tbody>{visibleLoans.map(loan=><tr key={loan.id}><td>{loan.data?.date||'—'}</td><td>{money(loan.data?.amount)} ر.س</td><td>{states[loan.status]||loan.status}</td><td><div className="row-actions" style={{display:'flex',gap:6,flexWrap:'nowrap'}}>
     <button type="button" onClick={()=>{setAdvanceManager(null);setLinkedEmployee(null);setEdit({...loan,data:{...loan.data}})}}>{loan.status==='draft'&&canChange?'تعديل':'عرض'}</button>
     {loan.status==='draft'&&canRemove&&<button type="button" className="danger-action" disabled={saving} onClick={async()=>{await deleteDraftRequest(loan);setAdvanceManager(null);}}>حذف</button>}
-    {loan.status==='paid'&&<button type="button" onClick={()=>{setAdvanceManager(null);setLinkedFinance({kind:'repayments',parentId:loan.id,amount:'',date:saudiDate(),reference:'',method:'cash',travel_amount:'0',other_amount:'0',deductions:'0',notes:''})}}>سداد / السجل</button>}
+    {['paid','approved'].includes(loan.status)&&<button type="button" onClick={()=>{setAdvanceManager(null);setSchedulePanel({id:loan.id,mode:loan.data?.schedule_mode||'auto',kind:'defer_installment',month:saudiDate().slice(0,7)})}}>الجدولة / التأجيل</button>}
+ {loan.status==='paid'&&<button type="button" onClick={()=>{setAdvanceManager(null);setLinkedFinance({kind:'repayments',parentId:loan.id,amount:'',date:saudiDate(),reference:'',method:'cash',travel_amount:'0',other_amount:'0',deductions:'0',notes:''})}}>سداد / السجل</button>}
     {loan.status!=='draft'&&<small>معتمد/قيد إجراء — لا يُحذف</small>}
    </div></td></tr>)}</tbody></table></div>}
   {advanceManager.mode==='delete'&&!canRemove&&<p className="footnote">حذف المسودات يتطلب صلاحية المدير العام أو شؤون الموظفين وصلاحية التعديل.</p>}
  </section></div>;
 })()}
+
+{module==='advances'&&schedulePanel&&(()=>{
+ const loan=rows.find(r=>r.module==='advances'&&r.id===schedulePanel.id);
+ if(!loan)return null;
+ const currentMonth=saudiDate().slice(0,7);
+ const skipped=Array.isArray(loan.data?.deferred_months)?loan.data.deferred_months:[];
+ const canConfigure=['admin','finance'].includes(user?.role);
+ const close=()=>setSchedulePanel(null);
+ return <div className="modal-backdrop" onClick={()=>!saving&&close()}>
+ <section className="modal" dir="rtl" role="dialog" aria-modal="true" aria-label="جدولة وتقسيط السلفة" onClick={e=>e.stopPropagation()} style={{width:'min(94vw,590px)',maxHeight:'85vh',overflow:'auto'}}>
+ <div className="modal-head"><div><h2>جدولة أقساط السلفة وتأجيلها</h2><small>قيمة السلفة: {money(loan.data.amount)} ر.س · {loan.data.installments||'—'} قسط · أول قسط: {loan.data.first_month||'—'}</small></div><button type="button" onClick={close} disabled={saving} aria-label="إغلاق"><X/></button></div>
+ <p>القسط الأساسي: <strong>{money(loan.data.installment_amount)} ر.س</strong> · الترحيل الشهري إلى مسير الرواتب يعتمد على حالة صرف السلفة والرصيد المتبقي.</p>
+ {!!skipped.length&&<p style={{fontSize:12}}>الأشهر المؤجلة: <strong>{skipped.join('، ')}</strong></p>}
+ {!canConfigure&&<p className="review-warning-box">التعديل متاح لمسؤول النظام والمالية فقط.</p>}
+ <form style={{display:'grid',gap:11}} onSubmit={async e=>{
+  e.preventDefault();if(!canConfigure)return;
+  const request={action:'configure_advance_schedule',module:'advances',id:loan.id,revision:loan.revision,kind:schedulePanel.kind,month:schedulePanel.month,schedule_mode:schedulePanel.mode};
+  if(!window.confirm('تأكيد تحديث جدول السلفة؟ ستنعكس التغييرات في المسيرات التي لم تُنشأ بعد فقط.'))return;
+  setSaving(true);
+  try{await post(request);await refresh();close();notify('تم تحديث جدولة السلفة. راجع مسير الرواتب قبل الاعتماد.')}catch(err){notify(err.message||'تعذر حفظ جدول السلفة')}finally{setSaving(false)}
+ }}>
+ <label>طريقة التحصيل<select value={schedulePanel.mode} onChange={e=>setSchedulePanel(p=>({...p,mode:e.target.value,kind:'set_mode'}))}><option value="auto">خصم تلقائي من مسير الرواتب</option><option value="manual">سداد يدوي — دون خصم تلقائي</option></select></label>
+ <label>الإجراء<select value={schedulePanel.kind} onChange={e=>setSchedulePanel(p=>({...p,kind:e.target.value}))}><option value="set_mode">تغيير طريقة التحصيل</option><option value="defer_installment">تأجيل قسط شهر واحد</option><option value="defer_loan">تأجيل السلفة بالكامل حتى نهاية الشهر المحدد</option><option value="resume">إلغاء التأجيل للأشهر من الحالي إلى المحدد</option></select></label>
+ {schedulePanel.kind!=='set_mode'&&<label>الشهر المستهدف<input type="month" required min={currentMonth} value={schedulePanel.month} onChange={e=>setSchedulePanel(p=>({...p,month:e.target.value}))}/></label>}
+ <small>تأجيل القسط يستبعد الشهر المختار من الجدولة، ثم يستمر التحصيل في الأشهر التالية حتى سداد كامل الرصيد. إذا تم توليد مسير للفترة، يجب تعديل خصمه من المسير ولا يُغيَّر بصمت.</small>
+ <div className="row-actions" style={{display:'flex',gap:8}}><button type="submit" className="primary" disabled={saving||!canConfigure}>حفظ الجدولة</button><button type="button" disabled={saving} onClick={close}>إغلاق</button></div>
+ </form>
+ </section></div>;
+})()}
+
 {module==='advances'&&openingForm&&(()=>{
  const employee=rows.find(r=>r.module==='employees'&&r.id===openingForm.employeeId);
  const loans=rows.filter(r=>r.module==='advances'&&r.company===employee?.company&&r.data?.employee_id===employee?.id&&['approved','paid'].includes(r.status));

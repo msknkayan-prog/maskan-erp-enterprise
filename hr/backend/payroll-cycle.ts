@@ -65,6 +65,51 @@ const ensureAssignedPayrollManager=async(projectId,company,employeeId='')=>{
  return email;
 };
 
+
+const validMonth=m=>/^\d{4}-(0[1-9]|1[0-2])$/.test(m||'');
+const monthNumber=m=>{const [y,n]=m.split('-').map(Number);return y*12+n};
+const paidLoanContext=async()=>{
+ const loans=(await db.prepare("SELECT * FROM records WHERE module='advances' AND status='paid'").all()).results.map(parse).filter(r=>!r.data?._deleted);
+ const payments=(await db.prepare("SELECT * FROM records WHERE module='repayments'").all()).results.map(parse).filter(r=>!r.data?._deleted);
+ const sums=new Map();
+ for(const payment of payments)sums.set(payment.data.advance_id,(sums.get(payment.data.advance_id)||0)+cents(payment.data.amount));
+ return {loans,payments,sums};
+};
+const loanBalanceCents=(loan,context)=>Math.max(0,cents(loan.data.amount)-(context.sums.get(loan.id)||0));
+const autoAdvanceAllocations=(context,employeeId,month,capCents=Infinity)=>{
+ let available=capCents;
+ const allocations=[];
+ for(const loan of context.loans.filter(r=>r.data.employee_id===employeeId&&r.data.schedule_mode!=='manual'&&validMonth(r.data.first_month)&&r.data.first_month<=month).sort((a,b)=>String(a.data.first_month).localeCompare(String(b.data.first_month))||String(a.data.date||'').localeCompare(String(b.data.date||'')))){
+  if(available<=0)break;
+  const skipped=Array.isArray(loan.data.deferred_months)?loan.data.deferred_months:[];
+  if(skipped.includes(month))continue;
+  const balance=loanBalanceCents(loan,context);
+  if(balance<=0)continue;
+  const count=Math.max(1,Number(loan.data.installments||1));
+  const base=Math.max(1,Math.floor(cents(loan.data.amount)/count));
+  const eligibleElapsed=monthNumber(month)-monthNumber(loan.data.first_month)-skipped.filter(m=>validMonth(m)&&m>=loan.data.first_month&&m<month).length;
+  if(eligibleElapsed<0)continue;
+  const scheduled=eligibleElapsed>=count-1?Math.max(base,cents(loan.data.final_installment||0)):base;
+  const allotted=Math.min(balance,scheduled,available);
+  if(allotted>0){allocations.push({advance_id:loan.id,amount:allotted/100});available-=allotted}
+ }
+ return allocations;
+};
+const allocateEditedAdvanceTotal=(context,employeeId,month,totalCents,existing=[])=>{
+ if(totalCents<=0)return [];
+ const pool=context.loans.filter(r=>r.data.employee_id===employeeId&&loanBalanceCents(r,context)>0).sort((a,b)=>String(a.data.first_month||a.data.date).localeCompare(String(b.data.first_month||b.data.date)));
+ const original=new Map((Array.isArray(existing)?existing:[]).map(a=>[a.advance_id,cents(a.amount)]));
+ let remaining=totalCents;const allocations=[];
+ for(const loan of [...pool].sort((a,b)=>Number(original.has(b.id))-Number(original.has(a.id)))){
+  const balance=loanBalanceCents(loan,context);
+  const part=Math.min(remaining,balance);
+  if(part>0){allocations.push({advance_id:loan.id,amount:part/100});remaining-=part}
+  if(!remaining)break;
+ }
+ if(remaining>0)throw Error('خصم السلف يتجاوز الرصيد القائم للسلف المصروفة؛ لا يمكن حفظ خصم زائد');
+ return allocations;
+};
+
 export async function POST(req){
  try{
   // The Next.js proxy validates the browser Origin against the site Origin.
@@ -85,6 +130,7 @@ export async function POST(req){
    if(requested.some(co=>!companies.includes(co)||!allowed(u,co)))return err('الشركة خارج نطاق الصلاحيات',403);
    const all=(await db.prepare("SELECT * FROM records WHERE module='employees'").all()).results.map(parse);
    const existing=(await db.prepare("SELECT company,data FROM records WHERE module='payroll_batches'").all()).results.map(r=>({...r,data:JSON.parse(r.data)}));
+   const advanceContext=await paidLoanContext();
    if(requested.some(co=>existing.some(b=>b.company===co&&b.data.month===month)))throw Error('تم توليد مسير لهذا الشهر مسبقًا لإحدى الشركات المختارة. افتح المسير الموجود للمراجعة.');
    // For employee transfers, old company payroll may be retained as excluded.
    // Creating another active payroll for the same employment/month remains forbidden.
@@ -109,10 +155,11 @@ export async function POST(req){
      const status=d.employment_status||d.employee_status||'';
      const isSuspended=!['active','نشط','على رأس العمل','علي راس العمل'].includes(String(status).trim());
      const salaryMismatch=Math.abs(cents(salary)-cents(basic+housing+transport))>1;
+     const advanceAllocations=autoAdvanceAllocations(advanceContext,e.id,month,cents(salary));
      const row={batch_id:id,employee_id:e.id,source_company:e.company,working_company:co,month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||e.code||'',employment_status:status,project_id:d.project_id||'',cost_company:co,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
        basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,
-       absence_days:0,absence_deduction:0,advance_deduction:0,deductions:0,
-       net:salary,cash_amount:0,bank_amount:0,split_confirmed:false,
+       absence_days:0,absence_deduction:0,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
+       net:rounded(salary-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,
        exception_note:'',needs_review:isSuspended||salaryMismatch,review_reason:[isSuspended?'حالة الموظف غير نشطة':'',salaryMismatch?'اختلاف إجمالي الراتب عن مكوناته':''].filter(Boolean).join('؛ '),notes:'',method:'bank'};
      employeeInserts.push([crypto.randomUUID(),'payroll',co,e.id+':'+month+':'+id,JSON.stringify(row),u.email,now,now,mutation]);
     }
@@ -176,10 +223,12 @@ export async function POST(req){
    const salary=rounded(basic+housing+transport);
    const declared=rounded(d.salary??d.total_monthly_salary??salary);
    const mismatch=Math.abs(cents(declared)-cents(salary))>1;
+   const advanceContext=await paidLoanContext();
+   const advanceAllocations=autoAdvanceAllocations(advanceContext,employeeId,batch.data.month,cents(salary));
    const rowId=crypto.randomUUID();
    const data={batch_id:batch.id,employee_id:employeeId,source_company:original.company,working_company:batch.company,month:batch.data.month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||original.code||'',employment_status:status,project_id:d.project_id||'',cost_company:batch.company,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
-    basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:0,absence_deduction:0,advance_deduction:0,deductions:0,
-    net:salary,cash_amount:0,bank_amount:0,split_confirmed:false,excluded:false,
+    basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:0,absence_deduction:0,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
+    net:rounded(salary-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,excluded:false,
     exception_note:'',needs_review:mismatch,review_reason:mismatch?'اختلاف إجمالي الراتب عن مكوناته':'',
     notes:'',method:'bank',added_to_batch_at:now,added_to_batch_by:u.email};
    const newBatch={...batch.data,employee_count:Number(batch.data.employee_count)+1};
@@ -251,6 +300,8 @@ export async function POST(req){
    const overtime=rounded(overtime_hours*(salary/30/8+0.5*basic/30/8));
    const absence_deduction=amount(input.absence_deduction??0,'خصم الغياب');
    const advance_deduction=amount(input.advance_deduction??0,'خصم السلف');
+   const advanceContext=await paidLoanContext();
+   const advance_allocations=allocateEditedAdvanceTotal(advanceContext,old.employee_id,batch.data.month,cents(advance_deduction),old.advance_allocations);
    const deductions=amount(input.deductions??0,'خصومات أخرى');
    const net=rounded(salary+bonus+extra_allowance+overtime-absence_deduction-advance_deduction-deductions);
    if(net<0)throw Error('الصافي سالب');
@@ -259,7 +310,7 @@ export async function POST(req){
    if(cents(cash_amount)+cents(bank_amount)!==cents(net))throw Error('إجمالي الكاش والتحويل يجب أن يساوي صافي الراتب');
    const exception_note=String(input.exception_note||'').trim().slice(0,1000);
    if(old.needs_review&&!exception_note)throw Error('الموظف غير النشط يحتاج توضيح قرار إدراجه في مسير الرواتب');
-   const data={...old,cost_company,cost_project_id,basic,housing,transport,salary,bonus,extra_allowance,overtime_hours,absence_days,overtime,absence_deduction,advance_deduction,deductions,net,cash_amount,bank_amount,split_confirmed:true,exception_note,notes:String(input.notes||'').slice(0,2000),method:cash_amount&&bank_amount?'mixed':cash_amount?'cash':'bank',reviewed_by:u.email,reviewed_at:now,manager_reviewed:managerEditing?true:false,manager_notes:managerEditing?String(input.manager_notes||'').trim().slice(0,2000):old.manager_notes||'',manager_reviewed_by:managerEditing?u.email:null,manager_reviewed_at:managerEditing?now:null};
+   const data={...old,cost_company,cost_project_id,basic,housing,transport,salary,bonus,extra_allowance,overtime_hours,absence_days,overtime,absence_deduction,advance_deduction,advance_allocations,deductions,net,cash_amount,bank_amount,split_confirmed:true,exception_note,notes:String(input.notes||'').slice(0,2000),method:cash_amount&&bank_amount?'mixed':cash_amount?'cash':'bank',reviewed_by:u.email,reviewed_at:now,manager_reviewed:managerEditing?true:false,manager_notes:managerEditing?String(input.manager_notes||'').trim().slice(0,2000):old.manager_notes||'',manager_reviewed_by:managerEditing?u.email:null,manager_reviewed_at:managerEditing?now:null};
    const res=await db.batch([db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND module='payroll' AND EXISTS(SELECT 1 FROM records b WHERE b.id=? AND b.status=?)")
     .bind(JSON.stringify(data),now,mutation,employee.id,employee.revision,batch.id,batch.status),
     db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,employee.id,'payroll_employee_edit',now,JSON.stringify({batch_id:batch.id,month:batch.data.month,cost_company,cost_project_id,previous_cost_company:old.cost_company||batch.company,previous_cost_project_id:old.cost_project_id||old.project_id||''}))]);
@@ -268,6 +319,7 @@ export async function POST(req){
   }
   // Enforce employment status at every approval/payment boundary, including
   // batches created before the employee became inactive.
+  const financeAllocations=[];
   if(['submit','managers_approve','projects_approve','finance_pay','admin_approve','finance_approve'].includes(action)){
    const included=monthly.filter(r=>!r.data.excluded);
    if(included.length){
@@ -321,6 +373,24 @@ export async function POST(req){
    if(!String(body.reference||'').trim()||String(body.reference).length>200)throw Error('مرجع الصرف مطلوب');
    if(!body.confirm_payment)throw Error('يجب تأكيد الصرف الفعلي قبل إصدار السندات');
    if(monthly.length!==Number(batch.data.employee_count)||monthly.every(r=>r.data.excluded))throw Error('قائمة المسير غير مكتملة');
+   const advanceContext=await paidLoanContext();
+   const pendingLoanSums=new Map();
+   for(const row of monthly.filter(r=>!r.data.excluded)){
+    const d=row.data;
+    if(!Array.isArray(d.advance_allocations)){
+     if(cents(d.advance_deduction)>0)throw Error('خصم السلف للموظف '+(d.employee_name||'')+' غير مربوط بسلفة محددة. افتح الموظف في المسير وأعد حفظ الخصم للربط الصحيح.');
+     continue;
+    }
+    if(d.advance_allocations.reduce((n,a)=>n+cents(a.amount),0)!==cents(d.advance_deduction))throw Error('مبالغ أقساط السلف غير متطابقة مع إجمالي خصم الموظف');
+    for(const a of d.advance_allocations){
+     const loan=advanceContext.loans.find(l=>l.id===a.advance_id&&l.data.employee_id===d.employee_id);
+     if(!loan)throw Error('السلفة المرتبطة بخصم الرواتب غير موجودة أو لم تُصرف');
+     const due=cents(a.amount),already=pendingLoanSums.get(loan.id)||0;
+     if(due<=0||due+already>loanBalanceCents(loan,advanceContext))throw Error('خصم السلف تجاوز الرصيد الفعلي أو تم تسجيل سداد آخر أثناء اعتماد المسير');
+     pendingLoanSums.set(loan.id,already+due);
+     financeAllocations.push({loan,amount:due/100,row});
+    }
+   }
    for(const row of monthly.filter(r=>!r.data.excluded)){
     if((modern&&!row.data.manager_reviewed)||!row.data.split_confirmed||cents(row.data.cash_amount)+cents(row.data.bank_amount)!==cents(row.data.net))throw Error('لا يمكن صرف مسير غير معتمد أو غير متطابق');
     if(row.data.needs_review&&!row.data.exception_note)throw Error('استثناء دون مبرر');
@@ -333,10 +403,20 @@ export async function POST(req){
   const newData={...batch.data,
    ...(action==='finance_pay'?{paid_at:now,paid_by:u.email,payment_reference:String(body.reference).trim()}:{}),
    ...(action==='return'?{returned_at:now,return_note:String(body.note).trim().slice(0,1000)}:{})};
+  const ledgerStatements=[];
+  if(action==='finance_pay'){
+   for(const allocation of financeAllocations){
+    const reference='PAYROLL-'+batch.id+'-'+allocation.row.id+'-'+allocation.loan.id;
+    const repayment={advance_id:allocation.loan.id,employee_id:allocation.row.data.employee_id,amount:allocation.amount,date:now.slice(0,10),code:reference,payroll_month:batch.data.month,payroll_reference:String(body.reference).trim(),method:'payroll',notes:'استقطاع قسط سلفة من مسير الرواتب',_payroll_batch_id:batch.id,_payroll_row_id:allocation.row.id};
+    ledgerStatements.push(db.prepare("INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation) SELECT ?,'repayments',?,?,?,'draft',1,?,?,?,? WHERE EXISTS (SELECT 1 FROM records WHERE id=? AND module='payroll_batches' AND status='paid' AND mutation=?) AND NOT EXISTS(SELECT 1 FROM records WHERE module='repayments' AND code=?)")
+     .bind(crypto.randomUUID(),allocation.loan.company,reference,JSON.stringify(repayment),u.email,now,now,mutation,batch.id,mutation,reference));
+   }
+  }
   const res=await db.batch([db.prepare("UPDATE records SET status=?,data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND status=?")
    .bind(next,JSON.stringify(newData),now,mutation,batch.id,batch.revision,batch.status),
-   db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,batch.id,'payroll_batch_'+action,now,JSON.stringify({from:batch.status,to:next,note:body.note||'',reference:action==='finance_pay'?String(body.reference):undefined}))]);
-  if(!res[0].meta.changes)throw Error('المسير تغير، أعد تحميل الصفحة');
+   ...ledgerStatements,
+   db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,batch.id,'payroll_batch_'+action,now,JSON.stringify({from:batch.status,to:next,note:body.note||'',reference:action==='finance_pay'?String(body.reference):undefined,advance_installments:ledgerStatements.length}))]);
+  if(!res[0].meta.changes||action==='finance_pay'&&ledgerStatements.some((_,i)=>!res[i+1]?.meta?.changes))throw Error('تعارض في صرف المسير أو تسجيل أقساط السلف؛ حدث الصفحة وراجع السجل المالي');
   return response({ok:true,status:next});
  }catch(error){return err(error.message||'تعذر تنفيذ العملية',String(error.message||'').includes('UNIQUE')?409:400);}
 }

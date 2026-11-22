@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
 import {companies,modules,normalize,annualLeave,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners,visible} from '../lib/modules.mjs';
 
 test('leave and advance approval follows the four named accounts without changing member roles',()=>{
@@ -1907,4 +1908,44 @@ test('manual leave entitlement is honored consistently in UI and backend final-a
  assert.ok(ui.includes("d.leave_balance_mode==='manual'?Number(d.manual_leave_entitlement||0)"));
  assert.ok(server.includes("e.leave_balance_mode==='manual'?Number(e.manual_leave_entitlement||0)"));
  assert.match(ui,/طريقة تحديد انتهاء العقد/);
+});
+
+test('automatic advance installments skip deferred months and stop at actual remaining balance',()=>{
+ const source=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ const first=source.indexOf('const validMonth='),last=source.indexOf('export async function POST(req)');
+ assert.ok(first>0&&last>first);
+ const schedule=runInNewContext(source.slice(first,last)+';({autoAdvanceAllocations,allocateEditedAdvanceTotal})',{cents:x=>Math.round(Number(x||0)*100)});
+ const loan={id:'loan-a',data:{employee_id:'employee-a',amount:1200,installments:3,installment_amount:400,final_installment:400,first_month:'2026-11',date:'2026-11-01',schedule_mode:'auto',deferred_months:['2026-12']}};
+ const context={loans:[loan],sums:new Map()};
+ const alloc=(month,cap=Infinity)=>schedule.autoAdvanceAllocations(context,'employee-a',month,cap);
+ assert.equal(alloc('2026-11')[0].amount,400);
+ assert.equal(alloc('2026-12').length,0);
+ assert.equal(alloc('2027-01')[0].amount,400);
+ assert.equal(alloc('2027-02')[0].amount,400);
+ assert.equal(alloc('2027-02',15000)[0].amount,150);
+ assert.equal(alloc('2027-02',0).length,0);
+ context.sums.set('loan-a',115000);
+ assert.equal(alloc('2027-02')[0].amount,50);
+ context.sums.set('loan-a',120000);
+ assert.equal(alloc('2027-02').length,0);
+ loan.data.schedule_mode='manual';
+ context.sums.set('loan-a',0);
+ assert.equal(alloc('2026-11').length,0);
+ loan.data.schedule_mode='auto';
+ assert.throws(()=>schedule.allocateEditedAdvanceTotal(context,'employee-a','2026-11',130000),/يتجاوز الرصيد/);
+ assert.equal(schedule.allocateEditedAdvanceTotal(context,'employee-a','2026-11',60000)[0].amount,600);
+});
+test('payroll installment posting remains tied to confirmed finance payment and loan postponement is audited',()=>{
+ const payroll=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(payroll,/autoAdvanceAllocations\(advanceContext,e\.id,month,cents\(salary\)\)/);
+ assert.match(payroll,/allocateEditedAdvanceTotal\(advanceContext,old\.employee_id,batch\.data\.month/);
+ assert.match(payroll,/if\(action==='finance_pay'\)\{\s*for\(const allocation of financeAllocations\)/);
+ assert.match(payroll,/payroll_reference:String\(body\.reference\)\.trim\(\)/);
+ assert.match(payroll,/advance_allocations\.reduce\(\(n,a\)=>n\+cents\(a\.amount\),0\)!==cents\(d\.advance_deduction\)/);
+ assert.match(erp,/action==='configure_advance_schedule'/);
+ assert.match(erp,/advance_schedule_change/);
+ assert.match(erp,/_payroll_batch_id\)throw Error/);
+ assert.match(payroll,/status='paid' AND mutation=\?/);
+ assert.match(payroll,/NOT EXISTS\(SELECT 1 FROM records WHERE module='repayments' AND code=\?\)/);
 });
