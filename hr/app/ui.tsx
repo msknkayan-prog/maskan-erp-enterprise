@@ -1257,7 +1257,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  const authorized=permittedWrite(user||{},linkedFinance.kind)&&permission(user||{},linkedFinance.kind,'edit');
  const existing=related[0]||null;
  const salary=Number(employee?.data?.salary||parent.data?.employee_snapshot?.salary||0);
- const payableDays=parent.data?.leave_type==='annual'?Number(parent.data?.paid_days??parent.data?.days||0):parent.data?.leave_type==='unpaid'?0:Number(parent.data?.days||0);
+ const payableDays=parent.data?.leave_type==='annual'?Number((parent.data?.paid_days??parent.data?.days)||0):parent.data?.leave_type==='unpaid'?0:Number(parent.data?.days||0);
  const days=Number.isFinite(payableDays)?Math.max(0,payableDays):0;
  const editingDue=!isRepayment&&existing?.status==='draft';
  const canSave=validParent&&authorized&&(isRepayment?balance>0:!existing||editingDue);
