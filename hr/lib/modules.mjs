@@ -98,6 +98,8 @@ if(module==='employees'&&/^(?:مراقب|مشرف)(?:\s*[-–/]\s*(?:مراقب|
 if(module==='employees'){
  out.leave_balance_mode=out.leave_balance_mode||'auto';
  out.contract_expiry_mode=out.contract_expiry_mode||'auto';
+  // Contract-end based accrual must never be overridden by a stale manual entitlement.
+  if(out.contract_expiry_mode==='manual')out.leave_balance_mode='auto';
  if(!['auto','manual'].includes(out.leave_balance_mode)||!['auto','manual'].includes(out.contract_expiry_mode))throw Error('طريقة الاحتساب غير صالحة');
  if(out.leave_balance_mode==='manual'&&(String(input.data?.manual_leave_entitlement??'').trim()===''||!Number.isFinite(out.manual_leave_entitlement)||out.manual_leave_entitlement<0))throw Error('أدخل إجمالي رصيد الإجازات المستحق يدويًا');
  if(out.contract_expiry_mode==='manual'){
