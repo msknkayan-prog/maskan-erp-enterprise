@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
-import {companies,modules,normalize,annualLeave,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners,visible} from '../lib/modules.mjs';
+import {companies,modules,normalize,annualLeave,leaveAccrualAsOf,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners,visible} from '../lib/modules.mjs';
 
 test('leave and advance approval follows the four named accounts without changing member roles',()=>{
  const magdi={email:requestApprovalOwners.projects_director.email,role:'admin',is_active:true};
