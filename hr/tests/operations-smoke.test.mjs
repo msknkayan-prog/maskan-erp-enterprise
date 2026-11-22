@@ -898,7 +898,7 @@ test('manager account company permissions are checked at project linking and req
  assert.match(source,/SELECT role,is_active,companies FROM members WHERE email=\?/);
  assert.match(source,/manager\.companies/);
  assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة المحددة/);
- assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة التابعة للطلب/);
+ assert.match(source,/المدير المباشر لا يمتلك صلاحية الشركة التابعة للموظف/);
 });
 
 test('leave dues select employee then filter approved leave and populate salary and days',()=>{
