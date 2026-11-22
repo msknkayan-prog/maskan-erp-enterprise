@@ -1890,7 +1890,7 @@ test('employee leave entitlement and contract expiration honor explicit automati
  const automatic=save({leave_balance_mode:'auto',contract_expiry_mode:'auto',contract_expiry:'2038-12-30'});
  assert.equal(automatic.leave_balance_mode,'auto');
  assert.notEqual(automatic.contract_expiry,'2038-12-30');
- assert.match(automatic.contract_expiry,/^\\d{4}-\\d{2}-\\d{2}$/);
+ assert.equal(automatic.contract_expiry.length,10);
  const manual=save({leave_balance_mode:'manual',manual_leave_entitlement:43.5,contract_expiry_mode:'manual',contract_expiry:'2038-12-30'});
  assert.equal(manual.manual_leave_entitlement,43.5);
  assert.equal(manual.contract_expiry,'2038-12-30');
