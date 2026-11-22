@@ -110,7 +110,7 @@ test('Magdi onboarding and project approval preserve the general manager role in
  assert.match(backend,/const adminMagdi=isMagdiGeneralManagerAccount\(existing,name\)/);
  assert.match(backend,/\}else if\(!adminMagdi\)\{/);
  assert.match(backend,/isAuthorizedProjectManagerAccount\(manager,data\.manager_name/);
- assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:managerEmail\}/);
+ assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:directEmail\}/);
  assert.match(backend,/if\(!adminMagdi&&manager\.projects!=='\*'/);
 });
 
