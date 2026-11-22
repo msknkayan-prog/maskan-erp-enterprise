@@ -839,7 +839,7 @@ test('request workflow requires an assigned active manager before routing and ch
  assert.match(backend,/current==='draft'&&decision==='approve'&&next==='project_manager'/);
  assert.match(backend,/يجب تحديد المدير المباشر المخوّل في سجل الموظف/);
  assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:directEmail\}/);
- assert.match(backend,/current==='project_manager'&&decision==='approve'&&u\.role!=='admin'/);
+ assert.match(backend,/current==='project_manager'&&u\.role!=='admin'/);
  assert.match(backend,/هذا الطلب بانتظار اعتماد المدير المباشر المخوّل/);
  assert.match(backend,/availableEmployeeDirectManagers\(db,old\.company\)/);
  assert.match(ui,/module==='projects'&&f\.key==='manager_email'/);
