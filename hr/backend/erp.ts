@@ -654,7 +654,44 @@ if(body.action==='record_opening_advance_repayment'){
   return json({ok:true,deleted:true});
  }
  if(body.action==='disburse'){if(mod!=='advances'||!old||old.status!=='approved'||!isRequestFinanceActor(u)||!permission(u,mod,'approve'))throw Error('403');const reference=String(body.reference||'').trim();if(!reference||reference.length>200)throw Error('مرجع الصرف مطلوب');const data={...JSON.parse(old.data),payment_reference:reference,paid_at:now};const result=await db.batch([db.prepare("UPDATE records SET data=?,status='paid',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=?").bind(JSON.stringify(data),now,mutation,old.id,old.revision),db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,old.id,'record_disbursement',now,JSON.stringify({reference}),old.id,mutation)]);if(!result[0].meta.changes)throw Error('تغير السجل؛ حدّث الصفحة');return json({ok:true});}
-if(body.action==='transition'){if(['payroll','payroll_batches'].includes(mod))throw Error('اعتماد المسيرات الشهرية يتم حصريًا من نافذة المسير الشهري');if(!permission(u,mod,'approve'))throw Error('403');if(!old)throw Error('السجل غير موجود');if(operationalModules.includes(mod)||['repayments'].includes(mod))throw Error('هذا السجل لا يتطلب مسار اعتماد');const current=old.status;let next=mod==='payroll'?(current==='draft'?'hr':current==='hr'?'finance':current==='finance'?'approved':null):(current==='draft'?workflow[1]:workflow[workflow.indexOf(current)+1]);const decision=body.decision||'approve';if(decision==='return')next='draft';if(decision==='reject')next='rejected';if(!['approve','return','reject'].includes(decision))throw Error('قرار غير صالح');if(decision!=='approve'&&!String(body.note||'').trim())throw Error('سبب الإعادة أو الرفض مطلوب');if(!next)throw Error('السجل مغلق');if(current==='draft'&&decision!=='approve')throw Error('القرار غير متاح للمسودة');const routedRequest=['leave','advances','resignations'].includes(mod);if(current==='draft'){if(!permittedWrite(u,mod))throw Error('403');}else if(routedRequest?(u.role!=='admin'&&!isRequestStageActor(u,current)):(u.role!=='admin'&&u.role!==current))throw Error('403');const details=JSON.parse(old.data);
+
+if(body.action==='leave_dues_workflow'){
+ if(mod!=='leave_dues'||!old)throw Error('بيان مستحقات الإجازة غير موجود');
+ const decision=String(body.decision||'');
+ const state=old.status;
+ const details=JSON.parse(old.data||'{}');
+ const canSubmit=permittedWrite(u,'leave_dues')&&permission(u,'leave_dues','edit');
+ const isDirector=u.role==='projects_director'||u.role==='admin';
+ const isFinance=isRequestFinanceActor(u)&&permission(u,'leave_dues','approve');
+ let next='';
+ if(decision==='submit'&&state==='draft'&&canSubmit)next='projects_director';
+ else if(decision==='approve'&&state==='projects_director'&&isDirector&&permission(u,'leave_dues','approve'))next='approved';
+ else if(decision==='return'&&state==='projects_director'&&isDirector&&permission(u,'leave_dues','approve'))next='draft';
+ else if(decision==='reject'&&state==='projects_director'&&isDirector&&permission(u,'leave_dues','approve'))next='rejected';
+ else if(decision==='pay'&&state==='approved'&&isFinance)next='paid';
+ else throw Error('لا تملك صلاحية القرار أو أن البيان ليس في مرحلة الاعتماد المناسبة');
+ const reason=String(body.note||'').trim().slice(0,1000);
+ if(['return','reject'].includes(decision)&&!reason)throw Error('أدخل سبب الإعادة أو الرفض');
+ const reference=String(body.reference||'').trim();
+ const method=String(body.method||'bank');
+ if(decision==='pay'&&(reference.length<3||reference.length>200||!['bank','cash'].includes(method)))throw Error('أدخل مرجع الصرف وطريقته قبل اعتماد الصرف');
+ if(!details.leave_id)throw Error('بيان المستحقات غير مرتبط بطلب إجازة');
+ const leave=await db.prepare("SELECT status,company,data FROM records WHERE module='leave' AND id=?").bind(String(details.leave_id)).first<any>();
+ if(!leave||leave.company!==old.company||leave.status!=='approved')throw Error('يجب أن يرتبط المستحق بطلب إجازة معتمد من نفس الشركة');
+ if(!Number.isFinite(Number(details.net))||Number(details.net)<0)throw Error('صافي المستحقات غير صالح');
+ const tracking=details.dues_approval&&typeof details.dues_approval==='object'?details.dues_approval:{};
+ if(decision==='submit')details.dues_approval={...tracking,submitted_by:u.email,submitted_at:now};
+ if(decision==='approve')details.dues_approval={...tracking,director_by:u.email,director_at:now,director_name:magdiProjectManagerName};
+ if(decision==='return'||decision==='reject')details.dues_approval={...tracking,decision_by:u.email,decision_at:now,decision_reason:reason,...(decision==='return'?{director_by:null,director_at:null}:{})};
+ if(decision==='pay'){details.payment_reference=reference;details.payment_method=method;details.paid_at=now;details.paid_by=u.email;}
+ const result=await db.batch([
+  db.prepare("UPDATE records SET status=?,data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND status=?").bind(next,JSON.stringify(details),now,mutation,old.id,old.revision,state),
+  db.prepare("INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)").bind(crypto.randomUUID(),u.email,old.id,'leave_dues_'+decision,now,JSON.stringify({from:state,to:next,reason,reference:decision==='pay'?reference:undefined,amount:details.net}),old.id,mutation)
+ ]);
+ if(!result[0].meta.changes)throw Error('تغير بيان المستحقات؛ حدث الصفحة قبل تكرار القرار');
+ return json({ok:true,status:next});
+}
+if(body.action==='transition'){if(mod==='leave_dues')throw Error('مستحقات الإجازة تعتمد حصريًا من المدير العام قبل المالية');if(['payroll','payroll_batches'].includes(mod))throw Error('اعتماد المسيرات الشهرية يتم حصريًا من نافذة المسير الشهري');if(!permission(u,mod,'approve'))throw Error('403');if(!old)throw Error('السجل غير موجود');if(operationalModules.includes(mod)||['repayments'].includes(mod))throw Error('هذا السجل لا يتطلب مسار اعتماد');const current=old.status;let next=mod==='payroll'?(current==='draft'?'hr':current==='hr'?'finance':current==='finance'?'approved':null):(current==='draft'?workflow[1]:workflow[workflow.indexOf(current)+1]);const decision=body.decision||'approve';if(decision==='return')next='draft';if(decision==='reject')next='rejected';if(!['approve','return','reject'].includes(decision))throw Error('قرار غير صالح');if(decision!=='approve'&&!String(body.note||'').trim())throw Error('سبب الإعادة أو الرفض مطلوب');if(!next)throw Error('السجل مغلق');if(current==='draft'&&decision!=='approve')throw Error('القرار غير متاح للمسودة');const routedRequest=['leave','advances','resignations'].includes(mod);if(current==='draft'){if(!permittedWrite(u,mod))throw Error('403');}else if(routedRequest?(u.role!=='admin'&&!isRequestStageActor(u,current)):(u.role!=='admin'&&u.role!==current))throw Error('403');const details=JSON.parse(old.data);
 if(routedRequest&&!details.employee_id)throw Error('لا يمكن توجيه طلب دون موظف مرتبط بالمدير المباشر');
 
 if(routedRequest&&details.employee_id&&((current==='draft'&&decision==='approve'&&next==='project_manager')||(current==='project_manager'&&u.role!=='admin'))){
