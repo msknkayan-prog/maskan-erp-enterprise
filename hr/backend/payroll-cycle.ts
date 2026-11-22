@@ -155,7 +155,7 @@ export async function POST(req){
      const status=d.employment_status||d.employee_status||'';
      const isSuspended=!['active','نشط','على رأس العمل','علي راس العمل'].includes(String(status).trim());
      const salaryMismatch=Math.abs(cents(salary)-cents(basic+housing+transport))>1;
-     const advanceAllocations=autoAdvanceAllocations(advanceContext,e.id,month);
+     const advanceAllocations=autoAdvanceAllocations(advanceContext,e.id,month,cents(salary));
      const row={batch_id:id,employee_id:e.id,source_company:e.company,working_company:co,month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||e.code||'',employment_status:status,project_id:d.project_id||'',cost_company:co,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
        basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,
        absence_days:0,absence_deduction:0,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
@@ -224,7 +224,7 @@ export async function POST(req){
    const declared=rounded(d.salary??d.total_monthly_salary??salary);
    const mismatch=Math.abs(cents(declared)-cents(salary))>1;
    const advanceContext=await paidLoanContext();
-   const advanceAllocations=autoAdvanceAllocations(advanceContext,employeeId,batch.data.month);
+   const advanceAllocations=autoAdvanceAllocations(advanceContext,employeeId,batch.data.month,cents(salary));
    const rowId=crypto.randomUUID();
    const data={batch_id:batch.id,employee_id:employeeId,source_company:original.company,working_company:batch.company,month:batch.data.month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||original.code||'',employment_status:status,project_id:d.project_id||'',cost_company:batch.company,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
     basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:0,absence_deduction:0,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
