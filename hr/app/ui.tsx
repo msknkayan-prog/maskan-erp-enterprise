@@ -1240,6 +1240,18 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  const advancesById=new Map(rows.filter(r=>r.module==='advances').map(r=>[r.id,r]));
  const employeesById=new Map(rows.filter(r=>r.module==='employees').map(r=>[r.id,r]));
  const completed=repayments.reduce((n,r)=>n+Number(r.data?.amount||0),0);
+ const printRepayments=()=>{
+  const safe=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+  const tr=(r,i)=>{
+   const loan=advancesById.get(r.data?.advance_id);
+   const employee=employeesById.get(loan?.data?.employee_id||r.data?._opening_employee_id||r.data?.employee_id);
+   const cells=[i+1,employee?.data?.name||'—',companyDisplayName(r.company),r.data?.date||'—',r.data?.code||r.code||'—',money(r.data?.amount),r.data?.method==='payroll'?'خصم مسير':r.data?.method==='bank'?'تحويل بنكي':'سداد نقدي / آخر',r.data?.payroll_month||'—'];
+   return '<tr>'+cells.map(v=>'<td>'+safe(v)+'</td>').join('')+'</tr>';
+  };
+  const title=company?companyOfficialName(company,rows):'جميع الشركات';
+  const html='<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>سجل سداد السلف</title><style>@page{size:A4 landscape;margin:12mm}body{font-family:Tajawal,Tahoma,Arial,sans-serif;direction:rtl;color:#26342d}header{text-align:center;border-bottom:3px solid #b3944d;padding-bottom:10px;margin-bottom:14px}h1{font-size:20px;margin:5px}p{font-size:12px}table{border-collapse:collapse;width:100%;font-size:10px}th,td{border:1px solid #d9d0bf;padding:6px;text-align:right}th{background:#eee1c7}tbody tr:nth-child(even){background:#fbf7f0}.foot{margin-top:15px;border-top:1px solid #ccc;padding-top:10px;font-size:11px}button{margin:12px;padding:8px;background:#b2934c;border:0}@media print{button{display:none}}</style></head><body><header><h1>'+safe(title)+'</h1><h2>سجل سداد السلف</h2><p>تاريخ الطباعة: '+safe(new Date().toLocaleString('ar-SA'))+' · السجلات: '+repayments.length+' · إجمالي السداد: '+safe(money(completed))+' ريال</p></header><table><thead><tr>'+['م','الموظف','الشركة','تاريخ السداد','المرجع','المبلغ','الطريقة','شهر المسير'].map(v=>'<th>'+safe(v)+'</th>').join('')+'</tr></thead><tbody>'+repayments.map(tr).join('')+'</tbody></table><div class="foot">سجل صادر من منصة شؤون الموظفين؛ يرجى مطابقة السدادات بالمستندات والرواتب المصروفة. لا يعد السجل بحد ذاته إثبات تحويل بنكي.</div><button onclick="window.print()">طباعة / حفظ PDF</button></body></html>';
+  const w=window.open('','_blank');if(!w){notify('اسمح بالنوافذ المنبثقة لطباعة سجل السداد');return;}w.document.open();w.document.write(html);w.document.close();
+ };
  return <details className="panel" dir="rtl" style={{marginBottom:12,padding:'8px 12px'}} open={false}>
   <summary style={{cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,padding:'6px 3px'}}>
    <strong>سجل سداد السلف — داخل ملف السلف</strong>
@@ -1253,7 +1265,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   </tr>})}
   </tbody></table></div>}
   <div className="row-actions" style={{display:'flex',gap:7,flexWrap:'wrap',marginTop:9}}>
-   <button type="button" onClick={()=>window.print()}>طباعة سجل السداد المعروض</button>
+   <button type="button" onClick={printRepayments}>طباعة سجل السداد المعروض</button>
    {permittedWrite(user||{},'repayments')&&<small>تسجيل السداد وصلاحياته المالية تعمل من أزرار السلفة المرتبطة، دون إنشاء تبويب منفصل.</small>}
   </div>
  </details>;
