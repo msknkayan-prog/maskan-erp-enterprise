@@ -953,8 +953,8 @@ test('leave editor recalculates duration and end date on type and start date cha
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/function applyLeaveField\(key,value\)/);
  assert.match(ui,/next\.days=String\(days\);next\.end=leaveEndDate\(next\.start,days\)/);
- assert.match(ui,/module==='leave'&&\['leave_type','holiday_policy','ticket'\]\.includes\(f\.key\)\?applyLeaveField/);
- assert.match(ui,/module==='leave'&&\['start','end'\]\.includes\(f\.key\)\)applyLeaveField/);
+ assert.match(ui,/module==='leave'&&\['leave_type','leave_payment','holiday_policy','ticket'\]\.includes\(f\.key\)\?applyLeaveField/);
+ assert.match(ui,/module==='leave'&&\['start','end','unpaid_days'\]\.includes\(f\.key\)\)applyLeaveField/);
  assert.match(ui,/fixedLeaveDays\(edit\.data\.leave_type\)!==null/);
  assert.match(ui,/لا تخصم من رصيد الإجازة السنوية/);
 });
@@ -1853,4 +1853,33 @@ test('seven approved project managers are selectable without duplicating Othman'
  assert.match(ui,/اختر أحد المدراء السبعة/);
  assert.match(erp,/updatedEmployee=\{\.\.\.d,manager:String\(directory\.name/);
  assert.match(erp,/employees_linked:syncEmployees\.length/);
+});
+
+
+test('annual leave paid, unpaid and mixed days retain correct annual entitlement without double charge',()=>{
+ const base={employee_id:'employee-test',leave_type:'annual',ticket:'no',start:'2026-11-22',end:'2026-11-26',days:5,holiday_policy:'include'};
+ const norm=data=>normalize('leave',{company:'مسكن الكيان',data:{...base,...data}});
+ const full=norm({leave_payment:'paid',unpaid_days:0});
+ assert.equal(full.paid_days,5);assert.equal(full.unpaid_days,0);assert.equal(full.balance_deducted,true);
+ const unpaid=norm({leave_payment:'unpaid',unpaid_days:0});
+ assert.equal(unpaid.paid_days,0);assert.equal(unpaid.unpaid_days,5);assert.equal(unpaid.balance_deducted,false);
+ const mixed=norm({leave_payment:'mixed',unpaid_days:2});
+ assert.equal(mixed.paid_days,3);assert.equal(mixed.unpaid_days,2);assert.equal(mixed.balance_deducted,true);
+ const legacy=norm({unpaid_days:0});
+ assert.equal(legacy.leave_payment,'paid');assert.equal(legacy.paid_days,5);
+ const noSalary=norm({leave_type:'unpaid',unpaid_days:0});
+ assert.equal(noSalary.paid_days,0);assert.equal(noSalary.unpaid_days,5);assert.equal(noSalary.balance_deducted,false);
+ assert.throws(()=>norm({leave_payment:'mixed',unpaid_days:5}),/الأيام غير المدفوعة/);
+ assert.throws(()=>norm({leave_payment:'mixed',unpaid_days:0}),/الأيام غير المدفوعة/);
+});
+test('integrated financial screens keep one linked record per leave and never pay unpaid annual days',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/kind:module==='leave'\?'leave_dues':'repayments'/);
+ assert.match(ui,/سداد السلفة والسدادات السابقة/);
+ assert.match(ui,/مستحقات الإجازة المرتبطة بالطلب/);
+ assert.match(server,/data.days=Math.max\(0,paidDays\)/);
+ assert.match(server,/مستحقات هذه الإجازة مسجلة بالفعل/);
+ assert.match(server,/SUM\(CAST\(COALESCE\(json_extract\(data,'\$\.paid_days'\),json_extract\(data,'\$\.days'\)\)/);
+ assert.match(server,/السداد يتجاوز الرصيد المتبقي/);
 });
