@@ -790,7 +790,7 @@ const managerDirectoryForRequest=(record,companyName)=>{
  const directRow=rows.find(r=>r.id===directRef&&r.company===companyName&&r.module==='project_managers');
  const projectId=record?.data?.project_id||employeeData.project_id;
  const project=rows.find(r=>r.id===projectId&&r.module==='projects'&&(r.company===companyName||Array.isArray(r.data?._shared_companies)&&r.data._shared_companies.includes(companyName)));
- if(!project)return {project:'غير محدد',name:'',email:'',phone:'',direct_name:directRow?.data.name||employeeData.manager||'',direct_email:directRow?.data.email||employeeData.manager_email||''};
+ if(!project)return {project:'غير محدد',name:directRow?.data.name||employeeData.manager||'',email:String(directRow?.data.email||employeeData.manager_email||'').trim().toLowerCase(),phone:directRow?.data.phone||'',direct_name:directRow?.data.name||employeeData.manager||'',direct_email:directRow?.data.email||employeeData.manager_email||''};
  const effectiveEmail=String(employeeData.manager_email||employeeData.supervisor_account||'').trim().toLowerCase();
  const projectManager=rows.find(r=>r.module==='project_managers'&&r.company===companyName&&String(r.data.email||'').toLowerCase()===effectiveEmail);
  const activeAccount=members.find(m=>String(m.email||'').toLowerCase()===effectiveEmail);
