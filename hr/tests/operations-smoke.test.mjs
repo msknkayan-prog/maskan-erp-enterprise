@@ -110,7 +110,7 @@ test('Magdi onboarding and project approval preserve the general manager role in
  assert.match(backend,/const adminMagdi=isMagdiGeneralManagerAccount\(existing,name\)/);
  assert.match(backend,/\}else if\(!adminMagdi\)\{/);
  assert.match(backend,/isAuthorizedProjectManagerAccount\(manager,data\.manager_name/);
- assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:managerEmail\}/);
+ assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:directEmail\}/);
  assert.match(backend,/if\(!adminMagdi&&manager\.projects!=='\*'/);
 });
 
@@ -817,8 +817,8 @@ test('project managers only see the project assigned to their own login, even wi
   {id:'p-two',module:'projects',company:'مسكن الكيان',data:{name:'مشروع ب',manager_email:'pm-two@example.test'}}
  ];
  const employees=[
-  {id:'e-one',module:'employees',company:'مسكن الكيان',data:{name:'موظف أ',project_id:'p-one'}},
-  {id:'e-two',module:'employees',company:'مسكن الكيان',data:{name:'موظف ب',project_id:'p-two'}}
+  {id:'e-one',module:'employees',company:'مسكن الكيان',data:{name:'موظف أ',project_id:'p-one',manager_email:'pm-one@example.test'}},
+  {id:'e-two',module:'employees',company:'مسكن الكيان',data:{name:'موظف ب',project_id:'p-two',manager_email:'pm-two@example.test'}}
  ];
  const requests=[
   {id:'r-one',module:'leave',company:'مسكن الكيان',data:{employee_id:'e-one'}},
@@ -831,17 +831,17 @@ test('project managers only see the project assigned to their own login, even wi
  assert.equal(visible(pm,requests[1],all),false);
  assert.equal(visible(pm,projects[1],all),false);
  assert.equal(visible({...pm,email:'unassigned@example.test'},requests[0],all),false);
- assert.equal(visible({...pm,projects:'[]'},requests[0],all),false);
+ assert.equal(visible({...pm,projects:'[]'},requests[0],all),true,'direct manager can approve regardless of project-scope assignment');
 });
 test('request workflow requires an assigned active manager before routing and checks ownership at review',()=>{
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(backend,/current==='draft'&&decision==='approve'&&next==='project_manager'/);
- assert.match(backend,/يجب ربط الموظف بمشروع قبل إرسال الطلب/);
- assert.match(backend,/يجب تعيين مدير المشروع في ملف المشروع/);
- assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:managerEmail\}/);
+ assert.match(backend,/يجب تحديد المدير المباشر المخوّل في سجل الموظف/);
+ assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:directEmail\}/);
  assert.match(backend,/current==='project_manager'&&u\.role!=='admin'/);
- assert.match(backend,/الطلب يخص مدير مشروع آخر/);
+ assert.match(backend,/هذا الطلب بانتظار اعتماد المدير المباشر المخوّل/);
+ assert.match(backend,/availableEmployeeDirectManagers\(db,old\.company\)/);
  assert.match(ui,/module==='projects'&&f\.key==='manager_email'/);
  assert.match(ui,/directManagerChoices\(rows,members,edit\.company\)/);
 });
@@ -850,8 +850,8 @@ test('the deployed shared visibility rule restricts managers to their assigned p
  const {visible}=await import('../lib/modules.mjs');
  const p1={id:'p1',module:'projects',company:'مسكن الكيان',data:{manager_email:'pm1@example.test'}};
  const p2={id:'p2',module:'projects',company:'مسكن الكيان',data:{manager_email:'pm2@example.test'}};
- const e1={id:'e1',module:'employees',company:'مسكن الكيان',data:{project_id:'p1'}};
- const e2={id:'e2',module:'employees',company:'مسكن الكيان',data:{project_id:'p2'}};
+ const e1={id:'e1',module:'employees',company:'مسكن الكيان',data:{project_id:'p1',manager_email:'pm1@example.test'}};
+ const e2={id:'e2',module:'employees',company:'مسكن الكيان',data:{project_id:'p2',manager_email:'pm2@example.test'}};
  const r1={id:'l1',module:'leave',company:'مسكن الكيان',data:{employee_id:'e1'}};
  const r2={id:'l2',module:'leave',company:'مسكن الكيان',data:{employee_id:'e2'}};
  const rows=[p1,p2,e1,e2,r1,r2];
@@ -861,13 +861,13 @@ test('the deployed shared visibility rule restricts managers to their assigned p
  assert.equal(visible(u,p1,rows),true);
  assert.equal(visible(u,p2,rows),false);
  assert.equal(visible({...u,email:'unknown@example.test'},r1,rows),false);
- assert.equal(visible({...u,projects:'[]'},r1,rows),false);
+ assert.equal(visible({...u,projects:'[]'},r1,rows),true,'direct supervisor request access is independent of project scope');
  assert.equal(visible({...u,companies:'["شركة البلد المتحدة"]'},r1,rows),false);
 });
 test('named employee delegation overrides project owner for both visibility rules, including technical office and payroll',async()=>{
  const project={id:'technical',module:'projects',company:'مسكن الكيان',data:{name:'المكتب الفني',manager_email:'owner@example.test'}};
- const delegated={id:'worker1',module:'employees',company:'مسكن الكيان',data:{name:'موظف المكتب الفني',project_id:'technical',delegated_manager_email:'new@example.test'}};
- const legacy={id:'worker2',module:'employees',company:'مسكن الكيان',data:{name:'موظف آخر',project_id:'technical'}};
+ const delegated={id:'worker1',module:'employees',company:'مسكن الكيان',data:{name:'موظف المكتب الفني',project_id:'technical',delegated_manager_email:'new@example.test',manager_email:'new@example.test'}};
+ const legacy={id:'worker2',module:'employees',company:'مسكن الكيان',data:{name:'موظف آخر',project_id:'technical',manager_email:'owner@example.test'}};
  const request={id:'leave1',module:'leave',company:'مسكن الكيان',data:{employee_id:delegated.id,project_id:project.id}};
  const salary={id:'pay1',module:'payroll',company:'مسكن الكيان',data:{employee_id:delegated.id,project_id:project.id,batch_id:'batch1'}};
  const batch={id:'batch1',module:'payroll_batches',company:'مسكن الكيان',data:{}};
@@ -898,7 +898,7 @@ test('manager account company permissions are checked at project linking and req
  assert.match(source,/SELECT role,is_active,companies FROM members WHERE email=\?/);
  assert.match(source,/manager\.companies/);
  assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة المحددة/);
- assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة التابعة للطلب/);
+ assert.match(source,/المدير المباشر لا يمتلك صلاحية الشركة التابعة للموظف/);
 });
 
 test('leave dues select employee then filter approved leave and populate salary and days',()=>{
@@ -1052,7 +1052,7 @@ test('project assignment and employee request details use project manager direct
  assert.match(ui,/managerDirectoryForRequest\(edit,edit\.company\)/);
  assert.match(erp,/سجّل بيانات مدير المشروع أولًا في دليل مدراء المشاريع للشركة/);
  assert.match(erp,/data\.project_manager=\{name:manager\?\.name/);
- assert.match(erp,/details\.project_manager=\{name:isMagdiGeneralManagerAccount/);
+ assert.match(erp,/details\.project_manager=\{name:direct\.name,email:directEmail/);
  assert.match(erp,/UPDATE records SET status=\?,data=\?,revision=revision\+1/);
 });
 
@@ -1164,7 +1164,7 @@ test('project managers choose authorized projects via searchable checkbox list o
  assert.match(ui,/memberEdit\.role==='project_manager'&&<ManagerProjectPicker/);
  assert.match(backend,/حدد مشروعًا واحدًا على الأقل لمدير المشروع/);
  assert.match(backend,/يمكن منح المدير صلاحية المشاريع المعيّن مديرًا لها فقط/);
- assert.match(backend,/ليس لديك صلاحية مراجعة طلبات هذا المشروع/);
+ assert.match(backend,/المدير المباشر المحدد ليس لديه حساب اعتماد نشط/);
 });
 test('project manager visibility requires both assigned manager and explicit selected project scope',async()=>{
  const {visible}=await import('../lib/modules.mjs');
@@ -1948,4 +1948,36 @@ test('payroll installment posting remains tied to confirmed finance payment and 
  assert.match(erp,/_payroll_batch_id\)throw Error/);
  assert.match(payroll,/status='paid' AND mutation=\?/);
  assert.match(payroll,/NOT EXISTS\(SELECT 1 FROM records WHERE module='repayments' AND code=\?\)/);
+});
+
+test('employee requests route to a registered active direct supervisor rather than the project owner',async()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const {requestApprovalStages}=await import('../lib/request-approval.mjs');
+ assert.equal(requestApprovalStages[0].title,'اعتماد المدير المباشر');
+ assert.match(backend,/const directEmail=String\(employeeData\.manager_email\|\|employeeData\.supervisor_account/);
+ assert.match(backend,/direct_manager=\{name:direct\.name,email:directEmail/);
+ assert.match(backend,/originalDirectEmail&&approvedEmail!==directEmail/);
+ assert.match(backend,/migrated_from_project_manager:true/);
+ assert.doesNotMatch(backend,/يجب تعيين مدير المشروع في ملف المشروع قبل إرسال الطلب/);
+ assert.match(backend,/\['leave','advances','resignations'\]\.includes\(mod\)/);
+ assert.match(ui,/المدير المباشر المخوّل لاعتماد هذا الطلب/);
+ assert.match(ui,/EmployeeDirectManagerCell/);
+});
+test('separate project owner and direct supervisor have different employee-request access',async()=>{
+ const {visible}=await import('../backend/modules.mjs');
+ const employee={id:'e',module:'employees',company:'مسكن الكيان',data:{project_id:'p',manager_email:'supervisor@example.test'}};
+ const project={id:'p',module:'projects',company:'مسكن الكيان',data:{manager_email:'projectowner@example.test'}};
+ const leave={id:'l',module:'leave',company:'مسكن الكيان',data:{employee_id:'e'}};
+ const loan={id:'a',module:'advances',company:'مسكن الكيان',data:{employee_id:'e'}};
+ const resignation={id:'r',module:'resignations',company:'مسكن الكيان',data:{employee_id:'e'}};
+ const rows=[employee,project,leave,loan,resignation];
+ const supervisor={role:'project_manager',email:'supervisor@example.test',projects:'[]',companies:'*'};
+ const projectOwner={...supervisor,email:'projectowner@example.test',projects:'["p"]'};
+ for(const request of [leave,loan,resignation]){
+  assert.equal(visible(supervisor,request,rows),true);
+  assert.equal(visible(projectOwner,request,rows),false);
+ }
+ assert.equal(visible(projectOwner,project,rows),true);
+ assert.equal(visible({...supervisor,companies:'["رياح الاعمار"]'},leave,rows),false);
 });

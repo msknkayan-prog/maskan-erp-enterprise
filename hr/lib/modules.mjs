@@ -35,13 +35,13 @@ export const isRequestFinanceActor=user=>Boolean(user?.is_active!==false&&user?.
 export function isRequestStageActor(user,stage){
  if(!user||user.is_active===false)return false;
  const email=String(user.email||'').trim().toLowerCase();
- if(stage==='project_manager')return user.role==='project_manager'||user.role==='admin'&&email===requestApprovalOwners.projects_director.email;
+ if(stage==='project_manager')return user.role==='project_manager'||user.role==='admin'&&email===requestApprovalOwners.projects_director.email; // The backend additionally matches the request's specific direct supervisor.
  if(stage==='projects_director')return user.role==='admin'&&email===requestApprovalOwners.projects_director.email;
  if(stage==='hr')return user.role==='hr'&&email===requestApprovalOwners.hr.email;
  if(stage==='finance')return isRequestFinanceActor(user);
  return false;
 }
-export const states={draft:'مسودة',project_manager:'مدير المشروع',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
+export const states={draft:'مسودة',project_manager:'المدير المباشر',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
 export const saudiDate=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,10);
 export function annualLeave(hire,at=saudiDate()){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(hire||''))return null;
@@ -233,6 +233,14 @@ export function visible(user,row,all=[]){
   const accountEmail=String(user.email||'').trim().toLowerCase();
   const employee=row.module==='employees'?row:all.find(e=>e.module==='employees'&&e.id===row.data?.employee_id);
   const delegated=String(employee?.data?.delegated_manager_email||'').trim().toLowerCase();
+  if(row.module==='employees'&&user.role==='project_manager'){
+   const direct=String(row.data?.manager_email||row.data?.supervisor_account||'').trim().toLowerCase();
+   if(direct&&direct===accountEmail)return true;
+  }
+  if(['leave','advances','resignations','returns','terminations','warnings','appointments'].includes(row.module)&&row.data?.employee_id){
+   const direct=String(employee?.data?.manager_email||employee?.data?.supervisor_account||'').trim().toLowerCase();
+   if(direct&&user.role==='project_manager')return direct===accountEmail;
+  }
   if(delegated&&(row.module==='employees'||!!row.data?.employee_id))return delegated===accountEmail;
   if(row.module==='projects'&&all.some(e=>e.module==='employees'&&e.company===row.company&&e.data?.project_id===row.id&&String(e.data?.delegated_manager_email||'').trim().toLowerCase()===accountEmail))return true;
  if(user.role==='project_manager'){
