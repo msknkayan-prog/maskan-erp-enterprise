@@ -1994,6 +1994,9 @@ test('advance repayment ledger is embedded and sidebar hides redundant repayment
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const modules=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
  assert.match(ui,/سجل سداد السلف — داخل ملف السلف/);
+ assert.match(ui,/const printRepayments=\(\)=>/);
+ assert.match(ui,/@page\{size:A4 landscape;margin:12mm\}/);
+ assert.match(ui,/onClick=\{printRepayments\}>طباعة سجل السداد المعروض/);
  assert.match(ui,/module==='advances'&&permittedRead\(user\|\|\{\},'repayments'\)/);
  assert.match(ui,/r\.module==='repayments'&&!r\.data\?\._deleted/);
  assert.match(ui,/!\['project_managers','repayments'\]\.includes\(k\)/);
