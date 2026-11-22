@@ -1496,8 +1496,26 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
 <div className="form-grid">{fieldsFor.filter(f=>(module!=='project_managers'||['name','email','department'].includes(f.key))&&(module!=='leave'||f.key!=='unpaid_days'||edit.data.leave_payment==='mixed')&&(module!=='leave'||f.key!=='leave_payment'||['annual','unpaid'].includes(edit.data.leave_type))).map(f=><label className={f.type==='textarea'?'full':''} key={f.key}>{f.label}{f.required&&!((module==='employees'||module==='projects')&&!edit.id&&f.key==='code')&&<span className="required"> *</span>}{module==='projects'&&f.key==='manager_email'?<div style={{display:'grid',gap:8}}>
  <strong>مدير المشروع المسؤول</strong>
  <input type="search" aria-label="فلتر مدير المشروع" placeholder="ابحث باسم المدير أو بريده الإلكتروني" value={projectManagerSearch} onChange={e=>setProjectManagerSearch(e.target.value)}/>
- <select aria-label="اختيار مدير المشروع" value={edit.data.manager_email||''} onChange={e=>{const selected=directManagerChoices(rows,members,edit.company).find(m=>m.email===e.target.value);setEdit({...edit,data:{...edit.data,manager_email:e.target.value,manager_name:selected?.name||edit.data.manager_name}});setProjectManagerSearch('')}}><option value="">اختر من المدراء السبعة المعتمدين…</option>{directManagerChoices(rows,members,edit.company).filter(m=>!projectManagerSearch.trim()||normalizeSearch([m.name,m.email].join(' ')).includes(normalizeSearch(projectManagerSearch))||m.email===edit.data.manager_email).map(m=><option value={m.email||'pending:'+m.id} key={m.id} disabled={!m.eligible}>{m.name}{m.eligible?' — '+m.email:m.ambiguous?' — يحتاج مراجعة حسابات مكررة':' — يحتاج ربط بريد وصلاحية مدير مشروع'}</option>)}{edit.data.manager_email&&!directManagerChoices(rows,members,edit.company).some(m=>m.email===String(edit.data.manager_email).toLowerCase())&&<option value={edit.data.manager_email}>{edit.data.manager_name||edit.data.manager_email} — تعيين سابق</option>}</select>
- <small>الأسماء السبعة معتمدة للاختيار. المدير غير المفعّل يظهر في القائمة لكنه يحتاج ربط حساب وبريد وصلاحية قبل حفظ تعيينه. عند التعيين يتحدّث المدير المباشر لموظفي المشروع تلقائيًا.</small>
+ <select aria-label="اختيار مدير المشروع" value={edit.data.manager_email||''} onChange={e=>{
+ const value=e.target.value;
+ const all=directManagerChoices(rows,members,edit.company);
+ if(value.startsWith('pending:')){
+  const selected=all.find(m=>m.id===value.slice(8));
+  if(!selected)return;
+  if(!edit.id){notify('احفظ المشروع الجديد أولًا، ثم أعد فتحه لاختيار المدير وإنشاء الحساب المخوّل.');return;}
+  if(user?.role!=='admin'){notify('تفعيل حساب مدير المشروع وربطه يتطلب صلاحية مسؤول النظام.');return;}
+  setProjectManagerSearch('');
+  setEdit(null);
+  setModule('project_managers');
+  setManagerSetup({employeeId:'',name:selected.name,email:selected.ambiguous?'':selected.email||'',username:'',phone:'',ids:[edit.id],showDetails:true});
+  notify('أكمل ربط البريد والحساب النشط للمدير؛ بعد الحفظ يُعيَّن مديرًا لهذا المشروع.');
+  return;
+ }
+ const selected=all.find(m=>m.eligible&&m.email===value);
+ setEdit({...edit,data:{...edit.data,manager_email:value,manager_name:selected?.name||edit.data.manager_name}});
+ setProjectManagerSearch('');
+}}><option value="">اختر مدير المشروع أو فعّل حسابه…</option>{directManagerChoices(rows,members,edit.company).filter(m=>!projectManagerSearch.trim()||normalizeSearch([m.name,m.email].join(' ')).includes(normalizeSearch(projectManagerSearch))||m.email===edit.data.manager_email).map(m=><option value={m.eligible?m.email:'pending:'+m.id} key={m.id}>{m.name}{m.eligible?' — جاهز للاختيار':m.ambiguous?' — اضغط لمراجعة الحسابات المكررة':' — اضغط لربط حساب وتفعيل الصلاحية'}</option>)}{edit.data.manager_email&&!directManagerChoices(rows,members,edit.company).some(m=>m.email===String(edit.data.manager_email).toLowerCase())&&<option value={edit.data.manager_email}>{edit.data.manager_name||edit.data.manager_email} — تعيين سابق</option>}</select>
+ <small>الأسماء السبعة معتمدة للاختيار. يمكن اختيار المدير النشط مباشرة. عند اختيار اسم بلا حساب مخوّل يفتح نموذج ربط الحساب والمدير لهذا المشروع؛ لا يُحفظ تعيين غير موثق. تعيين مدير المشروع لا يغيّر التكليف اليدوي للمدير المباشر.</small>
  </div>:module==='project_managers'&&f.key==='name'?(()=>{
  const directory=rows.filter(r=>r.module==='project_managers'&&r.company===edit.company);
  const staff=rows.filter(r=>r.module==='employees'&&r.company===edit.company&&!r.data?._archived);
