@@ -1042,6 +1042,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  const allRepayments=rows.filter(record=>record.module==='repayments');
  const canCreate=permittedWrite(user||{},'advances');
  const canDelete=['admin','hr'].includes(user?.role)&&canCreate&&permission(user||{},'advances','edit');
+ const canOpening=['admin','finance'].includes(user?.role)&&permittedWrite(user||{},'repayments')&&permission(user||{},'repayments','edit');
  return <section className="panel records" dir="rtl" aria-label="دليل الموظفين والسلف" style={{marginBottom:14}}>
   <div className="panel-head" style={{flexWrap:'wrap',gap:8}}><div><h2 style={{marginBottom:4}}>دليل الموظفين وإدارة السلف</h2><small>جميع الموظفين المسجلين ضمن الشركات المسموح بها — إضافة السلفة مباشرة من سجل الموظف</small></div><span>{matchingEmployees.length} موظف · {company?companyDisplayName(company):'جميع الشركات'}</span></div>
   <div style={{padding:'10px 14px',display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
@@ -1051,21 +1052,47 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   </div>
   {!matchingEmployees.length?<div className="empty"><Users size={28}/><h3>{loading?'جارٍ تحميل الموظفين…':'لا يوجد موظفون مطابقون'}</h3><p>راجع اختيار الشركة أو نص البحث أو بيانات الموظفين المستوردة.</p></div>:
   <div className="table-wrap"><table className="employee-register">
-   <thead><tr><th>الشركة</th><th>الرقم الوظيفي</th><th>اسم الموظف</th><th>المشروع</th><th>عدد السلف</th><th>الرصيد المستحق</th><th>الإجراءات</th></tr></thead>
+   <thead><tr><th>الشركة</th><th>الرقم الوظيفي</th><th>اسم الموظف</th><th>المشروع</th><th>عدد السلف</th><th>إجمالي السلف المعتمدة</th><th>السداد الافتتاحي</th><th>إجمالي السداد</th><th>المتبقي</th><th>الإجراءات</th></tr></thead>
    <tbody>{matchingEmployees.map(employee=>{
     const loans=allAdvances.filter(advance=>advance.data?.employee_id===employee.id&&advance.company===employee.company);
     const issued=loans.filter(advance=>['approved','paid'].includes(advance.status));
-    const balance=issued.reduce((sum,advance)=>sum+Math.max(0,Number(advance.data?.amount||0)-allRepayments.filter(payment=>payment.data?.advance_id===advance.id).reduce((paid,payment)=>paid+Number(payment.data?.amount||0),0)),0);
+    const loanIds=new Set(issued.map(advance=>advance.id));
+    const settled=allRepayments.filter(payment=>loanIds.has(payment.data?.advance_id)&&!payment.data?._deleted);
+    const totalIssued=issued.reduce((sum,advance)=>sum+Number(advance.data?.amount||0),0);
+    const totalPaid=settled.reduce((sum,payment)=>sum+Number(payment.data?.amount||0),0);
+    const openingPaid=settled.filter(payment=>payment.data?._opening_balance===true).reduce((sum,payment)=>sum+Number(payment.data?.amount||0),0);
+    const balance=Math.max(0,Math.round((totalIssued-totalPaid)*100)/100);
+    const drafts=loans.filter(advance=>advance.status==='draft');
     const project=rows.find(record=>record.module==='projects'&&record.id===employee.data?.project_id);
     return <tr key={employee.id}>
      <td><span className="company-tag">{companyDisplayName(employee.company)}</span></td>
      <td>{employee.data?.code||employee.code||'—'}</td><td><strong>{employee.data?.name||'غير محدد'}</strong></td>
      <td>{project?.data?.name||employee.data?.project_name||'—'}</td>
-     <td>{loans.length}</td><td>{money(balance)} ر.س</td>
-     <td><div className="row-actions" style={{flexWrap:'wrap'}}>
+     <td>{loans.length}</td><td>{money(totalIssued)} ر.س</td><td>{money(openingPaid)} ر.س</td><td>{money(totalPaid)} ر.س</td><td><strong>{money(balance)} ر.س</strong></td>
+     <td><div style={{display:'flex',flexDirection:'column',gap:6,minWidth:310}}><div className="row-actions" style={{display:'flex',flexDirection:'row',flexWrap:'nowrap',gap:5,alignItems:'center'}}>
       {canCreate&&<button type="button" className="primary" onClick={()=>{setFormError('');setLinkedEmployee(null);setEdit({company:employee.company,data:{employee_id:employee.id,amount:'0',date:saudiDate(),installments:'1',first_month:saudiDate().slice(0,7),notes:''}})}}>إضافة سلفة</button>}
       <button type="button" onClick={()=>setLinkedEmployee({id:employee.id,name:employee.data?.name||employee.data?.code||'الموظف'})}>عرض السلف</button>
-      {loans.length>0&&<details><summary style={{cursor:'pointer'}}>تعديل / حذف</summary><div style={{display:'grid',gap:7,padding:8,minWidth:210}}>
+      {canDelete&&<button type="button" className="danger-action" disabled={saving||!drafts.length} title={drafts.length?'حذف إحدى السلف المسودة':'لا توجد سلفة مسودة قابلة للحذف'} onClick={()=>{
+       const selected=drafts.length===1?drafts[0]:(()=>{const choice=window.prompt('حدد رقم السلفة المسودة لحذفها:\n'+drafts.map((row,index)=>(index+1)+' - '+money(row.data?.amount)+' ر.س | '+(row.data?.date||'')).join('\n'));const index=Number(choice)-1;return Number.isInteger(index)?drafts[index]:null})();
+       if(selected)deleteDraftRequest(selected);
+      }}>حذف سلفة</button>}
+      </div>
+      {canOpening&&<button type="button" disabled={saving||balance<=0} title={balance<=0?'لا يوجد رصيد مستحق لتسجيل سداد افتتاحي':undefined} onClick={async()=>{
+        const raw=window.prompt('مبلغ السداد الافتتاحي السابق للموظف '+(employee.data?.name||'')+' (حد أقصى '+money(balance)+' ريال):');
+        if(raw===null)return;
+        const amount=Number(String(raw).replace(/,/g,'').trim());
+        if(!Number.isFinite(amount)||amount<=0||Math.round(amount*100)>Math.round(balance*100)||Math.abs(amount*100-Math.round(amount*100))>0.000001){notify('المبلغ غير صحيح أو يتجاوز الرصيد المتبقي');return;}
+        const date=window.prompt('تاريخ السداد الفعلي بصيغة YYYY-MM-DD:',saudiDate());
+        if(date===null)return;
+        const reference=window.prompt('مرجع السداد الافتتاحي (مثل: رصيد افتتاحي معتمد 2026):');
+        if(reference===null)return;
+        if(reference.trim().length<3){notify('مرجع السداد مطلوب');return;}
+        if(!window.confirm('تأكيد إثبات سداد افتتاحي بمبلغ '+money(amount)+' ر.س للموظف '+(employee.data?.name||'')+'؟ ستوزع القيمة على السلف المعتمدة الأقدم، دون تنفيذ تحويل مالي.'))return;
+        setSaving(true);
+        try{await post({action:'record_opening_advance_repayment',module:'repayments',company:employee.company,employee_id:employee.id,amount,date,reference:reference.trim()});await refresh();notify('تم إثبات السداد الافتتاحي وتحديث المتبقي');}
+        catch(error){notify(error.message||'تعذر تسجيل السداد الافتتاحي');}finally{setSaving(false);}
+      }}>تسجيل سداد افتتاحي</button>}
+      {loans.length>0&&<details><summary style={{cursor:'pointer'}}>تفاصيل السلف وتعديل المسودات</summary><div style={{display:'grid',gap:7,padding:8,minWidth:210}}>
        {loans.map(advance=><div key={advance.id} style={{borderBottom:'1px solid #e6dccb',paddingBottom:6}}>
         <small style={{display:'block'}}>{money(advance.data?.amount)} ر.س · {states[advance.status]||advance.status}</small>
         <div className="row-actions">
@@ -1078,7 +1105,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
     </tr>;
    })}</tbody>
   </table></div>}
-  <div className="footnote" style={{padding:'9px 14px'}}>تعديل السلفة وحذفها متاحان للمسودات وفق الصلاحيات فقط؛ لا تُحذف السلف المعتمدة أو المصروفة، ويُحتسب الرصيد من السلف المعتمدة/المصروفة مطروحًا منها السدادات المسجلة.</div>
+  <div className="footnote" style={{padding:'9px 14px'}}>الأزرار الأساسية أفقية. حذف السلفة متاح للمسودات فقط؛ السداد الافتتاحي إجراء مالي موثق بمرجع وتاريخ، ويُخصم من السلف المعتمدة الأقدم. إجمالي السداد يشمل السداد الافتتاحي والسدادات الأخرى مرة واحدة، والمتبقي = إجمالي السلف المعتمدة − إجمالي السداد.</div>
  </section>;
 })()}
 
