@@ -1957,7 +1957,8 @@ test('employee requests route to a registered active direct supervisor rather th
  assert.equal(requestApprovalStages[0].title,'اعتماد المدير المباشر');
  assert.match(backend,/const directEmail=String\(employeeData\.manager_email\|\|employeeData\.supervisor_account/);
  assert.match(backend,/direct_manager=\{name:direct\.name,email:directEmail/);
- assert.match(backend,/approvedEmail!==directEmail/);
+ assert.match(backend,/originalDirectEmail&&approvedEmail!==directEmail/);
+ assert.match(backend,/migrated_from_project_manager:true/);
  assert.doesNotMatch(backend,/يجب تعيين مدير المشروع في ملف المشروع قبل إرسال الطلب/);
  assert.match(backend,/\['leave','advances','resignations'\]\.includes\(mod\)/);
  assert.match(ui,/المدير المباشر المخوّل لاعتماد هذا الطلب/);
