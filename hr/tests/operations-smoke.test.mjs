@@ -1798,7 +1798,7 @@ test('project manager directory uses actual members columns and lives within pro
  assert.doesNotMatch(erp,/SELECT [^\n]*display_name[^\n]* FROM members/);
  assert.match(erp,/SELECT email,role,is_active,companies,username FROM members WHERE lower\(email\)=\?/);
  assert.match(erp,/member\.username\|\|data\.email/);
- assert.match(ui,/allowed\.filter\(k=>modules\[k\]\.group===g&&k!=='project_managers'\)/);
+ assert.match(ui,/allowed\.filter\(k=>modules\[k\]\.group===g&&!\['project_managers','repayments'\]\.includes\(k\)\)/);
  assert.match(ui,/k==='projects'&&module==='project_managers'/);
  assert.match(ui,/aria-label="تبويبات المشاريع ومدراء المشاريع"/);
  assert.match(ui,/onClick=\{\(\)=>setModule\('project_managers'\)\}>مدراء المشاريع وربط الموظفين/);
