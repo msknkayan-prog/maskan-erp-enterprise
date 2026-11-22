@@ -1894,6 +1894,7 @@ test('employee leave entitlement and contract expiration honor explicit automati
  assert.equal(automatic.contract_expiry.length,10);
  const manual=save({leave_balance_mode:'manual',manual_leave_entitlement:43.5,contract_expiry_mode:'manual',contract_expiry:'2038-12-30'});
  assert.equal(manual.manual_leave_entitlement,43.5);
+ assert.equal(manual.leave_balance_mode,'auto'); // Manually entered contract expiry controls automatic leave accrual.
  assert.equal(manual.contract_expiry,'2038-12-30');
  assert.equal(manual.contract_expiry_mode,'manual');
  assert.throws(()=>save({leave_balance_mode:'manual',manual_leave_entitlement:'',contract_expiry_mode:'auto'}),/أدخل إجمالي رصيد/);
@@ -1905,8 +1906,8 @@ test('employee leave entitlement and contract expiration honor explicit automati
 test('manual leave entitlement is honored consistently in UI and backend final-approval balance check',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- assert.ok(ui.includes("d.leave_balance_mode==='manual'?Number(d.manual_leave_entitlement||0)"));
- assert.ok(server.includes("e.leave_balance_mode==='manual'?Number(e.manual_leave_entitlement||0)"));
+ assert.ok(ui.includes("d.contract_expiry_mode!=='manual'&&d.leave_balance_mode==='manual'?Number(d.manual_leave_entitlement||0)"));
+ assert.ok(server.includes("e.contract_expiry_mode!=='manual'&&e.leave_balance_mode==='manual'?Number(e.manual_leave_entitlement||0)"));
  assert.match(ui,/طريقة تحديد انتهاء العقد/);
 });
 
@@ -2040,4 +2041,14 @@ test('V86 annual leave automatically splits paid days and unpaid days in UI and 
  assert.deepEqual(split(0,30),{paid:0,unpaid:30});
  assert.deepEqual(split(50,30),{paid:30,unpaid:0});
  assert.deepEqual(split(5,30),{paid:5,unpaid:25});
+});
+
+test('V87 manual contract date accrues leave from hire date, not saved manual 84 days',()=>{
+ const employee={hire_date:'2022-01-04',contract_expiry_mode:'manual',contract_expiry:'2027-01-04',leave_balance_mode:'manual',manual_leave_entitlement:84};
+ assert.equal(leaveAccrualAsOf(employee,'2026-11-22'),'2027-01-04');
+ assert.equal(annualLeave(employee.hire_date,leaveAccrualAsOf(employee)).accrued,114);
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/contract_expiry_mode:'manual',leave_balance_mode:'auto'/);
+ assert.match(backend,/e.contract_expiry_mode!=='manual'&&e.leave_balance_mode==='manual'/);
 });
