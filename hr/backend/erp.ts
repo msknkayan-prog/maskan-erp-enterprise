@@ -753,6 +753,7 @@ if(mod==='employees'&&['archive_employee','restore_employee'].includes(body.acti
  return json({ok:true,archived,employee_id:old.id});
 }
 if(['payroll','payroll_batches'].includes(mod))throw Error('إنشاء وتعديل مسيرات الرواتب الشهرية يتم حصريًا من نافذة المسير الشهري');
+if(old&&mod==='repayments'&&JSON.parse(old.data||'{}')._payroll_batch_id)throw Error('سداد السلفة المرتبط بمسير مدفوع مقفل؛ أي تصحيح يتم بسجل تسوية مالي مستقل');
 if(!permittedWrite(u,mod)||!permission(u,mod,'edit'))throw Error('403');if(old&&old.status!=='draft'&&mod!=='employees')throw Error('التعديل متاح للمسودات فقط');if(mod==='employees'&&old&&JSON.parse(old.data)._archived)throw Error('يجب استعادة الموظف من الأرشيف قبل تعديل بياناته');const previous=old?JSON.parse(old.data):null;
 if(mod==='employees'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 if(mod==='projects'&&!old)body.data={...(body.data||{}),code:'AUTO'};
