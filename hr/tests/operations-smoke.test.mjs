@@ -62,9 +62,10 @@ test('request approval register shows four role-specific status columns with no 
  const stamp='2026-11-13T12:30:00.000Z';
  assert.equal(requestStageTimestamp({data:{approval_tracking:{hr:{at:stamp}}}},'hr'),stamp);
  const frontend=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- assert.match(frontend,/requestApprovalStages\.map\(stage=><th/);
- assert.match(frontend,/requestApprovalStages\.map\(stage=><td/);
- assert.match(frontend,/className=\{'approval-track-pill '/);
+ assert.match(frontend,/function ApprovalCompactStrip/);
+ assert.match(frontend,/requestApprovalStages\.map\(stage=>/);
+ assert.match(frontend,/مسار الاعتماد والقرار/);
+ assert.match(frontend,/onApprove=\{\(\)=>transition\(row\)\}/);
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  assert.match(backend,/details\.approval_tracking=\{\.\.\.tracking,\[completed\]/);
  assert.match(backend,/details\.approval_tracking=\{\};/);
