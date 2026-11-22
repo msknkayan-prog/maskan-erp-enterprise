@@ -1904,7 +1904,7 @@ test('employee leave entitlement and contract expiration honor explicit automati
 test('manual leave entitlement is honored consistently in UI and backend final-approval balance check',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- assert.match(ui,/d.leave_balance_mode==='manual'\\?Number\\(d.manual_leave_entitlement\\|\\|0\\)/);
- assert.match(server,/e.leave_balance_mode==='manual'\\?Number\\(e.manual_leave_entitlement\\|\\|0\\)/);
+ assert.ok(ui.includes("d.leave_balance_mode==='manual'?Number(d.manual_leave_entitlement||0)"));
+ assert.ok(server.includes("e.leave_balance_mode==='manual'?Number(e.manual_leave_entitlement||0)"));
  assert.match(ui,/طريقة تحديد انتهاء العقد/);
 });
