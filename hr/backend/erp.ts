@@ -682,9 +682,16 @@ if(routedRequest&&details.employee_id&&((current==='draft'&&decision==='approve'
    details.manager_submitted_at=now;
   }
  }else{
-  const approvedEmail=String(details.direct_manager?.email||details.project_manager?.email||directEmail).trim().toLowerCase();
+  const originalDirectEmail=String(details.direct_manager?.email||'').trim().toLowerCase();
+  const approvedEmail=originalDirectEmail||directEmail;
   if(approvedEmail!==String(u.email||'').trim().toLowerCase())throw Error('هذا الطلب بانتظار اعتماد المدير المباشر المخوّل، وليس مدير المشروع');
-  if(approvedEmail!==directEmail)throw Error('تغير المدير المباشر بعد إحالة الطلب؛ أعد الطلب للتجهيز وأرسله إلى المدير الحالي');
+  if(originalDirectEmail&&approvedEmail!==directEmail)throw Error('تغير المدير المباشر بعد إحالة الطلب؛ أعد الطلب للتجهيز وأرسله إلى المدير الحالي');
+  if(!originalDirectEmail){
+   // Existing in-progress requests were previously tied to a project manager.
+   // Move their next decision to the verified direct supervisor without skipping stages.
+   details.direct_manager={name:direct.name,email:directEmail,phone:direct.phone||'',employee_id:details.employee_id,assigned_at:now,migrated_from_project_manager:true};
+   details.project_manager={name:direct.name,email:directEmail,phone:direct.phone||'',project_name:'',approval_role:'direct_manager'};
+  }
  }
 }
 if(routedRequest){
