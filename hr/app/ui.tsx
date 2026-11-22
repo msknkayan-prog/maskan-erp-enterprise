@@ -158,6 +158,7 @@ function directManagerChoices(rows,members,company){
 export default function ERP(){const [integrityReport,setIntegrityReport]=useState(null),[integrityBusy,setIntegrityBusy]=useState(false),[managerSetup,setManagerSetup]=useState(null),[managerSetupBusy,setManagerSetupBusy]=useState(false),[leaveHolidayCandidate,setLeaveHolidayCandidate]=useState(''),[module,setModule]=useState('overview'),[pendingType,setPendingType]=useState(''),[pendingStage,setPendingStage]=useState(''),[pendingSearch,setPendingSearch]=useState(''),[payrollStage,setPayrollStage]=useState('__all__'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollEdit,setPayrollEdit]=useState(null),[cycleEdit,setCycleEdit]=useState(null),[payrollManageBatchId,setPayrollManageBatchId]=useState(null),[payrollAllOpen,setPayrollAllOpen]=useState(false),[payrollBulkSelected,setPayrollBulkSelected]=useState([]),[payrollAddEmployeeId,setPayrollAddEmployeeId]=useState(''),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[employeeProjectSearch,setEmployeeProjectSearch]=useState(''),[employeeManagerSearch,setEmployeeManagerSearch]=useState(''),[projectCompanySearch,setProjectCompanySearch]=useState(''),[projectManagerSearch,setProjectManagerSearch]=useState(''),[managerRecordSearch,setManagerRecordSearch]=useState(''),[employeeFilterOpen,setEmployeeFilterOpen]=useState(false),[employeeFieldFilters,setEmployeeFieldFilters]=useState({}),[edit,setEdit]=useState(null),[employeeReadOnly,setEmployeeReadOnly]=useState(false),[showArchivedEmployees,setShowArchivedEmployees]=useState(false),[saving,setSaving]=useState(false),[formError,setFormError]=useState(''),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberContactEmail,setMemberContactEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberSelectedProjects,setMemberSelectedProjects]=useState([]),[memberPermissions,setMemberPermissions]=useState({}),[memberUsername,setMemberUsername]=useState(''),[memberEdit,setMemberEdit]=useState(null),[memberEditPermissions,setMemberEditPermissions]=useState({}),[memberBusy,setMemberBusy]=useState(false),[linkedEmployee,setLinkedEmployee]=useState(null),[memberSearch,setMemberSearch]=useState(''),[memberRoleFilter,setMemberRoleFilter]=useState(''),[memberUserFilter,setMemberUserFilter]=useState(''),[memberStatusFilter,setMemberStatusFilter]=useState(''),[memberFormOpen,setMemberFormOpen]=useState(false),[expandedPermissions,setExpandedPermissions]=useState(null),[passwordResetDialog,setPasswordResetDialog]=useState(null),[generatedPassword,setGeneratedPassword]=useState(null),[credentialPhone,setCredentialPhone]=useState(''),[newMemberCredential,setNewMemberCredential]=useState(null),[today,setToday]=useState(()=>saudiDate());
 const [advanceEmployeeSearch,setAdvanceEmployeeSearch]=useState('');
 const [linkedFinance,setLinkedFinance]=useState(null);
+const [repairRequest,setRepairRequest]=useState(null);
 const advanceTableScrollRef=useRef(null);
 const [advanceManager,setAdvanceManager]=useState(null),[openingForm,setOpeningForm]=useState(null);
 const employeeManagerOptions=useMemo(()=>Object.fromEntries(companies.map(c=>[c,employeeDirectManagerOptions(rows,members,c)])),[rows,members]);
@@ -370,7 +371,41 @@ async function deleteProjectManager(row){
  notify(result.company_transferred?(result.linked_account_review_required?'تم نقل تبعية الموظف وحفظ التاريخ؛ راجع نطاق صلاحيات حساب دخوله':'تم نقل تبعية الموظف مع الاحتفاظ بالسجلات السابقة'):(result.payroll_synced?'حُفظ الراتب وتم تحديث '+result.payroll_synced+' سجل في المسيرات المفتوحة؛ يلزم إعادة المراجعة':'تم حفظ جميع بيانات السجل'));
 
  await refresh();
+ if(repairRequest&&((module==='projects'&&edit.id===repairRequest.projectId)||(module==='employees'&&edit.id===rows.find(r=>r.id===repairRequest.id&&r.module===repairRequest.module)?.data?.employee_id))){
+  const pending=rows.find(r=>r.id===repairRequest.id&&r.module===repairRequest.module);
+  setRepairRequest(null);
+  if(pending){setModule(pending.module);setEdit({...pending,data:{...pending.data}});notify('تم حفظ التصحيح. راجع الطلب ثم أعد إرساله للاعتماد.');}
+ }
  }catch(err){if(assignmentSaved){setEdit(null);await refresh();notify('تم حفظ تعيين المدير وتحديث الموظفين، لكن تعذر حفظ باقي تعديلات المشروع: '+err.message)}else{setFormError(err.message||'تعذر حفظ السجل');notify(err.message||'تعذر حفظ السجل')}}finally{setSaving(false)}}
+function draftManagerProblem(request){
+ if(!['leave','advances'].includes(request.module)||request.status!=='draft')return null;
+ const employee=rows.find(r=>r.module==='employees'&&r.id===request.data?.employee_id&&r.company===request.company);
+ const projectId=String(request.data?.project_id||employee?.data?.project_id||'');
+ if(!projectId)return {kind:'employee',employee,message:'الموظف غير مرتبط بمشروع'};
+ const project=rows.find(r=>r.module==='projects'&&r.id===projectId);
+ if(!project)return {kind:'missing_project',employee,message:'مشروع الموظف غير موجود في السجلات'};
+ if(project.company!==request.company&&!project.data?._shared_companies?.includes(request.company))return {kind:'wrong_company',employee,project,message:'المشروع لا يتبع شركة الطلب'};
+ const delegated=String(employee?.data?.delegated_manager_email||'').trim();
+ if(!delegated&&!String(project.data?.manager_email||'').trim())return {kind:'project',employee,project,message:'لم يُعيّن مدير مشروع لهذا الطلب'};
+ return null;
+}
+function repairDraftManager(request){
+ const issue=draftManagerProblem(request);
+ if(!issue)return;
+ if(user?.role!=='admin')return notify('إصلاح تكليف مدير المشروع يتطلب صلاحية مسؤول النظام');
+ if(issue.kind==='employee'&&issue.employee){
+  setRepairRequest({id:request.id,module:request.module});
+  setEmployeeReadOnly(false);setModule('employees');setEdit({...issue.employee,data:{...issue.employee.data}});
+  return;
+ }
+ if(issue.kind==='project'&&issue.project){
+  setRepairRequest({id:request.id,module:request.module,projectId:issue.project.id});
+  setModule('projects');setEdit({...issue.project,data:{...issue.project.data}});
+  return;
+ }
+ notify('راجع سجل الموظف والمشروع المرتبط به في وحدة المشاريع والتكليفات؛ لن يتم تجاوز المراحل أو تعيين مدير غير موثّق.');
+}
+
 async function saveEmployeeDirectManager(row,choice){
  if(!['admin','hr'].includes(user?.role)||!permittedWrite(user||{},'employees'))return false;
  setSaving(true);
@@ -992,6 +1027,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    const open=()=>{if(isPayroll){setPayrollMonth(request.data?.month||payrollMonth);setPayrollCompany(request.company);setPayrollManageBatchId(request.id);setModule('payroll')}else{setModule(request.module);setEdit({...request,data:{...request.data}})}};
    return <tr key={request.id}><td>{companyDisplayName(request.company)}</td><td>{modules[request.module]?.singular||request.module}</td><td>{pendingEmployeeName(request)}</td><td><span className={'badge '+request.status}>{states[request.status]||cycleStatus[request.status]||request.status}</span></td><td><div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
     <button type="button" onClick={open} disabled={saving}>عرض</button>
+    {user?.role==='admin'&&draftManagerProblem(request)&&<button type="button" disabled={saving} onClick={()=>repairDraftManager(request)} style={{fontSize:11}}>إصلاح تكليف مدير المشروع</button>}
     {canDirect&&<><button type="button" className="primary" disabled={saving} onClick={()=>transition(request)}>{request.status==='draft'?'إرسال للاعتماد':'اعتماد نيابة عن المخوّل'}</button>
     {request.status!=='draft'&&<><button type="button" disabled={saving} onClick={()=>{const note=window.prompt('سبب إعادة الطلب للمراجعة');if(note?.trim())transition(request,'return',note.trim())}}>إعادة</button><button type="button" className="danger-action" disabled={saving} onClick={()=>{const note=window.prompt('سبب رفض الطلب');if(note?.trim())transition(request,'reject',note.trim())}}>رفض</button></>}</>}
     {isPayroll&&<small>تُعتمد الرواتب من نافذة المسير</small>}
@@ -1315,7 +1351,12 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {assignedProjects.map(p=>{const employees=associatedEmployees.filter(e=>e.data?.project_id===p.id);return <div key={p.id} style={{borderBottom:'1px solid #e8dfce',paddingBottom:5}}><strong>{p.data?.name||p.code}</strong><small style={{display:'block'}}>{employees.length} موظف</small>{employees.slice(0,15).map(e=><div key={e.id}>{e.data?.name||e.data?.code||'غير مسمى'}</div>)}{employees.length>15&&<small>و{employees.length-15} موظف آخر</small>}</div>})}
  {!assignedProjects.length&&<small>لم تُربط مشاريع بهذا المدير بعد</small>}
  </div></details>;
- })()}</td>}{module==='payroll'&&<td>{money(row.data.net)} ر.س</td>}{module==='advances'&&<td>{money(Number(row.data.amount)-rows.filter(r=>r.module==='repayments'&&r.data.advance_id===row.id).reduce((n,r)=>n+Number(r.data.amount),0))} ر.س</td>}{module==='leave'&&<>{(()=>{const b=leaveBalanceFor(row.data.employee_id,row.company,{...row.data,id:row.id});return <><td>{row.data.days??'—'} يوم</td><td>{b.entitled===null?'غير متاح':b.entitled.toFixed(2)+' يوم'}</td><td>{b.after===null?'غير متاح':b.after.toFixed(2)+' يوم'}</td></>})()}</>}{['leave','advances'].includes(module)&&<td className="approval-stage-td"><ApprovalCompactStrip row={row} managerName={managerDirectoryForRequest(row,row.company)?.name} approvable={approvable} saving={saving} onApprove={()=>transition(row)} onReturn={()=>{const note=window.prompt('سبب الإعادة للمراجعة');if(note)transition(row,'return',note)}} onReject={()=>{const note=window.prompt('سبب الرفض');if(note)transition(row,'reject',note)}}/></td>}<td><div className={module==='employees'?'employee-status-horizontal':'record-status-stack'}><span className={'badge '+row.status}>{module==='employees'?registerDisplay(row,{key:'employment_status'}):operationalModules.includes(module)?'مسجل':states[row.status]||row.status}</span>{row.data._review_flags?.length>0&&<small className="review-warning">تحتاج {row.data._review_flags.length} بيانات للمراجعة</small>}</div></td><td><div className={module==='employees'?'row-actions employee-actions-horizontal':'row-actions'}>{module==='employees'?<>
+ })()}</td>}{module==='payroll'&&<td>{money(row.data.net)} ر.س</td>}{module==='advances'&&<td>{money(Number(row.data.amount)-rows.filter(r=>r.module==='repayments'&&r.data.advance_id===row.id).reduce((n,r)=>n+Number(r.data.amount),0))} ر.س</td>}{module==='leave'&&<>{(()=>{const b=leaveBalanceFor(row.data.employee_id,row.company,{...row.data,id:row.id});return <><td>{row.data.days??'—'} يوم</td><td>{b.entitled===null?'غير متاح':b.entitled.toFixed(2)+' يوم'}</td><td>{b.after===null?'غير متاح':b.after.toFixed(2)+' يوم'}</td></>})()}</>}{['leave','advances'].includes(module)&&<td className="approval-stage-td"><ApprovalCompactStrip row={row} managerName={managerDirectoryForRequest(row,row.company)?.name} approvable={approvable} saving={saving} onApprove={()=>transition(row)} onReturn={()=>{const note=window.prompt('سبب الإعادة للمراجعة');if(note)transition(row,'return',note)}} onReject={()=>{const note=window.prompt('سبب الرفض');if(note)transition(row,'reject',note)}}/>
+ {user?.role==='admin'&&draftManagerProblem(row)&&<div style={{background:'#fff1dd',border:'1px solid #e4bd71',borderRadius:7,padding:'6px 8px',marginTop:4,fontSize:11,maxWidth:230}}>
+  <strong>{draftManagerProblem(row).message}</strong>
+  <button type="button" disabled={saving} style={{display:'block',marginTop:5,fontSize:11}} onClick={()=>repairDraftManager(row)}>{draftManagerProblem(row).kind==='project'?'تعيين مدير المشروع':'إصلاح ارتباط المشروع'}</button>
+ </div>}
+ </td>}<td><div className={module==='employees'?'employee-status-horizontal':'record-status-stack'}><span className={'badge '+row.status}>{module==='employees'?registerDisplay(row,{key:'employment_status'}):operationalModules.includes(module)?'مسجل':states[row.status]||row.status}</span>{row.data._review_flags?.length>0&&<small className="review-warning">تحتاج {row.data._review_flags.length} بيانات للمراجعة</small>}</div></td><td><div className={module==='employees'?'row-actions employee-actions-horizontal':'row-actions'}>{module==='employees'?<>
  <button type="button" onClick={()=>openEmployee(row,true)}>عرض</button>
  {permittedWrite(user||{},'employees')&&<button type="button" onClick={()=>openEmployee(row,false)}>تعديل</button>}
  {permittedWrite(user||{},'employees')&&['admin','hr'].includes(user?.role)&&<button type="button" disabled={saving} onClick={()=>archiveEmployee(row,Boolean(row.data?._archived))}>{row.data?._archived?'استعادة الموظف':'حذف'}</button>}
