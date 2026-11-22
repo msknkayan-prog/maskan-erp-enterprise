@@ -408,15 +408,15 @@ export async function POST(req){
    for(const allocation of financeAllocations){
     const reference='PAYROLL-'+batch.id+'-'+allocation.row.id+'-'+allocation.loan.id;
     const repayment={advance_id:allocation.loan.id,employee_id:allocation.row.data.employee_id,amount:allocation.amount,date:now.slice(0,10),code:reference,payroll_month:batch.data.month,payroll_reference:String(body.reference).trim(),method:'payroll',notes:'استقطاع قسط سلفة من مسير الرواتب',_payroll_batch_id:batch.id,_payroll_row_id:allocation.row.id};
-    ledgerStatements.push(db.prepare("INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation) VALUES(?,'repayments',?,?,?,'draft',1,?,?,?,?)")
-     .bind(crypto.randomUUID(),allocation.loan.company,reference,JSON.stringify(repayment),u.email,now,now,mutation));
+    ledgerStatements.push(db.prepare("INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation) SELECT ?,'repayments',?,?,?,'draft',1,?,?,?,? WHERE EXISTS (SELECT 1 FROM records WHERE id=? AND module='payroll_batches' AND status='paid' AND mutation=?) AND NOT EXISTS(SELECT 1 FROM records WHERE module='repayments' AND code=?)")
+     .bind(crypto.randomUUID(),allocation.loan.company,reference,JSON.stringify(repayment),u.email,now,now,mutation,batch.id,mutation,reference));
    }
   }
   const res=await db.batch([db.prepare("UPDATE records SET status=?,data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND status=?")
    .bind(next,JSON.stringify(newData),now,mutation,batch.id,batch.revision,batch.status),
    ...ledgerStatements,
    db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,batch.id,'payroll_batch_'+action,now,JSON.stringify({from:batch.status,to:next,note:body.note||'',reference:action==='finance_pay'?String(body.reference):undefined,advance_installments:ledgerStatements.length}))]);
-  if(!res[0].meta.changes)throw Error('المسير تغير، أعد تحميل الصفحة');
+  if(!res[0].meta.changes||action==='finance_pay'&&ledgerStatements.some((_,i)=>!res[i+1]?.meta?.changes))throw Error('تعارض في صرف المسير أو تسجيل أقساط السلف؛ حدث الصفحة وراجع السجل المالي');
   return response({ok:true,status:next});
  }catch(error){return err(error.message||'تعذر تنفيذ العملية',String(error.message||'').includes('UNIQUE')?409:400);}
 }
