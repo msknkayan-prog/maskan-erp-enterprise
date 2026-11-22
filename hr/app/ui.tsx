@@ -1115,6 +1115,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  const loanIds=new Set(loans.map(r=>r.id));
  const repaid=rows.filter(r=>r.module==='repayments'&&loanIds.has(r.data?.advance_id)&&!r.data?._deleted).reduce((sum,r)=>sum+Number(r.data?.amount||0),0);
  const available=Math.max(0,Math.round((loans.reduce((sum,r)=>sum+Number(r.data?.amount||0),0)-repaid)*100)/100);
+ const canOpening=['admin','finance','hr'].includes(user?.role);
  return <div className="modal-backdrop" onClick={()=>!saving&&setOpeningForm(null)}><section className="modal" role="dialog" aria-modal="true" dir="rtl" aria-label="تسجيل سداد افتتاحي" onClick={e=>e.stopPropagation()} style={{width:'min(94vw,500px)',maxHeight:'88vh',overflowY:'auto'}}>
   <div className="modal-head"><div><h2>تسجيل سداد افتتاحي</h2><small>{employee?.data?.name||'الموظف'} · {companyDisplayName(employee?.company||'')}</small></div><button type="button" disabled={saving} onClick={()=>setOpeningForm(null)} aria-label="إغلاق"><X/></button></div>
   <p>المتبقي من السلف المعتمدة أو المصروفة: <b>{money(available)} ر.س</b></p>
