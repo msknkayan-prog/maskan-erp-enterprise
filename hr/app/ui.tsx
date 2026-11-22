@@ -135,6 +135,7 @@ function directManagerChoices(rows,members,company){
 }
 export default function ERP(){const [integrityReport,setIntegrityReport]=useState(null),[integrityBusy,setIntegrityBusy]=useState(false),[managerSetup,setManagerSetup]=useState(null),[managerSetupBusy,setManagerSetupBusy]=useState(false),[leaveHolidayCandidate,setLeaveHolidayCandidate]=useState(''),[module,setModule]=useState('overview'),[pendingType,setPendingType]=useState(''),[pendingStage,setPendingStage]=useState(''),[pendingSearch,setPendingSearch]=useState(''),[payrollStage,setPayrollStage]=useState('__all__'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollEdit,setPayrollEdit]=useState(null),[cycleEdit,setCycleEdit]=useState(null),[payrollManageBatchId,setPayrollManageBatchId]=useState(null),[payrollAllOpen,setPayrollAllOpen]=useState(false),[payrollBulkSelected,setPayrollBulkSelected]=useState([]),[payrollAddEmployeeId,setPayrollAddEmployeeId]=useState(''),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[employeeProjectSearch,setEmployeeProjectSearch]=useState(''),[employeeManagerSearch,setEmployeeManagerSearch]=useState(''),[projectCompanySearch,setProjectCompanySearch]=useState(''),[projectManagerSearch,setProjectManagerSearch]=useState(''),[managerRecordSearch,setManagerRecordSearch]=useState(''),[employeeFilterOpen,setEmployeeFilterOpen]=useState(false),[employeeFieldFilters,setEmployeeFieldFilters]=useState({}),[edit,setEdit]=useState(null),[employeeReadOnly,setEmployeeReadOnly]=useState(false),[showArchivedEmployees,setShowArchivedEmployees]=useState(false),[saving,setSaving]=useState(false),[formError,setFormError]=useState(''),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberContactEmail,setMemberContactEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberSelectedProjects,setMemberSelectedProjects]=useState([]),[memberPermissions,setMemberPermissions]=useState({}),[memberUsername,setMemberUsername]=useState(''),[memberEdit,setMemberEdit]=useState(null),[memberEditPermissions,setMemberEditPermissions]=useState({}),[memberBusy,setMemberBusy]=useState(false),[linkedEmployee,setLinkedEmployee]=useState(null),[memberSearch,setMemberSearch]=useState(''),[memberRoleFilter,setMemberRoleFilter]=useState(''),[memberUserFilter,setMemberUserFilter]=useState(''),[memberStatusFilter,setMemberStatusFilter]=useState(''),[memberFormOpen,setMemberFormOpen]=useState(false),[expandedPermissions,setExpandedPermissions]=useState(null),[passwordResetDialog,setPasswordResetDialog]=useState(null),[generatedPassword,setGeneratedPassword]=useState(null),[credentialPhone,setCredentialPhone]=useState(''),[newMemberCredential,setNewMemberCredential]=useState(null),[today,setToday]=useState(()=>saudiDate());
 const [advanceEmployeeSearch,setAdvanceEmployeeSearch]=useState('');
+const advanceTableScrollRef=useRef(null);
 const [advanceManager,setAdvanceManager]=useState(null),[openingForm,setOpeningForm]=useState(null);
 const employeeManagerOptions=useMemo(()=>Object.fromEntries(companies.map(c=>[c,employeeDirectManagerOptions(rows,members,c)])),[rows,members]);
 const notify=t=>{setToast(t);setTimeout(()=>setToast(''),4500)};
@@ -1052,7 +1053,14 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    <small>اختر الشركة من أعلى الصفحة لتصفية الدليل. السلف المعتمدة والمصروفة تبقى محفوظة في السجل.</small>
   </div>
   {!matchingEmployees.length?<div className="empty"><Users size={28}/><h3>{loading?'جارٍ تحميل الموظفين…':'لا يوجد موظفون مطابقون'}</h3><p>راجع اختيار الشركة أو نص البحث أو بيانات الموظفين المستوردة.</p></div>:
-  <div className="table-wrap"><table className="employee-register">
+  <>
+  <div dir="rtl" role="group" aria-label="التحريك الأفقي لجدول السلف" style={{position:'sticky',top:0,zIndex:5,display:'flex',alignItems:'center',gap:6,justifyContent:'flex-start',padding:'5px 10px',background:'#faf6ed',borderBottom:'1px solid #e4d6bd'}}>
+   <span style={{fontSize:11,color:'#755f37',fontWeight:600}}>تحريك الجدول</span>
+   <button type="button" aria-label="حرك جدول السلف يمينًا" title="يمين — عرض أعمدة الشركة والموظف" style={{padding:'4px 9px',minWidth:34,minHeight:27,borderRadius:6}} onClick={()=>advanceTableScrollRef.current?.scrollBy({left:480,behavior:'smooth'})}><span aria-hidden="true">▶</span> يمين</button>
+   <button type="button" aria-label="حرك جدول السلف يسارًا" title="يسار — عرض أعمدة الأرصدة والإجراءات" style={{padding:'4px 9px',minWidth:34,minHeight:27,borderRadius:6}} onClick={()=>advanceTableScrollRef.current?.scrollBy({left:-480,behavior:'smooth'})}>يسار <span aria-hidden="true">◀</span></button>
+   <small style={{fontSize:10,color:'#87745a'}}>يمكن التمرير بالسحب أيضًا</small>
+  </div>
+  <div className="table-wrap" ref={advanceTableScrollRef} dir="rtl" style={{overflowX:'auto',scrollBehavior:'smooth',scrollbarGutter:'stable'}}><table className="employee-register">
    <thead><tr><th>الشركة</th><th>الرقم الوظيفي</th><th>اسم الموظف</th><th>المشروع</th><th>عدد السلف</th><th>إجمالي السلف المعتمدة</th><th>السداد الافتتاحي</th><th>إجمالي السداد</th><th>المتبقي</th><th>الإجراءات</th></tr></thead>
    <tbody>{matchingEmployees.map(employee=>{
     const loans=allAdvances.filter(advance=>advance.data?.employee_id===employee.id&&advance.company===employee.company);
@@ -1083,7 +1091,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
      </div></td>
     </tr>;
    })}</tbody>
-  </table></div>}
+  </table></div></>}
   <div className="footnote" style={{padding:'9px 14px'}}>الأزرار الأساسية أفقية. حذف السلفة متاح للمسودات فقط؛ السداد الافتتاحي إجراء مالي موثق بمرجع وتاريخ، ويُخصم من السلف المعتمدة الأقدم. إجمالي السداد يشمل السداد الافتتاحي والسدادات الأخرى مرة واحدة، والمتبقي = إجمالي السلف المعتمدة − إجمالي السداد.</div>
  </section>;
 })()}
