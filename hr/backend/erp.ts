@@ -484,7 +484,7 @@ const mod=body.module;if(!(modules as any)[mod])throw Error('نافذة غير �
 if(old&&JSON.parse(old.data)?._deleted)throw Error('هذا الطلب محذوف ولا يمكن تعديله أو إرساله للاعتماد');
 
 if(body.action==='record_opening_advance_repayment'){
- if(mod!=='repayments'||!['admin','finance'].includes(u.role)||!permittedWrite(u,'repayments')||!permission(u,'repayments','edit'))throw Error('403');
+ if(mod!=='repayments'||!['admin','finance','hr'].includes(u.role))throw Error('403');
  const companyName=String(body.company||'').trim();
  const employeeId=String(body.employee_id||'').trim();
  const amount=Number(body.amount);

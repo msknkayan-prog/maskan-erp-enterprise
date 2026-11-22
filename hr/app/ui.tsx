@@ -135,6 +135,7 @@ function directManagerChoices(rows,members,company){
 }
 export default function ERP(){const [integrityReport,setIntegrityReport]=useState(null),[integrityBusy,setIntegrityBusy]=useState(false),[managerSetup,setManagerSetup]=useState(null),[managerSetupBusy,setManagerSetupBusy]=useState(false),[leaveHolidayCandidate,setLeaveHolidayCandidate]=useState(''),[module,setModule]=useState('overview'),[pendingType,setPendingType]=useState(''),[pendingStage,setPendingStage]=useState(''),[pendingSearch,setPendingSearch]=useState(''),[payrollStage,setPayrollStage]=useState('__all__'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollEdit,setPayrollEdit]=useState(null),[cycleEdit,setCycleEdit]=useState(null),[payrollManageBatchId,setPayrollManageBatchId]=useState(null),[payrollAllOpen,setPayrollAllOpen]=useState(false),[payrollBulkSelected,setPayrollBulkSelected]=useState([]),[payrollAddEmployeeId,setPayrollAddEmployeeId]=useState(''),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[employeeProjectSearch,setEmployeeProjectSearch]=useState(''),[employeeManagerSearch,setEmployeeManagerSearch]=useState(''),[projectCompanySearch,setProjectCompanySearch]=useState(''),[projectManagerSearch,setProjectManagerSearch]=useState(''),[managerRecordSearch,setManagerRecordSearch]=useState(''),[employeeFilterOpen,setEmployeeFilterOpen]=useState(false),[employeeFieldFilters,setEmployeeFieldFilters]=useState({}),[edit,setEdit]=useState(null),[employeeReadOnly,setEmployeeReadOnly]=useState(false),[showArchivedEmployees,setShowArchivedEmployees]=useState(false),[saving,setSaving]=useState(false),[formError,setFormError]=useState(''),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberContactEmail,setMemberContactEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberSelectedProjects,setMemberSelectedProjects]=useState([]),[memberPermissions,setMemberPermissions]=useState({}),[memberUsername,setMemberUsername]=useState(''),[memberEdit,setMemberEdit]=useState(null),[memberEditPermissions,setMemberEditPermissions]=useState({}),[memberBusy,setMemberBusy]=useState(false),[linkedEmployee,setLinkedEmployee]=useState(null),[memberSearch,setMemberSearch]=useState(''),[memberRoleFilter,setMemberRoleFilter]=useState(''),[memberUserFilter,setMemberUserFilter]=useState(''),[memberStatusFilter,setMemberStatusFilter]=useState(''),[memberFormOpen,setMemberFormOpen]=useState(false),[expandedPermissions,setExpandedPermissions]=useState(null),[passwordResetDialog,setPasswordResetDialog]=useState(null),[generatedPassword,setGeneratedPassword]=useState(null),[credentialPhone,setCredentialPhone]=useState(''),[newMemberCredential,setNewMemberCredential]=useState(null),[today,setToday]=useState(()=>saudiDate());
 const [advanceEmployeeSearch,setAdvanceEmployeeSearch]=useState('');
+const [advanceManager,setAdvanceManager]=useState(null),[openingForm,setOpeningForm]=useState(null);
 const employeeManagerOptions=useMemo(()=>Object.fromEntries(companies.map(c=>[c,employeeDirectManagerOptions(rows,members,c)])),[rows,members]);
 const notify=t=>{setToast(t);setTimeout(()=>setToast(''),4500)};
 const refreshGeneration=useRef(0),lastBackgroundRefresh=useRef(0);
@@ -1042,7 +1043,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  const allRepayments=rows.filter(record=>record.module==='repayments');
  const canCreate=permittedWrite(user||{},'advances');
  const canDelete=['admin','hr'].includes(user?.role)&&canCreate&&permission(user||{},'advances','edit');
- const canOpening=['admin','finance'].includes(user?.role)&&permittedWrite(user||{},'repayments')&&permission(user||{},'repayments','edit');
+ const canOpening=['admin','finance','hr'].includes(user?.role);
  return <section className="panel records" dir="rtl" aria-label="دليل الموظفين والسلف" style={{marginBottom:14}}>
   <div className="panel-head" style={{flexWrap:'wrap',gap:8}}><div><h2 style={{marginBottom:4}}>دليل الموظفين وإدارة السلف</h2><small>جميع الموظفين المسجلين ضمن الشركات المسموح بها — إضافة السلفة مباشرة من سجل الموظف</small></div><span>{matchingEmployees.length} موظف · {company?companyDisplayName(company):'جميع الشركات'}</span></div>
   <div style={{padding:'10px 14px',display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
@@ -1069,44 +1070,75 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
      <td>{employee.data?.code||employee.code||'—'}</td><td><strong>{employee.data?.name||'غير محدد'}</strong></td>
      <td>{project?.data?.name||employee.data?.project_name||'—'}</td>
      <td>{loans.length}</td><td>{money(totalIssued)} ر.س</td><td>{money(openingPaid)} ر.س</td><td>{money(totalPaid)} ر.س</td><td><strong>{money(balance)} ر.س</strong></td>
-     <td><div style={{display:'flex',flexDirection:'column',gap:6,minWidth:310}}><div className="row-actions" style={{display:'flex',flexDirection:'row',flexWrap:'nowrap',gap:5,alignItems:'center'}}>
-      {canCreate&&<button type="button" className="primary" onClick={()=>{setFormError('');setLinkedEmployee(null);setEdit({company:employee.company,data:{employee_id:employee.id,amount:'0',date:saudiDate(),installments:'1',first_month:saudiDate().slice(0,7),notes:''}})}}>إضافة سلفة</button>}
-      <button type="button" onClick={()=>setLinkedEmployee({id:employee.id,name:employee.data?.name||employee.data?.code||'الموظف'})}>عرض السلف</button>
-      {canDelete&&<button type="button" className="danger-action" disabled={saving||!drafts.length} title={drafts.length?'حذف إحدى السلف المسودة':'لا توجد سلفة مسودة قابلة للحذف'} onClick={()=>{
-       const selected=drafts.length===1?drafts[0]:(()=>{const choice=window.prompt('حدد رقم السلفة المسودة لحذفها:\n'+drafts.map((row,index)=>(index+1)+' - '+money(row.data?.amount)+' ر.س | '+(row.data?.date||'')).join('\n'));const index=Number(choice)-1;return Number.isInteger(index)?drafts[index]:null})();
-       if(selected)deleteDraftRequest(selected);
-      }}>حذف سلفة</button>}
-      </div>
-      {canOpening&&<button type="button" disabled={saving||balance<=0} title={balance<=0?'لا يوجد رصيد مستحق لتسجيل سداد افتتاحي':undefined} onClick={async()=>{
-        const raw=window.prompt('مبلغ السداد الافتتاحي السابق للموظف '+(employee.data?.name||'')+' (حد أقصى '+money(balance)+' ريال):');
-        if(raw===null)return;
-        const amount=Number(String(raw).replace(/,/g,'').trim());
-        if(!Number.isFinite(amount)||amount<=0||Math.round(amount*100)>Math.round(balance*100)||Math.abs(amount*100-Math.round(amount*100))>0.000001){notify('المبلغ غير صحيح أو يتجاوز الرصيد المتبقي');return;}
-        const date=window.prompt('تاريخ السداد الفعلي بصيغة YYYY-MM-DD:',saudiDate());
-        if(date===null)return;
-        const reference=window.prompt('مرجع السداد الافتتاحي (مثل: رصيد افتتاحي معتمد 2026):');
-        if(reference===null)return;
-        if(reference.trim().length<3){notify('مرجع السداد مطلوب');return;}
-        if(!window.confirm('تأكيد إثبات سداد افتتاحي بمبلغ '+money(amount)+' ر.س للموظف '+(employee.data?.name||'')+'؟ ستوزع القيمة على السلف المعتمدة الأقدم، دون تنفيذ تحويل مالي.'))return;
-        setSaving(true);
-        try{await post({action:'record_opening_advance_repayment',module:'repayments',company:employee.company,employee_id:employee.id,amount,date,reference:reference.trim()});await refresh();notify('تم إثبات السداد الافتتاحي وتحديث المتبقي');}
-        catch(error){notify(error.message||'تعذر تسجيل السداد الافتتاحي');}finally{setSaving(false);}
-      }}>تسجيل سداد افتتاحي</button>}
-      {loans.length>0&&<details><summary style={{cursor:'pointer'}}>تفاصيل السلف وتعديل المسودات</summary><div style={{display:'grid',gap:7,padding:8,minWidth:210}}>
-       {loans.map(advance=><div key={advance.id} style={{borderBottom:'1px solid #e6dccb',paddingBottom:6}}>
-        <small style={{display:'block'}}>{money(advance.data?.amount)} ر.س · {states[advance.status]||advance.status}</small>
-        <div className="row-actions">
-         <button type="button" onClick={()=>{setLinkedEmployee(null);setEdit({...advance,data:{...advance.data}})}}>{advance.status==='draft'&&canCreate?'تعديل':'عرض'}</button>
-         {advance.status==='draft'&&canDelete&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteDraftRequest(advance)}>حذف</button>}
-        </div>
-       </div>)}
-      </div></details>}
+
+     <td style={{minWidth:350}}><div className="row-actions" style={{display:'flex',flexDirection:'row',gap:4,alignItems:'center',justifyContent:'flex-start',flexWrap:'nowrap',width:'max-content',whiteSpace:'nowrap'}}>
+      {canCreate&&<button type="button" className="primary" style={{fontSize:11,padding:'5px 8px',minHeight:28}} onClick={()=>{setFormError('');setLinkedEmployee(null);setEdit({company:employee.company,data:{employee_id:employee.id,amount:'0',date:saudiDate(),installments:'1',first_month:saudiDate().slice(0,7),notes:''}})}}>+ إضافة</button>}
+      <button type="button" style={{fontSize:11,padding:'5px 8px',minHeight:28}} onClick={()=>setAdvanceManager({id:employee.id,mode:'view'})}>عرض</button>
+      <button type="button" style={{fontSize:11,padding:'5px 8px',minHeight:28}} onClick={()=>setAdvanceManager({id:employee.id,mode:'edit'})}>تعديل</button>
+      <button type="button" className="danger-action" style={{fontSize:11,padding:'5px 8px',minHeight:28}} onClick={()=>setAdvanceManager({id:employee.id,mode:'delete'})}>حذف</button>
+      <button type="button" style={{fontSize:11,padding:'5px 8px',minHeight:28}} onClick={()=>{
+       if(!canOpening){notify('تسجيل سداد افتتاحي يتطلب صلاحية المدير العام أو المالية أو شؤون الموظفين');return;}
+       setOpeningForm({employeeId:employee.id,amount:'',date:saudiDate(),reference:'',balance});
+      }}>سداد افتتاحي</button>
      </div></td>
     </tr>;
    })}</tbody>
   </table></div>}
   <div className="footnote" style={{padding:'9px 14px'}}>الأزرار الأساسية أفقية. حذف السلفة متاح للمسودات فقط؛ السداد الافتتاحي إجراء مالي موثق بمرجع وتاريخ، ويُخصم من السلف المعتمدة الأقدم. إجمالي السداد يشمل السداد الافتتاحي والسدادات الأخرى مرة واحدة، والمتبقي = إجمالي السلف المعتمدة − إجمالي السداد.</div>
  </section>;
+})()}
+
+
+{module==='advances'&&advanceManager&&(()=>{
+ const employee=rows.find(r=>r.module==='employees'&&r.id===advanceManager.id);
+ const employeeLoans=rows.filter(r=>r.module==='advances'&&r.data?.employee_id===advanceManager.id&&r.company===employee?.company&&!r.data?._deleted).sort((a,b)=>String(b.data?.date||b.created_at).localeCompare(String(a.data?.date||a.created_at)));
+ const canChange=permittedWrite(user||{},'advances')&&permission(user||{},'advances','edit');
+ const canRemove=canChange&&['admin','hr'].includes(user?.role);
+ const visibleLoans=advanceManager.mode==='delete'?employeeLoans.filter(r=>r.status==='draft'):employeeLoans;
+ return <div className="modal-backdrop" onClick={()=>setAdvanceManager(null)}><section className="modal" role="dialog" aria-modal="true" dir="rtl" aria-label="إدارة سلف الموظف" onClick={e=>e.stopPropagation()} style={{maxWidth:760,width:'min(94vw,760px)',maxHeight:'85vh',overflowY:'auto'}}>
+  <div className="modal-head"><div><h2>إدارة سلف الموظف — {employee?.data?.name||'الموظف'}</h2><small>{companyDisplayName(employee?.company||'')} · {employee?.data?.code||''} · {employeeLoans.length} سلفة</small></div><button type="button" onClick={()=>setAdvanceManager(null)} aria-label="إغلاق"><X/></button></div>
+  <div className="row-actions" style={{display:'flex',flexDirection:'row',gap:6,flexWrap:'wrap',marginBottom:12}}>
+   {[['view','عرض السلف'],['edit','تعديل المسودات'],['delete','حذف المسودات']].map(([mode,label])=><button key={mode} type="button" className={advanceManager.mode===mode?'primary':''} onClick={()=>setAdvanceManager({...advanceManager,mode})}>{label}</button>)}
+  </div>
+  {!visibleLoans.length?<div className="empty"><p>{advanceManager.mode==='delete'?'لا توجد سلف مسودة قابلة للحذف. لا يمكن حذف المعتمدة أو المصروفة.':'لا توجد سلف مسجلة لهذا الموظف بهذه الحالة.'}</p></div>:
+   <div className="table-wrap"><table><thead><tr><th>التاريخ</th><th>المبلغ</th><th>حالة السلفة</th><th>الإجراء</th></tr></thead><tbody>{visibleLoans.map(loan=><tr key={loan.id}><td>{loan.data?.date||'—'}</td><td>{money(loan.data?.amount)} ر.س</td><td>{states[loan.status]||loan.status}</td><td><div className="row-actions" style={{display:'flex',gap:6,flexWrap:'nowrap'}}>
+    <button type="button" onClick={()=>{setAdvanceManager(null);setLinkedEmployee(null);setEdit({...loan,data:{...loan.data}})}}>{loan.status==='draft'&&canChange?'تعديل':'عرض'}</button>
+    {loan.status==='draft'&&canRemove&&<button type="button" className="danger-action" disabled={saving} onClick={async()=>{await deleteDraftRequest(loan);setAdvanceManager(null);}}>حذف</button>}
+    {loan.status!=='draft'&&<small>معتمد/قيد إجراء — لا يُحذف</small>}
+   </div></td></tr>)}</tbody></table></div>}
+  {advanceManager.mode==='delete'&&!canRemove&&<p className="footnote">حذف المسودات يتطلب صلاحية المدير العام أو شؤون الموظفين وصلاحية التعديل.</p>}
+ </section></div>;
+})()}
+{module==='advances'&&openingForm&&(()=>{
+ const employee=rows.find(r=>r.module==='employees'&&r.id===openingForm.employeeId);
+ const loans=rows.filter(r=>r.module==='advances'&&r.company===employee?.company&&r.data?.employee_id===employee?.id&&['approved','paid'].includes(r.status));
+ const loanIds=new Set(loans.map(r=>r.id));
+ const repaid=rows.filter(r=>r.module==='repayments'&&loanIds.has(r.data?.advance_id)&&!r.data?._deleted).reduce((sum,r)=>sum+Number(r.data?.amount||0),0);
+ const available=Math.max(0,Math.round((loans.reduce((sum,r)=>sum+Number(r.data?.amount||0),0)-repaid)*100)/100);
+ const canOpening=['admin','finance','hr'].includes(user?.role);
+ return <div className="modal-backdrop" onClick={()=>!saving&&setOpeningForm(null)}><section className="modal" role="dialog" aria-modal="true" dir="rtl" aria-label="تسجيل سداد افتتاحي" onClick={e=>e.stopPropagation()} style={{width:'min(94vw,500px)',maxHeight:'88vh',overflowY:'auto'}}>
+  <div className="modal-head"><div><h2>تسجيل سداد افتتاحي</h2><small>{employee?.data?.name||'الموظف'} · {companyDisplayName(employee?.company||'')}</small></div><button type="button" disabled={saving} onClick={()=>setOpeningForm(null)} aria-label="إغلاق"><X/></button></div>
+  <p>المتبقي من السلف المعتمدة أو المصروفة: <b>{money(available)} ر.س</b></p>
+  {available<=0&&<p className="review-warning-box">لا توجد سلف معتمدة برصيد قائم. السلف المسودة أو الجاري اعتمادها لا تدخل في الأرصدة المالية، ويجب اعتماد السلفة أولًا أو تسجيل الرصيد التاريخي في سجلات السلف قبل إثبات سداده.</p>}
+  {!canOpening&&<p className="review-warning-box">هذا الإجراء يتطلب صلاحية المدير العام أو شؤون الموظفين أو المالية.</p>}
+  <form onSubmit={async e=>{
+   e.preventDefault();if(!canOpening)return notify('لا توجد صلاحية لتسجيل السداد الافتتاحي');
+   const amount=Number(openingForm.amount),reference=String(openingForm.reference||'').trim();
+   if(!Number.isFinite(amount)||amount<=0||Math.round(amount*100)>Math.round(available*100)||Math.abs(amount*100-Math.round(amount*100))>0.000001)return notify('المبلغ غير صحيح أو يتجاوز الرصيد المستحق');
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(openingForm.date)||openingForm.date>saudiDate())return notify('تاريخ السداد غير صحيح');
+   if(reference.length<3)return notify('أدخل مرجعًا لا يقل عن ثلاثة أحرف');
+   if(!window.confirm('تأكيد تسجيل سداد تاريخي بمبلغ '+money(amount)+' ر.س؟ سيتم خصمه من أقدم السلف المعتمدة وتوثيق العملية.'))return;
+   setSaving(true);
+   try{await post({action:'record_opening_advance_repayment',module:'repayments',company:employee.company,employee_id:employee.id,amount,date:openingForm.date,reference});setOpeningForm(null);await refresh();notify('تم تسجيل السداد وتحديث إجمالي المتبقي بنجاح');}
+   catch(error){notify(error.message||'تعذر حفظ السداد الافتتاحي');}finally{setSaving(false);}
+  }} style={{display:'grid',gap:12}}>
+   <label>المبلغ المسدد سابقًا (ر.س)<input type="number" min="0.01" step="0.01" max={available||undefined} required value={openingForm.amount} onChange={e=>setOpeningForm(p=>({...p,amount:e.target.value}))} placeholder="0.00"/></label>
+   <label>تاريخ السداد<input type="date" required max={saudiDate()} value={openingForm.date} onChange={e=>setOpeningForm(p=>({...p,date:e.target.value}))}/></label>
+   <label>المرجع / مستند الإثبات<input type="text" minLength={3} maxLength={120} required value={openingForm.reference} onChange={e=>setOpeningForm(p=>({...p,reference:e.target.value}))} placeholder="مرجع كشف السلف السابق"/></label>
+   <small>يُوزّع السداد على أقدم السلف المعتمدة، ولا يتم تنفيذ أي صرف أو تحويل بنكي.</small>
+   <div className="row-actions" style={{display:'flex',flexDirection:'row',gap:8}}><button type="submit" className="primary" disabled={saving||!canOpening||available<=0}>حفظ السداد</button><button type="button" disabled={saving} onClick={()=>setOpeningForm(null)}>إلغاء</button></div>
+  </form>
+ </section></div>;
 })()}
 
 {module!=='payroll'&&<section className="panel records"><div className="panel-head"><h2>سجل {spec.label}</h2><span>{list.length} سجل · {company||'جميع الشركات'}</span></div>{!list.length?<div className="empty"><Building2 size={34}/><h3>{loading?'جارٍ تحميل البيانات…':'لا توجد سجلات بعد'}</h3><p>اختر الشركة وأضف {spec.singular} لبدء العمل.</p></div>:<div className="table-wrap"><table key={module} className={module==='employees'?'employee-register':undefined}><thead><tr><th>الشركة</th>{tableFields.map(f=><th key={module+':'+f.key}>{f.label}</th>)}{module==='project_managers'&&<th>المشاريع والموظفون المرتبطون</th>}{module==='payroll'&&<th>صافي الراتب</th>}{module==='advances'&&<th>الرصيد المتبقي</th>}{module==='leave'&&<><th>عدد أيام الإجازة</th><th>الرصيد المستحق</th><th>الرصيد المتبقي بعد الطلب</th></>}{['leave','advances'].includes(module)&&requestApprovalStages.map(stage=><th key={'approval:'+stage.id} className="approval-stage-header">{stage.title}</th>)}<th>{module==='employees'?'حالة الموظف':'حالة الطلب'}</th><th>الإجراء</th></tr></thead><tbody>{list.map(row=>{const service=annualLeave(row.data.hire_date);const used=rows.filter(r=>r.module==='leave'&&r.status==='approved'&&(r.data.balance_deducted??(!r.data.leave_type||r.data.leave_type==='annual'))&&r.data.employee_id===row.id).reduce((n,r)=>n+Number(r.data.days),0);const approvable=permission(user||{},module,'approve')&&!operationalModules.includes(module)&&module!=='repayments'&&!['approved','paid','rejected','completed','cancelled'].includes(row.status)&&requestCanApprove(row);return <tr key={row.id}><td><span className="company-tag">{companyDisplayName(row.company)}</span></td>{tableFields.map(f=><td key={module+':'+f.key}>{module==='employees'&&f.key==='manager'?<EmployeeDirectManagerCell employee={row} rows={rows} managers={employeeManagerOptions[row.company]||[]} disabled={saving||!['admin','hr'].includes(user?.role)||!permittedWrite(user||{},'employees')||row.data?._archived} onSave={saveEmployeeDirectManager}/>:module==='employees'?registerDisplay(row,f):display(row,f)}</td>)}{module==='project_managers'&&<td>{(()=>{
