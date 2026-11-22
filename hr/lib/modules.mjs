@@ -233,6 +233,10 @@ export function visible(user,row,all=[]){
   const accountEmail=String(user.email||'').trim().toLowerCase();
   const employee=row.module==='employees'?row:all.find(e=>e.module==='employees'&&e.id===row.data?.employee_id);
   const delegated=String(employee?.data?.delegated_manager_email||'').trim().toLowerCase();
+  if(row.module==='employees'&&user.role==='project_manager'){
+   const direct=String(row.data?.manager_email||row.data?.supervisor_account||'').trim().toLowerCase();
+   if(direct&&direct===accountEmail)return true;
+  }
   if(['leave','advances','resignations','returns','terminations','warnings','appointments'].includes(row.module)&&row.data?.employee_id){
    const direct=String(employee?.data?.manager_email||employee?.data?.supervisor_account||'').trim().toLowerCase();
    if(direct&&user.role==='project_manager')return direct===accountEmail;
