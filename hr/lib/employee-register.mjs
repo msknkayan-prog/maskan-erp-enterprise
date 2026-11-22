@@ -29,8 +29,8 @@ export function employeeRegisterValue(row,key,rows){
  if(key==='contract_expiry')return data.contract_expiry_mode==='manual'?(data.contract_expiry||'حدد تاريخ انتهاء العقد'):nextContractExpiry(data.hire_date)||'أكمل تاريخ التعيين';
  if(key==='service_years'){const span=serviceDuration(data.hire_date);return span?span.years+' سنة، '+span.months+' شهر، '+span.days+' يوم':'أكمل تاريخ التعيين';}
  if(key==='service_total_days')return serviceDuration(data.hire_date)?.totalDays??'أكمل تاريخ التعيين';
- if(key==='accrued_leave')return data.leave_balance_mode==='manual'?Number(data.manual_leave_entitlement||0):service?.accrued??'أكمل تاريخ التعيين';
- if(key==='current_leave'){const carry=data.opening_leave_confirmed==='yes'?Number(data.opening_leave||0):0;return service||data.leave_balance_mode==='manual'||data.opening_leave_confirmed==='yes'?Math.round(((data.leave_balance_mode==='manual'?Number(data.manual_leave_entitlement||0):(service?.accrued||0)+carry)-used)*100)/100:'أكمل تاريخ التعيين';}
+ if(key==='accrued_leave')return data.contract_expiry_mode!=='manual'&&data.leave_balance_mode==='manual'?Number(data.manual_leave_entitlement||0):service?.accrued??'أكمل تاريخ التعيين';
+ if(key==='current_leave'){const carry=data.opening_leave_confirmed==='yes'?Number(data.opening_leave||0):0;return service||(data.contract_expiry_mode!=='manual'&&data.leave_balance_mode==='manual')||data.opening_leave_confirmed==='yes'?Math.round(((data.contract_expiry_mode!=='manual'&&data.leave_balance_mode==='manual'?Number(data.manual_leave_entitlement||0):(service?.accrued||0)+carry)-used)*100)/100:'أكمل تاريخ التعيين';}
  if(key==='latest_leave'){
   const latest=[...leaves].sort((a,b)=>String(b.data.request_date||b.data.start||b.created_at).localeCompare(String(a.data.request_date||a.data.start||a.created_at)))[0];
   return latest?[latest.data.request_date||latest.data.start,latest.code].filter(Boolean).join(' · '):data.last_leave_request||data.extra_fields?.['آخر طلب إجازة معتمد']||'';
