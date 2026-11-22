@@ -79,7 +79,7 @@ const loanBalanceCents=(loan,context)=>Math.max(0,cents(loan.data.amount)-(conte
 const autoAdvanceAllocations=(context,employeeId,month,capCents=Infinity)=>{
  let available=capCents;
  const allocations=[];
- for(const loan of context.loans.filter(r=>r.data.employee_id===employeeId&&r.data.schedule_mode!=='manual'&&validMonth(r.data.first_month)&&r.data.first_month<=month).sort((a,b)=>String(a.data.first_month).localeCompare(String(b.data.first_month))||String(a.data.date||'').localeCompare(String(b.data.date||''))){
+ for(const loan of context.loans.filter(r=>r.data.employee_id===employeeId&&r.data.schedule_mode!=='manual'&&validMonth(r.data.first_month)&&r.data.first_month<=month).sort((a,b)=>String(a.data.first_month).localeCompare(String(b.data.first_month))||String(a.data.date||'').localeCompare(String(b.data.date||'')))){
   if(available<=0)break;
   const skipped=Array.isArray(loan.data.deferred_months)?loan.data.deferred_months:[];
   if(skipped.includes(month))continue;
