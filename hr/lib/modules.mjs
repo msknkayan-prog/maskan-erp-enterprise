@@ -43,6 +43,10 @@ export function isRequestStageActor(user,stage){
 }
 export const states={draft:'مسودة',project_manager:'المدير المباشر',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
 export const saudiDate=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,10);
+export function leaveAccrualAsOf(data,at=saudiDate()){
+ const manual=data?.contract_expiry_mode==='manual'&&/^\d{4}-\d{2}-\d{2}$/.test(String(data?.contract_expiry||''));
+ return manual?data.contract_expiry:at;
+}
 export function annualLeave(hire,at=saudiDate()){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(hire||''))return null;
  if(isNaN(Date.parse(hire))||new Date(hire).toISOString().slice(0,10)!==hire)return null;
