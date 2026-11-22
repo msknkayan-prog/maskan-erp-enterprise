@@ -319,6 +319,7 @@ export async function POST(req){
   }
   // Enforce employment status at every approval/payment boundary, including
   // batches created before the employee became inactive.
+  const financeAllocations=[];
   if(['submit','managers_approve','projects_approve','finance_pay','admin_approve','finance_approve'].includes(action)){
    const included=monthly.filter(r=>!r.data.excluded);
    if(included.length){
@@ -373,7 +374,6 @@ export async function POST(req){
    if(!body.confirm_payment)throw Error('يجب تأكيد الصرف الفعلي قبل إصدار السندات');
    if(monthly.length!==Number(batch.data.employee_count)||monthly.every(r=>r.data.excluded))throw Error('قائمة المسير غير مكتملة');
    const advanceContext=await paidLoanContext();
-   const financeAllocations=[];
    const pendingLoanSums=new Map();
    for(const row of monthly.filter(r=>!r.data.excluded)){
     const d=row.data;
