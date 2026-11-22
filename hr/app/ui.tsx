@@ -1056,8 +1056,8 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   <>
   <div dir="rtl" role="group" aria-label="التحريك الأفقي لجدول السلف" style={{position:'sticky',top:0,zIndex:5,display:'flex',alignItems:'center',gap:6,justifyContent:'flex-start',padding:'5px 10px',background:'#faf6ed',borderBottom:'1px solid #e4d6bd'}}>
    <span style={{fontSize:11,color:'#755f37',fontWeight:600}}>تحريك الجدول</span>
-   <button type="button" aria-label="حرك جدول السلف يمينًا" title="يمين — عرض أعمدة الشركة والموظف" style={{padding:'4px 9px',minWidth:34,minHeight:27,borderRadius:6}} onClick={()=>advanceTableScrollRef.current?.scrollBy({left:480,behavior:'smooth'})}><span aria-hidden="true">◀</span> يمين</button>
-   <button type="button" aria-label="حرك جدول السلف يسارًا" title="يسار — عرض أعمدة الأرصدة والإجراءات" style={{padding:'4px 9px',minWidth:34,minHeight:27,borderRadius:6}} onClick={()=>advanceTableScrollRef.current?.scrollBy({left:-480,behavior:'smooth'})}>يسار <span aria-hidden="true">▶</span></button>
+   <button type="button" aria-label="حرك جدول السلف يمينًا" title="يمين — عرض أعمدة الشركة والموظف" style={{padding:'4px 9px',minWidth:34,minHeight:27,borderRadius:6}} onClick={()=>advanceTableScrollRef.current?.scrollBy({left:480,behavior:'smooth'})}><span aria-hidden="true">▶</span> يمين</button>
+   <button type="button" aria-label="حرك جدول السلف يسارًا" title="يسار — عرض أعمدة الأرصدة والإجراءات" style={{padding:'4px 9px',minWidth:34,minHeight:27,borderRadius:6}} onClick={()=>advanceTableScrollRef.current?.scrollBy({left:-480,behavior:'smooth'})}>يسار <span aria-hidden="true">◀</span></button>
    <small style={{fontSize:10,color:'#87745a'}}>يمكن التمرير بالسحب أيضًا</small>
   </div>
   <div className="table-wrap" ref={advanceTableScrollRef} dir="rtl" style={{overflowX:'auto',scrollBehavior:'smooth',scrollbarGutter:'stable'}}><table className="employee-register">
