@@ -482,6 +482,45 @@ if(body.action==='set_member_status'){
 if(body.action==='remove_member'){if(u.role!=='admin')throw Error('403');const target=String(body.email||'').trim().toLowerCase();const existing=await db.prepare('SELECT role FROM members WHERE email=?').bind(target).first();if(!existing||existing.role==='admin'||target===u.email.toLowerCase())throw Error('لا يمكن إزالة حساب المدير');await db.prepare('DELETE FROM members WHERE email=?').bind(target).run();return json({ok:true});}
 const mod=body.module;if(!(modules as any)[mod])throw Error('نافذة غير معروفة');const old=body.id?await db.prepare('SELECT * FROM records WHERE id=? AND module=?').bind(body.id,mod).first<any>():null;if(body.id&&!old)throw Error('السجل غير موجود');if(old&&!visible(u,parse(old),(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(old&&old.revision!==body.revision)throw Error('تغير السجل؛ حدّث الصفحة');
 if(old&&JSON.parse(old.data)?._deleted)throw Error('هذا الطلب محذوف ولا يمكن تعديله أو إرساله للاعتماد');
+
+if(body.action==='record_opening_advance_repayment'){
+ if(mod!=='repayments'||!['admin','finance'].includes(u.role)||!permittedWrite(u,'repayments')||!permission(u,'repayments','edit'))throw Error('403');
+ const companyName=String(body.company||'').trim();
+ const employeeId=String(body.employee_id||'').trim();
+ const amount=Number(body.amount);
+ const paidDate=String(body.date||'').trim();
+ const reference=String(body.reference||'').trim();
+ if(!employeeId||!companies.includes(companyName))throw Error('حدد الموظف والشركة');
+ if(!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100&&Math.abs(amount*100-Math.round(amount*100))>0.000001)throw Error('مبلغ السداد يجب أن يكون موجبًا بخانتين عشريتين كحد أقصى');
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(paidDate)||Number.isNaN(Date.parse(paidDate))||paidDate>saudiDate())throw Error('تاريخ السداد غير صالح أو في المستقبل');
+ if(reference.length<3||reference.length>120)throw Error('أدخل مرجع السداد الافتتاحي (3 إلى 120 حرفًا) لمنع التسجيل المكرر');
+ const records=(await db.prepare("SELECT * FROM records WHERE module IN ('employees','advances','repayments') AND company=?").bind(companyName).all()).results;
+ const employee=records.find((r:any)=>r.module==='employees'&&r.id===employeeId);
+ if(!employee||!visible(u,parse(employee),records.map(parse)))throw Error('الموظف غير متاح ضمن صلاحياتك');
+ const repayments=records.filter((r:any)=>r.module==='repayments'&&!JSON.parse(r.data||'{}')._deleted).map((r:any)=>({id:r.id,data:JSON.parse(r.data||'{}')}));
+ const loans=records.filter((r:any)=>r.module==='advances'&&['approved','paid'].includes(r.status)).map((r:any)=>({id:r.id,created_at:r.created_at,data:JSON.parse(r.data||'{}')})).filter((r:any)=>r.data.employee_id===employeeId&&!r.data._deleted).sort((a:any,b:any)=>String(a.data.date||a.created_at).localeCompare(String(b.data.date||b.created_at)));
+ if(repayments.some((r:any)=>r.data._opening_employee_id===employeeId&&r.data._opening_reference===reference))throw Error('مرجع السداد الافتتاحي مسجل مسبقًا لهذا الموظف');
+ const allocations=loans.map((loan:any)=>{const settled=repayments.filter((r:any)=>r.data.advance_id===loan.id).reduce((sum:number,r:any)=>sum+Number(r.data.amount||0),0);return {...loan,available:Math.max(0,Math.round((Number(loan.data.amount||0)-settled)*100)/100)}}).filter((r:any)=>r.available>0);
+ const availableCents=allocations.reduce((sum:number,r:any)=>sum+Math.round(r.available*100),0);
+ let remainingCents=Math.round(amount*100);
+ if(!availableCents)throw Error('لا توجد سلف معتمدة أو مصروفة برصيد مستحق لهذا الموظف');
+ if(remainingCents>availableCents)throw Error('السداد الافتتاحي يتجاوز المتبقي الفعلي من السلف');
+ const group=crypto.randomUUID();
+ const statements:any[]=[];
+ let segments=0;
+ for(const loan of allocations){
+  if(remainingCents<=0)break;
+  const part=Math.min(remainingCents,Math.round(loan.available*100));
+  remainingCents-=part;
+  const recordId=crypto.randomUUID();
+  const repayment={advance_id:loan.id,amount:part/100,date:paidDate,code:'OPEN-'+group.slice(0,8)+'-'+(++segments),method:'opening',notes:'سداد افتتاحي سابق — '+reference,_opening_balance:true,_opening_reference:reference,_opening_employee_id:employeeId,_opening_group:group,_opening_created_by:u.email};
+  statements.push(db.prepare("INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation) VALUES(?,'repayments',?,?,?,'draft',1,?,?,?,?)").bind(recordId,companyName,repayment.code,JSON.stringify(repayment),u.email,now,now,mutation));
+ }
+ statements.push(db.prepare('INSERT INTO audit VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),u.email,group,'opening_advance_repayment',now,JSON.stringify({company:companyName,employee_id:employeeId,amount,reference,date:paidDate,allocations:segments})));
+ await db.batch(statements);
+ return json({ok:true,recorded:amount,allocations:segments,reference});
+}
+
  if(body.action==='set_employee_direct_manager'){
   if(mod!=='employees'||!old||!['admin','hr'].includes(u.role)||!permittedWrite(u,'employees')||!permission(u,'employees','edit'))throw Error('403');
   const original=JSON.parse(old.data||'{}');
