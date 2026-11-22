@@ -1981,3 +1981,24 @@ test('separate project owner and direct supervisor have different employee-reque
  assert.equal(visible(projectOwner,project,rows),true);
  assert.equal(visible({...supervisor,companies:'["رياح الاعمار"]'},leave,rows),false);
 });
+
+test('project manager picker offers onboarding for an inactive roster member rather than disabled choices',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/value\.startsWith\('pending:'\)/);
+ assert.match(ui,/setManagerSetup\(\{employeeId:'',name:selected\.name/);
+ assert.match(ui,/setModule\('project_managers'\)/);
+ assert.match(ui,/m\.eligible\?m\.email:'pending:'\+m\.id/);
+ assert.doesNotMatch(ui,/key=\{m\.id\} disabled=\{!m\.eligible\}/);
+});
+test('advance repayment ledger is embedded and sidebar hides redundant repayment navigation without losing finance modules',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const modules=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ assert.match(ui,/سجل سداد السلف — داخل ملف السلف/);
+ assert.match(ui,/module==='advances'&&permittedRead\(user\|\|\{\},'repayments'\)/);
+ assert.match(ui,/r\.module==='repayments'&&!r\.data\?\._deleted/);
+ assert.match(ui,/!\['project_managers','repayments'\]\.includes\(k\)/);
+ assert.match(ui,/setLinkedFinance\(\{kind:module==='leave'\?'leave_dues':'repayments'/);
+ assert.match(ui,/سداد افتتاحي/);
+ assert.match(modules,/repayments:\{label:'سداد السلف'/);
+ assert.match(modules,/leave_dues:\{label:'مستحقات الإجازة'/);
+});
