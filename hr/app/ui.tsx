@@ -975,7 +975,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  </div>
  <div className="table-wrap" style={{maxHeight:410,overflow:'auto'}}><table><thead><tr><th>الشركة</th><th>الطلب</th><th>الموظف / الشهر</th><th>الحالة الحالية</th><th>القرار</th></tr></thead><tbody>
  {pendingRequestRows.map(request=>{
- const canDirect=['leave','advances'].includes(request.module)&&['draft','project_manager','projects_director','hr','finance'].includes(request.status)&&permission(user,'leave'===request.module?'leave':'advances','approve')&&(request.status!=='draft'||permittedWrite(user,request.module));
+ const canDirect=!operationalModules.includes(request.module)&&request.module!=='payroll_batches'&&['draft','project_manager','projects_director','hr','finance'].includes(request.status)&&permission(user,request.module,'approve')&&(request.status!=='draft'||permittedWrite(user,request.module));
  const isPayroll=request.module==='payroll_batches';
  const open=()=>{if(isPayroll){setPayrollMonth(request.data?.month||payrollMonth);setPayrollCompany(request.company);setPayrollManageBatchId(request.id);setModule('payroll')}else{setModule(request.module);setEdit({...request,data:{...request.data}})}};
  return <tr key={request.id}><td>{companyDisplayName(request.company)}</td><td>{modules[request.module]?.singular||request.module}</td><td>{pendingEmployeeName(request)}</td><td><span className={'badge '+request.status}>{states[request.status]||cycleStatus[request.status]||request.status}</span></td>
