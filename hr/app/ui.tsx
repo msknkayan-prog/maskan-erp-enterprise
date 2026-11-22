@@ -134,6 +134,7 @@ function directManagerChoices(rows,members,company){
  });
 }
 export default function ERP(){const [integrityReport,setIntegrityReport]=useState(null),[integrityBusy,setIntegrityBusy]=useState(false),[managerSetup,setManagerSetup]=useState(null),[managerSetupBusy,setManagerSetupBusy]=useState(false),[leaveHolidayCandidate,setLeaveHolidayCandidate]=useState(''),[module,setModule]=useState('overview'),[pendingType,setPendingType]=useState(''),[pendingStage,setPendingStage]=useState(''),[pendingSearch,setPendingSearch]=useState(''),[payrollStage,setPayrollStage]=useState('__all__'),[company,setCompany]=useState(''),[payrollCompany,setPayrollCompany]=useState('__all__'),[payrollEdit,setPayrollEdit]=useState(null),[cycleEdit,setCycleEdit]=useState(null),[payrollManageBatchId,setPayrollManageBatchId]=useState(null),[payrollAllOpen,setPayrollAllOpen]=useState(false),[payrollBulkSelected,setPayrollBulkSelected]=useState([]),[payrollAddEmployeeId,setPayrollAddEmployeeId]=useState(''),[payrollMonth,setPayrollMonth]=useState(new Date(Date.now()+3*3600000).toISOString().slice(0,7)),[rows,setRows]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[employeeProjectSearch,setEmployeeProjectSearch]=useState(''),[employeeManagerSearch,setEmployeeManagerSearch]=useState(''),[projectCompanySearch,setProjectCompanySearch]=useState(''),[projectManagerSearch,setProjectManagerSearch]=useState(''),[managerRecordSearch,setManagerRecordSearch]=useState(''),[employeeFilterOpen,setEmployeeFilterOpen]=useState(false),[employeeFieldFilters,setEmployeeFieldFilters]=useState({}),[edit,setEdit]=useState(null),[employeeReadOnly,setEmployeeReadOnly]=useState(false),[showArchivedEmployees,setShowArchivedEmployees]=useState(false),[saving,setSaving]=useState(false),[formError,setFormError]=useState(''),[toast,setToast]=useState(''),[importRows,setImportRows]=useState(null),[members,setMembers]=useState([]),[audit,setAudit]=useState([]),[memberEmail,setMemberEmail]=useState(''),[memberContactEmail,setMemberContactEmail]=useState(''),[memberRole,setMemberRole]=useState('hr'),[memberEmployee,setMemberEmployee]=useState(''),[memberCompany,setMemberCompany]=useState('*'),[memberProject,setMemberProject]=useState('*'),[memberSelectedProjects,setMemberSelectedProjects]=useState([]),[memberPermissions,setMemberPermissions]=useState({}),[memberUsername,setMemberUsername]=useState(''),[memberEdit,setMemberEdit]=useState(null),[memberEditPermissions,setMemberEditPermissions]=useState({}),[memberBusy,setMemberBusy]=useState(false),[linkedEmployee,setLinkedEmployee]=useState(null),[memberSearch,setMemberSearch]=useState(''),[memberRoleFilter,setMemberRoleFilter]=useState(''),[memberUserFilter,setMemberUserFilter]=useState(''),[memberStatusFilter,setMemberStatusFilter]=useState(''),[memberFormOpen,setMemberFormOpen]=useState(false),[expandedPermissions,setExpandedPermissions]=useState(null),[passwordResetDialog,setPasswordResetDialog]=useState(null),[generatedPassword,setGeneratedPassword]=useState(null),[credentialPhone,setCredentialPhone]=useState(''),[newMemberCredential,setNewMemberCredential]=useState(null),[today,setToday]=useState(()=>saudiDate());
+const [advanceEmployeeSearch,setAdvanceEmployeeSearch]=useState('');
 const employeeManagerOptions=useMemo(()=>Object.fromEntries(companies.map(c=>[c,employeeDirectManagerOptions(rows,members,c)])),[rows,members]);
 const notify=t=>{setToast(t);setTimeout(()=>setToast(''),4500)};
 const refreshGeneration=useRef(0),lastBackgroundRefresh=useRef(0);
@@ -1031,6 +1032,56 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <div style={{display:'flex',gap:10}}><button className="primary" type="submit" disabled={saving}>حفظ ومراجعة بيانات الموظف</button><button type="button" disabled={saving} onClick={()=>setCycleEdit(null)}>إلغاء</button></div></form></section></div>}
  {importRows&&<section className="panel import-panel"><h2>معاينة الاستيراد — {importRows.length} سجل</h2><p>يدعم XLSX بالقيم فقط أو CSV UTF-8 من Excel. لا تستورد بيانات حتى تضغط التأكيد.</p><div className="table-wrap"><table><thead><tr><th>الصف</th><th>الشركة</th><th>الاسم / الرقم</th><th>الملاحظة</th></tr></thead><tbody>{importRows.map((r,i)=><tr key={i}><td>{r.line}</td><td>{r.company}</td><td>{r.data.name} / {r.data.code}</td><td>{r.error||'بانتظار التحقق والحفظ'}</td></tr>)}</tbody></table></div><button className="primary" disabled={saving} onClick={confirmImport}>تأكيد الاستيراد</button><button disabled={saving} onClick={()=>setImportRows(null)}>إلغاء</button></section>}
 {linkedEmployee&&['leave','advances','warnings','resignations','returns','terminations','leave_dues','settlements'].includes(module)&&<div className="panel" style={{padding:12,marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}><span>عرض السجلات المرتبطة بالموظف: <b>{linkedEmployee.name}</b></span><button type="button" onClick={()=>setLinkedEmployee(null)}>عرض جميع السجلات</button></div>}
+
+{module==='advances'&&(()=>{
+ const matchingEmployees=rows.filter(employee=>employee.module==='employees'&&!employee.data?._archived&&(!company||employee.company===company)).filter(employee=>{
+  const source=[employee.data?.name,employee.data?.code,employee.code,employee.data?.identity,employee.data?.project_name,companyDisplayName(employee.company)].join(' ');
+  return normalizeSearch(source).includes(normalizeSearch(advanceEmployeeSearch));
+ }).sort((a,b)=>companyDisplayName(a.company).localeCompare(companyDisplayName(b.company),'ar')||String(a.data?.name||'').localeCompare(String(b.data?.name||''),'ar'));
+ const allAdvances=rows.filter(record=>record.module==='advances');
+ const allRepayments=rows.filter(record=>record.module==='repayments');
+ const canCreate=permittedWrite(user||{},'advances');
+ const canDelete=['admin','hr'].includes(user?.role)&&canCreate&&permission(user||{},'advances','edit');
+ return <section className="panel records" dir="rtl" aria-label="دليل الموظفين والسلف" style={{marginBottom:14}}>
+  <div className="panel-head" style={{flexWrap:'wrap',gap:8}}><div><h2 style={{marginBottom:4}}>دليل الموظفين وإدارة السلف</h2><small>جميع الموظفين المسجلين ضمن الشركات المسموح بها — إضافة السلفة مباشرة من سجل الموظف</small></div><span>{matchingEmployees.length} موظف · {company?companyDisplayName(company):'جميع الشركات'}</span></div>
+  <div style={{padding:'10px 14px',display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+   <label style={{flex:'1 1 230px'}}>بحث الموظفين<input type="search" value={advanceEmployeeSearch} onChange={e=>setAdvanceEmployeeSearch(e.target.value)} placeholder="اسم الموظف أو رقمه الوظيفي أو الإقامة"/></label>
+   {advanceEmployeeSearch&&<button type="button" onClick={()=>setAdvanceEmployeeSearch('')}>مسح البحث</button>}
+   <small>اختر الشركة من أعلى الصفحة لتصفية الدليل. السلف المعتمدة والمصروفة تبقى محفوظة في السجل.</small>
+  </div>
+  {!matchingEmployees.length?<div className="empty"><Users size={28}/><h3>{loading?'جارٍ تحميل الموظفين…':'لا يوجد موظفون مطابقون'}</h3><p>راجع اختيار الشركة أو نص البحث أو بيانات الموظفين المستوردة.</p></div>:
+  <div className="table-wrap"><table className="employee-register">
+   <thead><tr><th>الشركة</th><th>الرقم الوظيفي</th><th>اسم الموظف</th><th>المشروع</th><th>عدد السلف</th><th>الرصيد المستحق</th><th>الإجراءات</th></tr></thead>
+   <tbody>{matchingEmployees.map(employee=>{
+    const loans=allAdvances.filter(advance=>advance.data?.employee_id===employee.id&&advance.company===employee.company);
+    const issued=loans.filter(advance=>['approved','paid'].includes(advance.status));
+    const balance=issued.reduce((sum,advance)=>sum+Math.max(0,Number(advance.data?.amount||0)-allRepayments.filter(payment=>payment.data?.advance_id===advance.id).reduce((paid,payment)=>paid+Number(payment.data?.amount||0),0)),0);
+    const project=rows.find(record=>record.module==='projects'&&record.id===employee.data?.project_id);
+    return <tr key={employee.id}>
+     <td><span className="company-tag">{companyDisplayName(employee.company)}</span></td>
+     <td>{employee.data?.code||employee.code||'—'}</td><td><strong>{employee.data?.name||'غير محدد'}</strong></td>
+     <td>{project?.data?.name||employee.data?.project_name||'—'}</td>
+     <td>{loans.length}</td><td>{money(balance)} ر.س</td>
+     <td><div className="row-actions" style={{flexWrap:'wrap'}}>
+      {canCreate&&<button type="button" className="primary" onClick={()=>{setFormError('');setLinkedEmployee(null);setEdit({company:employee.company,data:{employee_id:employee.id,amount:'0',date:saudiDate(),installments:'1',first_month:saudiDate().slice(0,7),notes:''}})}}>إضافة سلفة</button>}
+      <button type="button" onClick={()=>setLinkedEmployee({id:employee.id,name:employee.data?.name||employee.data?.code||'الموظف'})}>عرض السلف</button>
+      {loans.length>0&&<details><summary style={{cursor:'pointer'}}>تعديل / حذف</summary><div style={{display:'grid',gap:7,padding:8,minWidth:210}}>
+       {loans.map(advance=><div key={advance.id} style={{borderBottom:'1px solid #e6dccb',paddingBottom:6}}>
+        <small style={{display:'block'}}>{money(advance.data?.amount)} ر.س · {states[advance.status]||advance.status}</small>
+        <div className="row-actions">
+         <button type="button" onClick={()=>{setLinkedEmployee(null);setEdit({...advance,data:{...advance.data}})}}>{advance.status==='draft'&&canCreate?'تعديل':'عرض'}</button>
+         {advance.status==='draft'&&canDelete&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteDraftRequest(advance)}>حذف</button>}
+        </div>
+       </div>)}
+      </div></details>}
+     </div></td>
+    </tr>;
+   })}</tbody>
+  </table></div>}
+  <div className="footnote" style={{padding:'9px 14px'}}>تعديل السلفة وحذفها متاحان للمسودات وفق الصلاحيات فقط؛ لا تُحذف السلف المعتمدة أو المصروفة، ويُحتسب الرصيد من السلف المعتمدة/المصروفة مطروحًا منها السدادات المسجلة.</div>
+ </section>;
+})()}
+
 {module!=='payroll'&&<section className="panel records"><div className="panel-head"><h2>سجل {spec.label}</h2><span>{list.length} سجل · {company||'جميع الشركات'}</span></div>{!list.length?<div className="empty"><Building2 size={34}/><h3>{loading?'جارٍ تحميل البيانات…':'لا توجد سجلات بعد'}</h3><p>اختر الشركة وأضف {spec.singular} لبدء العمل.</p></div>:<div className="table-wrap"><table key={module} className={module==='employees'?'employee-register':undefined}><thead><tr><th>الشركة</th>{tableFields.map(f=><th key={module+':'+f.key}>{f.label}</th>)}{module==='project_managers'&&<th>المشاريع والموظفون المرتبطون</th>}{module==='payroll'&&<th>صافي الراتب</th>}{module==='advances'&&<th>الرصيد المتبقي</th>}{module==='leave'&&<><th>عدد أيام الإجازة</th><th>الرصيد المستحق</th><th>الرصيد المتبقي بعد الطلب</th></>}{['leave','advances'].includes(module)&&requestApprovalStages.map(stage=><th key={'approval:'+stage.id} className="approval-stage-header">{stage.title}</th>)}<th>{module==='employees'?'حالة الموظف':'حالة الطلب'}</th><th>الإجراء</th></tr></thead><tbody>{list.map(row=>{const service=annualLeave(row.data.hire_date);const used=rows.filter(r=>r.module==='leave'&&r.status==='approved'&&(r.data.balance_deducted??(!r.data.leave_type||r.data.leave_type==='annual'))&&r.data.employee_id===row.id).reduce((n,r)=>n+Number(r.data.days),0);const approvable=permission(user||{},module,'approve')&&!operationalModules.includes(module)&&module!=='repayments'&&!['approved','paid','rejected','completed','cancelled'].includes(row.status)&&requestCanApprove(row);return <tr key={row.id}><td><span className="company-tag">{companyDisplayName(row.company)}</span></td>{tableFields.map(f=><td key={module+':'+f.key}>{module==='employees'&&f.key==='manager'?<EmployeeDirectManagerCell employee={row} rows={rows} managers={employeeManagerOptions[row.company]||[]} disabled={saving||!['admin','hr'].includes(user?.role)||!permittedWrite(user||{},'employees')||row.data?._archived} onSave={saveEmployeeDirectManager}/>:module==='employees'?registerDisplay(row,f):display(row,f)}</td>)}{module==='project_managers'&&<td>{(()=>{
  const email=String(row.data?.email||'').trim().toLowerCase();
  const assignedProjects=rows.filter(p=>p.module==='projects'&&p.company===row.company&&String(p.data?.manager_email||'').trim().toLowerCase()===email);
