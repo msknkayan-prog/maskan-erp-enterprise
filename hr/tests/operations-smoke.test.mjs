@@ -2021,3 +2021,23 @@ test('leave dues require general manager approval before finance payout with imm
  assert.match(schema,/f\('deduction_reason','بيان الخصومات'\)/);
  assert.match(schema,/f\('other_description','تفاصيل الإضافات'\)/);
 });
+
+test('V86 annual leave automatically splits paid days and unpaid days in UI and backend',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const register=readFileSync(new URL('../lib/employee-register.mjs',import.meta.url),'utf8');
+ assert.match(ui,/const automaticLeaveSplit=/);
+ assert.match(ui,/Math\.floor\(balance\.remaining\+1e-8\)/);
+ assert.match(ui,/leave_type==='annual'&&f\.key==='unpaid_days'/);
+ assert.match(ui,/payload\.data=\{\.\.\.payload\.data,\.\.\.split\}/);
+ assert.match(backend,/async function calculateAnnualLeaveSplit/);
+ assert.match(backend,/if\(mod==='leave'&&next==='approved'&&details\.leave_type==='annual'\)/);
+ assert.match(backend,/if\(mod==='leave'&&data\.leave_type==='annual'\)/);
+ assert.match(backend,/contract_expiry_mode==='manual'/);
+ assert.match(register,/Number\(item\.data\.paid_days/);
+ const split=(available,days)=>{const paid=Math.min(days,Math.max(0,Math.floor(available+1e-8)));return {paid,unpaid:days-paid}};
+ assert.deepEqual(split(21,30),{paid:21,unpaid:9});
+ assert.deepEqual(split(0,30),{paid:0,unpaid:30});
+ assert.deepEqual(split(50,30),{paid:30,unpaid:0});
+ assert.deepEqual(split(5,30),{paid:5,unpaid:25});
+});
