@@ -1883,3 +1883,28 @@ test('integrated financial screens keep one linked record per leave and never pa
  assert.match(server,/SUM\(CAST\(COALESCE\(json_extract\(data,'\$\.paid_days'\),json_extract\(data,'\$\.days'\)\)/);
  assert.match(server,/السداد يتجاوز الرصيد المتبقي/);
 });
+
+test('employee leave entitlement and contract expiration honor explicit automatic and manual modes',()=>{
+ const base={name:'موظف اختبار',code:'TEST-700',hire_date:'2021-04-01',salary:7000,sponsorship:'no',working_company:'مسكن الكيان'};
+ const save=data=>normalize('employees',{company:'مسكن الكيان',data:{...base,...data}});
+ const automatic=save({leave_balance_mode:'auto',contract_expiry_mode:'auto',contract_expiry:'2038-12-30'});
+ assert.equal(automatic.leave_balance_mode,'auto');
+ assert.notEqual(automatic.contract_expiry,'2038-12-30');
+ assert.equal(automatic.contract_expiry.length,10);
+ const manual=save({leave_balance_mode:'manual',manual_leave_entitlement:43.5,contract_expiry_mode:'manual',contract_expiry:'2038-12-30'});
+ assert.equal(manual.manual_leave_entitlement,43.5);
+ assert.equal(manual.contract_expiry,'2038-12-30');
+ assert.equal(manual.contract_expiry_mode,'manual');
+ assert.throws(()=>save({leave_balance_mode:'manual',manual_leave_entitlement:'',contract_expiry_mode:'auto'}),/أدخل إجمالي رصيد/);
+ assert.throws(()=>save({leave_balance_mode:'auto',contract_expiry_mode:'manual',contract_expiry:'2020-01-01'}),/تاريخ انتهاء العقد/);
+ const legacy=save({});
+ assert.equal(legacy.leave_balance_mode,'auto');
+ assert.equal(legacy.contract_expiry_mode,'auto');
+});
+test('manual leave entitlement is honored consistently in UI and backend final-approval balance check',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.ok(ui.includes("d.leave_balance_mode==='manual'?Number(d.manual_leave_entitlement||0)"));
+ assert.ok(server.includes("e.leave_balance_mode==='manual'?Number(e.manual_leave_entitlement||0)"));
+ assert.match(ui,/طريقة تحديد انتهاء العقد/);
+});
