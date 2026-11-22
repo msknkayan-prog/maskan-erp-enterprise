@@ -470,7 +470,7 @@ const leaveBalanceFor=(employeeId,companyName,request=null)=>{
  const d=employee.data||{},service=annualLeave(d.hire_date);
  if(!service&&d.opening_leave_confirmed!=='yes')return {entitled:null,used:null,remaining:null,after:null,reason:'يجب استكمال تاريخ التعيين أو اعتماد رصيد مرحّل'};
  const entitled=(service?.accrued||0)+(d.opening_leave_confirmed==='yes'?Number(d.opening_leave||0):0);
- const used=rows.filter(x=>x.module==='leave'&&x.company===companyName&&x.status==='approved'&&x.data?.employee_id===employeeId&&(x.data.balance_deducted??(!x.data.leave_type||x.data.leave_type==='annual'))).reduce((sum,x)=>sum+Number(x.data.paid_days??x.data.days||0),0);
+ const used=rows.filter(x=>x.module==='leave'&&x.company===companyName&&x.status==='approved'&&x.data?.employee_id===employeeId&&(x.data.balance_deducted??(!x.data.leave_type||x.data.leave_type==='annual'))).reduce((sum,x)=>sum+Number((x.data.paid_days??x.data.days) || 0),0);
  const remaining=Math.round((entitled-used)*100)/100;
  const deductible=request&&(request.balance_deducted??(!request.leave_type||request.leave_type==='annual'));
  const alreadyApproved=request?.id&&rows.some(x=>x.id===request.id&&x.module==='leave'&&x.status==='approved');
