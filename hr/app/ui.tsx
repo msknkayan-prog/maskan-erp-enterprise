@@ -371,7 +371,7 @@ async function deleteProjectManager(row){
  notify(result.company_transferred?(result.linked_account_review_required?'تم نقل تبعية الموظف وحفظ التاريخ؛ راجع نطاق صلاحيات حساب دخوله':'تم نقل تبعية الموظف مع الاحتفاظ بالسجلات السابقة'):(result.payroll_synced?'حُفظ الراتب وتم تحديث '+result.payroll_synced+' سجل في المسيرات المفتوحة؛ يلزم إعادة المراجعة':'تم حفظ جميع بيانات السجل'));
 
  await refresh();
- if(repairRequest&&((module==='projects'&&edit.id===repairRequest.projectId)||(module==='employees'&&edit.id===rows.find(r=>r.module==='leave'||r.module==='advances'&&r.id===repairRequest.id)?.data?.employee_id))){
+ if(repairRequest&&((module==='projects'&&edit.id===repairRequest.projectId)||(module==='employees'&&edit.id===rows.find(r=>r.id===repairRequest.id&&r.module===repairRequest.module)?.data?.employee_id))){
   const pending=rows.find(r=>r.id===repairRequest.id&&r.module===repairRequest.module);
   setRepairRequest(null);
   if(pending){setModule(pending.module);setEdit({...pending,data:{...pending.data}});notify('تم حفظ التصحيح. راجع الطلب ثم أعد إرساله للاعتماد.');}
@@ -1027,6 +1027,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    const open=()=>{if(isPayroll){setPayrollMonth(request.data?.month||payrollMonth);setPayrollCompany(request.company);setPayrollManageBatchId(request.id);setModule('payroll')}else{setModule(request.module);setEdit({...request,data:{...request.data}})}};
    return <tr key={request.id}><td>{companyDisplayName(request.company)}</td><td>{modules[request.module]?.singular||request.module}</td><td>{pendingEmployeeName(request)}</td><td><span className={'badge '+request.status}>{states[request.status]||cycleStatus[request.status]||request.status}</span></td><td><div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
     <button type="button" onClick={open} disabled={saving}>عرض</button>
+    {user?.role==='admin'&&draftManagerProblem(request)&&<button type="button" disabled={saving} onClick={()=>repairDraftManager(request)} style={{fontSize:11}}>إصلاح تكليف مدير المشروع</button>}
     {canDirect&&<><button type="button" className="primary" disabled={saving} onClick={()=>transition(request)}>{request.status==='draft'?'إرسال للاعتماد':'اعتماد نيابة عن المخوّل'}</button>
     {request.status!=='draft'&&<><button type="button" disabled={saving} onClick={()=>{const note=window.prompt('سبب إعادة الطلب للمراجعة');if(note?.trim())transition(request,'return',note.trim())}}>إعادة</button><button type="button" className="danger-action" disabled={saving} onClick={()=>{const note=window.prompt('سبب رفض الطلب');if(note?.trim())transition(request,'reject',note.trim())}}>رفض</button></>}</>}
     {isPayroll&&<small>تُعتمد الرواتب من نافذة المسير</small>}
