@@ -2509,3 +2509,36 @@ test('leave dues and post-leave return are nested under their parent HR navigati
  assert.match(modules,/returns:\{label:'المباشرة بعد الإجازة'/);
  assert.match(modules,/leave_dues:\{label:'مستحقات الإجازة'/);
 });
+
+
+test('monthly advance deduction appears in loan register, both receipts and backend payroll schedule',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const paper=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
+ const modules=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ const backendModules=readFileSync(new URL('../backend/modules.mjs',import.meta.url),'utf8');
+ const payroll=readFileSync(new URL('../lib/payroll-advance-schedule.mjs',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ for(const source of [modules,backendModules]){
+  assert.ok(source.includes("f('monthly_deduction','مبلغ الاستقطاع الشهري','number')"));
+  assert.ok(source.includes("out.monthly_deduction=regularCents/100"));
+ }
+ assert.ok(ui.includes("col('مبلغ الاستقطاع الشهري / Monthly Deduction'"));
+ assert.ok(ui.includes("مبلغ الاستقطاع الشهري الجديد"));
+ assert.ok(paper.includes("f.key==='monthly_deduction'"));
+ assert.ok(payroll.includes("loan.data.monthly_deduction"));
+ assert.ok(api.includes("kind==='set_amount'"));
+ assert.ok(api.includes("advance_schedule_change"));
+});
+
+test('manual advance installment uses configured amount with final balance cap and paid-only scheduling',async()=>{
+ const {calculateScheduledAdvances}=await import('../lib/payroll-advance-schedule.mjs');
+ const loan={id:'test-loan',status:'paid',data:{amount:5000,employee_id:'employee-test',installments:10,monthly_deduction:500,first_month:'2026-12',paid_at:'2026-11-23'}};
+ const ctx={loans:[loan],sums:new Map()};
+ assert.deepEqual(calculateScheduledAdvances(ctx,'employee-test','2026-12'),[{advance_id:'test-loan',amount:500}]);
+ ctx.loans[0].data.monthly_deduction=750;
+ assert.deepEqual(calculateScheduledAdvances(ctx,'employee-test','2026-12'),[{advance_id:'test-loan',amount:750}]);
+ ctx.sums.set('test-loan',480000);
+ assert.deepEqual(calculateScheduledAdvances(ctx,'employee-test','2026-12'),[{advance_id:'test-loan',amount:200}]);
+ ctx.loans[0].status='approved';
+ assert.deepEqual(calculateScheduledAdvances(ctx,'employee-test','2026-12'),[]);
+});
