@@ -1025,6 +1025,7 @@ if(mod==='projects'&&(Number(data.radius)<20||Number(data.radius)>5000))throw Er
 }
 const id=old?.id||crypto.randomUUID();
 const returnSyncUpdates:any[]=[];
+const returnPayrollSync={updated:0,created:0,status:'none'};
 if(mod==='returns'){
  if(!returnLeaveRecord)throw Error('اختر إجازة معتمدة لتسجيل المباشرة');
  const leaveData=JSON.parse(returnLeaveRecord.data||'{}');
@@ -1042,6 +1043,61 @@ if(mod==='returns'){
   const updatedEmployee={...employeeData,last_return_date:data.actual_return,last_return_leave_id:data.leave_id,employment_status:employeeOnLeave({data:employeeData})?'active':employeeData.employment_status,employee_status:employeeOnLeave({data:employeeData})&&employeeData.employee_status?'active':employeeData.employee_status,return_recorded_at:now};
   returnSyncUpdates.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
    .bind(JSON.stringify(updatedEmployee),now,mutation,employeeRecord.id,employeeRecord.revision));
+ }
+ // The return-to-work event updates the current open payroll in the same transaction.
+ // Approved, paid, and prior-month batches remain untouched.
+ const month=saudiDate().slice(0,7);
+ const workCompany=String(employeeData.working_company||body.company);
+ const openBatches=(await db.prepare("SELECT * FROM records WHERE module='payroll_batches' AND company=?").bind(workCompany).all()).results;
+ const monthlyBatch=openBatches.find((b:any)=>{const d=JSON.parse(b.data||'{}');return d.month===month});
+ const payrollRows=(await db.prepare("SELECT * FROM records WHERE module='payroll'").all()).results;
+ const matched=payrollRows.filter((r:any)=>{const d=JSON.parse(r.data||'{}');return String(d.employee_id)===String(data.employee_id)&&String(d.month)===month});
+ const current=matched.find((r:any)=>monthlyBatch&&JSON.parse(r.data||'{}').batch_id===monthlyBatch.id);
+ data.payroll_sync_month=month;
+ if(monthlyBatch&&['draft','manager_review'].includes(monthlyBatch.status)&&current){
+  const prior=JSON.parse(current.data||'{}');
+  if(prior.excluded){
+   data.payroll_sync_status='excluded_needs_restore';returnPayrollSync.status='excluded_needs_restore';
+  }else{
+   const updated={...prior,employment_status:'active',return_to_work_at:data.actual_return,return_record_id:id,
+    split_confirmed:false,manager_reviewed:false,manager_reviewed_by:null,manager_reviewed_at:null,
+    reviewed_by:null,reviewed_at:null,
+    review_reason:[prior.review_reason,'اعتماد مباشرة الموظف؛ يلزم مراجعة حضور الشهر وتوزيع الراتب'].filter(Boolean).join('؛ ')};
+   returnSyncUpdates.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='payroll' AND revision=?")
+    .bind(JSON.stringify(updated),now,mutation,current.id,current.revision));
+   returnPayrollSync.updated++;returnPayrollSync.status='updated';
+   data.payroll_sync_status='updated';
+  }
+ }else if(monthlyBatch&&monthlyBatch.status==='draft'&&!matched.some((r:any)=>!JSON.parse(r.data||'{}').excluded)){
+  const basic=Number(employeeData.basic??employeeData.basic_salary??0);
+  const housing=Number(employeeData.housing??employeeData.housing_allowance??0);
+  const transport=Number(employeeData.transport??employeeData.transport_allowance??0);
+  const salary=Math.round(Number(employeeData.salary??employeeData.total_monthly_salary??basic+housing+transport)*100)/100;
+  const loans=(await db.prepare("SELECT * FROM records WHERE module='advances' AND status='paid'").all()).results.map((r:any)=>({...r,data:JSON.parse(r.data||'{}')})).filter((r:any)=>!r.data._deleted);
+  const repayments=(await db.prepare("SELECT * FROM records WHERE module='repayments'").all()).results;
+  const sums=new Map();
+  for(const r of repayments){const d=JSON.parse(r.data||'{}');if(!d._deleted)sums.set(d.advance_id,(sums.get(d.advance_id)||0)+advanceCents(d.amount));}
+  const allocations=calculateScheduledAdvances({loans,sums},data.employee_id,month,advanceCents(salary));
+  const loanDeduction=allocations.reduce((n:number,a:any)=>n+advanceCents(a.amount),0)/100;
+  const employeePayrollId=crypto.randomUUID();
+  const line={batch_id:monthlyBatch.id,employee_id:data.employee_id,source_company:body.company,working_company:workCompany,month,
+   employee_name:employeeData.name||'',employee_number:employeeData.code||employeeRecord.id,
+   employment_status:'active',project_id:employeeData.project_id||'',cost_company:workCompany,cost_project_id:employeeData.project_id||'',
+   manager_reviewed:false,manager_notes:'',basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,
+   absence_days:0,absence_deduction:0,advance_deduction:loanDeduction,advance_allocations:allocations,deductions:0,
+   net:Math.round((salary-loanDeduction)*100)/100,cash_amount:0,bank_amount:0,split_confirmed:false,excluded:false,
+   exception_note:'',needs_review:false,review_reason:'أضيف إلى المسير بعد تسجيل المباشرة؛ راجع استحقاق الشهر والغياب والسلف والتوزيع',
+   notes:'',method:'bank',return_to_work_at:data.actual_return,return_record_id:id,
+   added_to_batch_at:now,added_to_batch_by:u.email,added_reason:'approved_return_to_work'};
+  const batchData=JSON.parse(monthlyBatch.data||'{}');
+  returnSyncUpdates.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='payroll_batches' AND revision=? AND status='draft'")
+    .bind(JSON.stringify({...batchData,employee_count:Number(batchData.employee_count||0)+1}),now,mutation,monthlyBatch.id,monthlyBatch.revision));
+  returnSyncUpdates.push(db.prepare("INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation) SELECT ?,'payroll',?,?,?,'draft',1,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM records WHERE module='payroll' AND data::jsonb->>'employee_id'=? AND data::jsonb->>'month'=? AND COALESCE(data::jsonb->>'excluded','false')<>'true')")
+    .bind(employeePayrollId,workCompany,data.employee_id+':'+month+':'+monthlyBatch.id,JSON.stringify(line),u.email,now,now,mutation,data.employee_id,month));
+  returnPayrollSync.created++;returnPayrollSync.status='created';data.payroll_sync_status='created';
+ }else{
+  data.payroll_sync_status=monthlyBatch?monthlyBatch.status==='paid'?'paid_batch_unchanged':monthlyBatch.status==='draft'?'excluded_needs_restore':'requires_payroll_return_to_draft':'next_payroll_generation';
+  returnPayrollSync.status=data.payroll_sync_status;
  }
 }
 
@@ -1102,4 +1158,4 @@ const stmt=old
   ?db.prepare(employeeInsertSql).bind(id,body.company,JSON.stringify(data),u.email,now,now,mutation)
   :db.prepare('INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
     .bind(id,mod,body.company,code,JSON.stringify(data),'draft',1,u.email,now,now,mutation);
-const result=await db.batch([...returnSyncUpdates,stmt,...linkedPayrollUpdates,db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,id,old?'update':'create',now,JSON.stringify({module:mod,company:body.company,leave_id:mod==='returns'?data.leave_id:undefined,actual_return:mod==='returns'?data.actual_return:undefined,salary_changed:salaryFieldsChanged,synced_payroll_count:synchronizedMonths.length,...(transferringEmployee?{transfer_from:old.company,transfer_to:body.company,historical_records_preserved:true,linked_account_review_required:linkedAccount}:{})}),id,mutation)]);if(returnSyncUpdates.some((_:any,i:number)=>!result[i]?.meta?.changes)||!result[returnSyncUpdates.length]?.meta?.changes||linkedPayrollUpdates.some((_:any,i:number)=>i%2===0&&!result[returnSyncUpdates.length+1+i]?.meta?.changes))throw Error('تغير سجل الإجازة أو المباشرة أثناء الحفظ؛ حدّث الصفحة وأعد المحاولة');return json({ok:true,id,...(mod==='employees'&&!old?{employee_code:result[0]?.results?.[0]?.code}:{}),payroll_synced:synchronizedMonths.length,company_transferred:transferringEmployee,linked_account_review_required:linkedAccount});}catch(e:any){return json({error:['401','403'].includes(e.message)?'غير مصرح':e.message?.includes('UNIQUE')?'الرقم أو السجل موجود مسبقًا':e.message||'تعذر الحفظ'},['401','403'].includes(e.message)?Number(e.message):400);}}
+const result=await db.batch([...returnSyncUpdates,stmt,...linkedPayrollUpdates,db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,id,old?'update':'create',now,JSON.stringify({module:mod,company:body.company,leave_id:mod==='returns'?data.leave_id:undefined,actual_return:mod==='returns'?data.actual_return:undefined,return_payroll_sync:mod==='returns'?returnPayrollSync:undefined,salary_changed:salaryFieldsChanged,synced_payroll_count:synchronizedMonths.length,...(transferringEmployee?{transfer_from:old.company,transfer_to:body.company,historical_records_preserved:true,linked_account_review_required:linkedAccount}:{})}),id,mutation)]);if(returnSyncUpdates.some((_:any,i:number)=>!result[i]?.meta?.changes)||!result[returnSyncUpdates.length]?.meta?.changes||linkedPayrollUpdates.some((_:any,i:number)=>i%2===0&&!result[returnSyncUpdates.length+1+i]?.meta?.changes))throw Error('تغير سجل الإجازة أو المباشرة أثناء الحفظ؛ حدّث الصفحة وأعد المحاولة');return json({ok:true,id,...(mod==='employees'&&!old?{employee_code:result[0]?.results?.[0]?.code}:{}),payroll_synced:synchronizedMonths.length,return_payroll_sync:mod==='returns'?returnPayrollSync:undefined,company_transferred:transferringEmployee,linked_account_review_required:linkedAccount});}catch(e:any){return json({error:['401','403'].includes(e.message)?'غير مصرح':e.message?.includes('UNIQUE')?'الرقم أو السجل موجود مسبقًا':e.message||'تعذر الحفظ'},['401','403'].includes(e.message)?Number(e.message):400);}}
