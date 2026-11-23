@@ -498,6 +498,25 @@ if(body.action==='set_member_status'){
  return json({ok:true,is_active:body.is_active});
 }
 if(body.action==='remove_member'){if(u.role!=='admin')throw Error('403');const target=String(body.email||'').trim().toLowerCase();const existing=await db.prepare('SELECT role FROM members WHERE email=?').bind(target).first();if(!existing||existing.role==='admin'||target===u.email.toLowerCase())throw Error('لا يمكن إزالة حساب المدير');await db.prepare('DELETE FROM members WHERE email=?').bind(target).run();return json({ok:true});}
+if(body.action==='backfill_appointment_numbers'){
+ if(u.role!=='admin')throw Error('403');
+ const legacy=(await db.prepare("SELECT id,company,data,revision,created_at FROM records WHERE module='appointments' ORDER BY created_at ASC,id ASC").all()).results;
+ const missing=legacy.filter((r:any)=>!String(JSON.parse(r.data||'{}').document_no||'').trim());
+ if(!missing.length)return json({ok:true,updated:0,message:'جميع نماذج التعيين مرقمة بالفعل'});
+ if(missing.length>250)throw Error('عدد نماذج التعيين غير المرقمة يتجاوز حد الدفعة الآمنة؛ تواصل مع مسؤول النظام');
+ const statements:any[]=[];
+ for(const row of missing){
+  const serial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
+  if(!serial||!/^\\d{4,12}$/.test(String(serial)))throw Error('تعذر توليد الرقم التسلسلي للتعيين');
+  const documentNo='APT-'+saudiDate().slice(0,4)+'-'+String(serial).padStart(6,'0');
+  const data={...JSON.parse(row.data||'{}'),document_no:documentNo,document_no_backfilled_at:now,document_no_backfilled_by:u.email};
+  statements.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='appointments' AND revision=? AND COALESCE(NULLIF(TRIM(data::jsonb->>'document_no'),''),'')=''").bind(JSON.stringify(data),now,mutation,row.id,row.revision));
+  statements.push(db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)").bind(crypto.randomUUID(),u.email,row.id,'appointment_number_backfill',now,JSON.stringify({document_no:documentNo,company:row.company}),row.id,mutation));
+ }
+ const result=await db.batch(statements);
+ if(result.some((item:any,i:number)=>i%2===0&&!item.meta?.changes))throw Error('تغيرت نماذج التعيين أثناء الترقيم؛ حدّث الصفحة وأعد المحاولة');
+ return json({ok:true,updated:missing.length});
+}
 const mod=body.module;if(!(modules as any)[mod])throw Error('نافذة غير معروفة');const old=body.id?await db.prepare('SELECT * FROM records WHERE id=? AND module=?').bind(body.id,mod).first<any>():null;if(body.id&&!old)throw Error('السجل غير موجود');if(old&&!visible(u,parse(old),(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('403');if(old&&old.revision!==body.revision)throw Error('تغير السجل؛ حدّث الصفحة');
 if(old&&JSON.parse(old.data)?._deleted)throw Error('هذا الطلب محذوف ولا يمكن تعديله أو إرساله للاعتماد');
 
@@ -1217,7 +1236,11 @@ if(mod==='projects'&&!old){
 if(old){
  const originalNo=String(previous?.document_no||'').trim();
  if(originalNo)data.document_no=originalNo;
- if(mod==='appointments'&&originalNo)data.document_no=originalNo;
+ if(mod==='appointments'&&!originalNo){
+  const serial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
+  if(!serial||!/^\\d{4,12}$/.test(String(serial)))throw Error('تعذر توليد رقم النموذج');
+  data.document_no='APT-'+saudiDate().slice(0,4)+'-'+String(serial).padStart(6,'0');
+ }
 }else{
  const serial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
  if(!serial||!/^\\d{4,12}$/.test(String(serial)))throw Error('تعذر توليد رقم النموذج؛ أعد المحاولة');
