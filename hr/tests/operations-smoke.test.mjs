@@ -610,8 +610,8 @@ test('monthly payroll stores salary-charged company and project cost center inde
  assert.match(ui,/aria-label="شركة تحميل الراتب في المسير"/);
  assert.match(ui,/aria-label="مركز تكلفة المشروع في المسير"/);
  assert.match(ui,/cycleEdit\.data\.cost_company/);
- assert.match(ui,/cost_project_id:e\.target\.value/);
- assert.match(ui,/cycleCostProjectOptions\.map\(project=>/);
+ assert.match(ui,/cycleCostProjectName\(rows\.find\(e=>e\.module==='employees'/);
+ assert.match(ui,/aria-label="مركز تكلفة المشروع في المسير" type="text" readOnly/);
  assert.match(ui,/cost_company:co,cost_project_id:valid\?current:''/);
  assert.match(ui,/شركة تحميل الراتب/);
  assert.match(ui,/مركز تكلفة المشروع/);
