@@ -1681,7 +1681,7 @@ test('project manager may also be verified HR approver without changing the acco
  assert.equal(isAuthorizedProjectManagerAccount({...manager,is_active:false}),false);
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  assert.match(erp,/const isManager=actorEmail===managerEmail/);
- assert.match(erp,/manager.role==='project_manager'&&manager.projects/);
+ assert.match(erp,/!adminOverride&&manager\?\.role==='project_manager'&&manager.projects/);
 });
 test('loan disbursement automatically recalculates draft payroll, preserves approval/review locks',()=>{
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
