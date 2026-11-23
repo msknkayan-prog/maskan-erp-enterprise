@@ -1810,7 +1810,7 @@ test('GM approves advance directly, records employee ledger and issues printable
  const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(api,/body.action==='gm_approve_advance'/);
- assert.match(api,/u.role!=='admin'/);
+ assert.match(api,/!isRequestFinanceActor\(u\)/);
  assert.match(api,/advance_disbursement_ledger/);
  assert.match(api,/existingLedger.some/);
  assert.match(api,/status='paid'/);
@@ -1851,7 +1851,7 @@ test('advances display administrative approvals only, without finance or payout 
  assert.equal(requestApprovalStages.length,3);
  assert.match(ui,/requestApprovalStages\.map\(stage/);
  assert.doesNotMatch(ui,/row.module==='advances'\?\[\.\.\.requestApprovalStages,advanceFinanceStage/);
- assert.match(ui,/اعتماد السلفة وتقييدها/);
+ assert.match(ui,/اعتماد مبلغ الصرف وتقييده/);
 });
 test('finance separately approves monthly payroll before recording payment',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
@@ -2407,7 +2407,7 @@ test('GM ledger posting activates installments only once, after final approval',
 test('advance actions are horizontal, director approves and employee prints linked receipt',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- for(const label of ['إرسال','اعتماد','تعديل','رفض','حذف','اعتماد السلفة وتقييدها','طباعة سند الصرف'])assert.ok(ui.includes(label),label);
+ for(const label of ['إرسال','اعتماد','تعديل','رفض','حذف','اعتماد مبلغ الصرف وتقييده','طباعة سند الصرف'])assert.ok(ui.includes(label),label);
  assert.match(ui,/className="advance-row-actions"/);
  assert.match(ui,/flexDirection:'row',alignItems:'center',flexWrap:'nowrap'/);
  assert.match(ui,/onClick=\{\(\)=>advanceReceipt\(row\)\}/);
@@ -2476,4 +2476,23 @@ test('direct GM advance action idempotently posts monetary ledger and prevents d
  assert.match(api,/receipt_no:reference/);
  assert.match(ui,/gmFinalizeAdvance\(row\)/);
  assert.doesNotMatch(ui,/onClick=\{\(\)=>financeApproveAdvance\(row\)\}/);
+});
+
+test('Musab finance controller may approve advance amount with single ledger posting and no duplicate financial stage',async()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const {isRequestFinanceActor,requestApprovalOwners}=await import('../backend/modules.mjs');
+ assert.equal(requestApprovalOwners.finance.name.includes('مصعب عبد القيوم'),true);
+ assert.equal(isRequestFinanceActor({role:'project_manager',email:requestApprovalOwners.finance.email,is_active:true}),true);
+ assert.equal(isRequestFinanceActor({role:'finance',email:requestApprovalOwners.finance.email,is_active:true}),true);
+ assert.equal(isRequestFinanceActor({role:'project_manager',email:'unassigned@example.com',is_active:true}),false);
+ assert.equal(isRequestFinanceActor({role:'finance',email:requestApprovalOwners.finance.email,is_active:false}),false);
+ assert.match(backend,/!isRequestFinanceActor\(u\)/);
+ assert.match(backend,/requestApprovalOwners.finance.email/);
+ assert.match(backend,/final_approved_by:u.email/);
+ assert.match(backend,/advance_disbursement_ledger/);
+ assert.match(ui,/isRequestFinanceActor\(user\)&&<button type="button" className="primary" disabled=\{saving\} onClick=\{\(\)=>gmFinalizeAdvance\(row\)\}>اعتماد مبلغ الصرف وتقييده/);
+ assert.match(ui,/قيد اعتماد مبلغ الصرف/);
+ assert.match(ui,/تم القيد والصرف/);
+ assert.match(ui,/row.data.final_approved_by/);
 });
