@@ -216,13 +216,9 @@ export function visible(user,row,all=[]){
   const worker=row.module==='employees'?row:all.find(e=>e.module==='employees'&&e.id===row.data?.employee_id);
   const delegated=String(worker?.data?.delegated_manager_email||'').trim().toLowerCase();
   if(['leave','advances','resignations'].includes(row.module)&&row.data?.employee_id){
-   const assigned=all.find(p=>p.module==='projects'&&p.id===project);
-   if(!assigned||!project)return false;
-   if(user.projects&&user.projects!=='*'){
-    let scope=[];try{scope=JSON.parse(user.projects)}catch{return false}
-    if(!Array.isArray(scope)||!scope.includes(project))return false;
-   }
-   return assigned.company===row.company&&String(assigned.data?.manager_email||'').trim().toLowerCase()===accountEmail;
+   const direct=String(worker?.data?.manager_email||worker?.data?.supervisor_account||row.data?.direct_manager?.email||'').trim().toLowerCase();
+   // Company scope was checked above. A supervisor can review only requests of their own employees.
+   return Boolean(direct&&direct===accountEmail);
   }
   if(row.module==='employees'&&user.role==='project_manager'){
    const direct=String(row.data?.manager_email||row.data?.supervisor_account||'').trim().toLowerCase();
