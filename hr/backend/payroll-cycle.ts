@@ -6,6 +6,7 @@ import {identity} from './erp.ts';
 import {companies,canonicalCompany,permission} from './modules.mjs';
 import {isAuthorizedProjectManagerAccount,magdiProjectManagerName} from './project-manager-roster.mjs';
 import {calculateScheduledAdvances} from '../lib/payroll-advance-schedule.mjs';
+import {salaryAbsenceDeduction} from '../lib/payroll-attendance.mjs';
 const response=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 const err=(message,status=400)=>response({error:message},status);
 const cents=x=>Math.round(Number(x||0)*100);
@@ -264,7 +265,10 @@ export async function POST(req){
    const cost_company=canonicalCompany(input.cost_company||old.cost_company||batch.company);
    if(!companies.includes(cost_company)||!allowed(u,cost_company))return err('شركة تحميل الراتب خارج نطاق الصلاحيات أو غير مسجلة',403);
    if(managerEditing&&cost_company!==canonicalCompany(old.cost_company||batch.company))return err('تغيير شركة تحميل الراتب من صلاحية إعداد المسير فقط',403);
-   const cost_project_id=String(input.cost_project_id||'').trim();
+   const linkedEmployee=await db.prepare("SELECT data FROM records WHERE id=? AND module='employees'").bind(old.employee_id).first();
+   const assignedProjectId=String(linkedEmployee?JSON.parse(linkedEmployee.data||'{}').project_id||'':old.project_id||'').trim();
+   const cost_project_id=assignedProjectId;
+   if(String(input.cost_project_id||assignedProjectId).trim()!==assignedProjectId)throw Error('مركز التكلفة مرتبط بمشروع الموظف؛ صحّح المشروع في سجل الموظفين أولًا');
    if(!cost_project_id)throw Error('حدد مركز تكلفة المشروع الذي سيتحمل الراتب');
    const costProject=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(cost_project_id).first();
    if(!costProject)throw Error('مركز تكلفة المشروع غير موجود في سجل المشاريع');
@@ -281,7 +285,7 @@ export async function POST(req){
    const absence_days=Number(input.absence_days||0);
    if(!Number.isFinite(overtime_hours)||overtime_hours<0||overtime_hours>300||!Number.isFinite(absence_days)||absence_days<0||absence_days>31)throw Error('ساعات إضافية أو أيام غياب غير صالحة');
    const overtime=rounded(overtime_hours*(salary/30/8+0.5*basic/30/8));
-   const absence_deduction=amount(input.absence_deduction??0,'خصم الغياب');
+   const absence_deduction=salaryAbsenceDeduction(salary,absence_days);
    const advance_deduction=amount(input.advance_deduction??0,'خصم السلف');
    const advanceContext=await paidLoanContext();
    const advance_allocations=allocateEditedAdvanceTotal(advanceContext,old.employee_id,batch.data.month,cents(advance_deduction),old.advance_allocations);
