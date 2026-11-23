@@ -843,7 +843,7 @@ test('project managers only see the project assigned to their own login, even wi
  assert.equal(visible(pm,requests[1],all),false);
  assert.equal(visible(pm,projects[1],all),false);
  assert.equal(visible({...pm,email:'unassigned@example.test'},requests[0],all),false);
- assert.equal(visible({...pm,projects:'[]'},requests[0],all),false,'project manager requires explicit project scope');
+ assert.equal(visible({...pm,projects:'[]'},requests[0],all),true,'assigned direct manager is independently authorized for employee requests');
 });
 test('request workflow requires an assigned active manager before routing and checks ownership at review',()=>{
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
@@ -873,7 +873,7 @@ test('the deployed shared visibility rule restricts managers to their assigned p
  assert.equal(visible(u,p1,rows),true);
  assert.equal(visible(u,p2,rows),false);
  assert.equal(visible({...u,email:'unknown@example.test'},r1,rows),false);
- assert.equal(visible({...u,projects:'[]'},r1,rows),false,'project scope applies to request access');
+ assert.equal(visible({...u,projects:'[]'},r1,rows),true,'direct manager request approval does not depend on project ownership');
  assert.equal(visible({...u,companies:'["شركة البلد المتحدة"]'},r1,rows),false);
 });
 test('named employee delegation overrides project owner for both visibility rules, including technical office and payroll',async()=>{
@@ -889,9 +889,9 @@ test('named employee delegation overrides project owner for both visibility rule
  for(const modulePath of ['../lib/modules.mjs','../backend/modules.mjs']){
   const {visible}=await import(modulePath);
   for(const record of [project,delegated,salary,batch])assert.equal(visible(newManager,record,rows),true,modulePath+' '+record.module);
-  assert.equal(visible(newManager,request,rows),false,modulePath+' request follows project owner');
+  assert.equal(visible(newManager,request,rows),true,modulePath+' request follows employee direct manager');
   for(const record of [delegated,salary,batch])assert.equal(visible(owner,record,rows),false,modulePath+' '+record.module);
-  assert.equal(visible(owner,request,rows),true,modulePath+' project owner approves request');
+  assert.equal(visible(owner,request,rows),false,modulePath+' project owner cannot approve a different employee direct manager request');
   assert.equal(visible(owner,legacy,rows),true,modulePath+' legacy worker');
   assert.equal(visible({...newManager,companies:'["رياح الاعمار"]'},request,rows),false,'company isolation');
  }
