@@ -82,7 +82,7 @@ export function employeeDirectManagerOptions(records=[],members=[],company=''){
    ...relatedProjects.map(r=>r.data?.manager_email),
    ...active.filter(m=>normalizeManagerName(m.username||m.display_name)===normalizeManagerName(choice.name)).map(m=>m.email)
   ].map(x=>String(x||'').trim().toLowerCase()).filter(Boolean));
-  const valid=active.filter(m=>m.role==='project_manager'&&emails.has(String(m.email||'').trim().toLowerCase()));
+  const valid=active.filter(m=>['project_manager','hr'].includes(m.role)&&emails.has(String(m.email||'').trim().toLowerCase()));
   if(valid.length!==1)continue;
   choice.email=String(valid[0].email).trim().toLowerCase();
   choice.hasLogin=true;
