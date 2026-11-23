@@ -198,7 +198,7 @@ export async function POST(req){
     const d=row.data;
     const wage=rounded(Number(d.basic||0)+Number(d.housing||0)+Number(d.transport||0));
     const attendance=payrollAttendanceForSalary(attendanceRecords,d.employee_id,batch.data.month,wage);
-    const scheduled=autoAdvanceAllocations(loans,d.employee_id,batch.data.month,Math.max(0,cents(wage)-cents(attendance.absence_deduction)));
+    const scheduled=autoAdvanceAllocations(loans,d.employee_id,batch.data.month,Math.max(0,cents(wage)+cents(d.overtime)+cents(d.bonus)+cents(d.extra_allowance)-cents(attendance.absence_deduction)-cents(d.deductions)));
     const advance_deduction=rounded(scheduled.reduce((n,x)=>n+Number(x.amount),0));
     const overtime=Number(d.overtime||0),bonus=Number(d.bonus||0),allowance=Number(d.extra_allowance||0),other=Number(d.deductions||0);
     const net=rounded(wage+overtime+bonus+allowance-attendance.absence_deduction-advance_deduction-other);
@@ -328,11 +328,11 @@ export async function POST(req){
    if(!Number.isFinite(overtime_hours)||overtime_hours<0||overtime_hours>300||!Number.isFinite(absence_days)||absence_days<0||absence_days>31)throw Error('ساعات إضافية أو أيام غياب غير صالحة');
    const overtime=rounded(overtime_hours*(salary/30/8+0.5*basic/30/8));
    const absence_deduction=salaryAbsenceDeduction(salary,absence_days);
+   const deductions=amount(input.deductions??0,'خصومات أخرى');
    const advanceContext=await paidLoanContext();
-   const scheduledCap=Math.max(0,cents(salary)-cents(absence_deduction));
+   const scheduledCap=Math.max(0,cents(salary+bonus+extra_allowance+overtime-absence_deduction-deductions));
    const advance_allocations=autoAdvanceAllocations(advanceContext,old.employee_id,batch.data.month,scheduledCap);
    const advance_deduction=rounded(advance_allocations.reduce((total,a)=>total+Number(a.amount),0));
-   const deductions=amount(input.deductions??0,'خصومات أخرى');
    const net=rounded(salary+bonus+extra_allowance+overtime-absence_deduction-advance_deduction-deductions);
    if(net<0)throw Error('الصافي سالب');
    const cash_amount=amount(input.cash_amount??0,'الكاش');
@@ -350,6 +350,22 @@ export async function POST(req){
   // Enforce employment status at every approval/payment boundary, including
   // batches created before the employee became inactive.
   const financeAllocations=[];
+  // A loan that becomes payable after the monthly payroll was reviewed cannot
+  // silently disappear from payroll. Require a fresh sync and renewed approvals.
+  if(['submit','finance_pay'].includes(action)){
+   const context=await paidLoanContext();
+   for(const row of monthly.filter(r=>!r.data.excluded)){
+    const d=row.data;
+    const gross=Number(d.salary??Number(d.basic||0)+Number(d.housing||0)+Number(d.transport||0));
+    const cap=Math.max(0,cents(gross)+cents(d.bonus)+cents(d.extra_allowance)+cents(d.overtime)-cents(d.absence_deduction)-cents(d.deductions));
+    const expected=autoAdvanceAllocations(context,d.employee_id,batch.data.month,cap);
+    const current=Array.isArray(d.advance_allocations)?d.advance_allocations:[];
+    const comparable=a=>a.map(x=>({advance_id:String(x.advance_id),amount:cents(x.amount)}));
+    if(JSON.stringify(comparable(expected))!==JSON.stringify(comparable(current))||
+     cents(d.advance_deduction)!==expected.reduce((total,x)=>total+cents(x.amount),0))
+     throw Error('أقساط السلف تغيرت لدى الموظف '+(d.employee_name||d.employee_number||'')+'؛ يجب إعادة المسير إلى التجهيز ومزامنة الخصومات ومراجعتها قبل الاعتماد أو الصرف');
+   }
+  }
   if(['submit','managers_approve','projects_approve','finance_pay','admin_approve','finance_approve'].includes(action)){
    const included=monthly.filter(r=>!r.data.excluded);
    if(included.length){
