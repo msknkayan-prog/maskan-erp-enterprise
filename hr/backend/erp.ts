@@ -738,7 +738,9 @@ if(body.action==='record_opening_advance_repayment'){
  .bind(crypto.randomUUID(),u.email,old.id,'record_disbursement',now,JSON.stringify({reference,payroll_synced:synced,employee_id:employee.id,amount,approved_by:u.email,approver_role:u.role}),old.id,mutation));
  const result=await db.batch(statements);
  if(result.slice(0,-1).some((v:any)=>!v.meta?.changes))throw Error('تغير سجل السلفة أو مسير الرواتب أثناء الحفظ؛ حدّث الصفحة ثم أعد المحاولة');
- return json({ok:true,status:'paid',employee_id:employee.id,receipt_no:reference,payroll_synced:synced.length});
+ const existingPayrollMonths=payrollRows.filter((row:any)=>{const d=JSON.parse(row.data||'{}');return String(d.employee_id)===String(data.employee_id)&&!d.excluded;}).map((row:any)=>{const d=JSON.parse(row.data||'{}');return {month:String(d.month||''),batch_id:d.batch_id,status:batches.find((b:any)=>b.id===d.batch_id)?.status||'unknown'};});
+ const nextMonth=String(data.first_month||saudiDate().slice(0,7));
+ return json({ok:true,status:'paid',employee_id:employee.id,receipt_no:reference,payroll_synced:synced.length,first_deduction_month:nextMonth,open_payroll_updated:synced,existing_payroll_months:existingPayrollMonths.filter((x:any)=>x.month>=nextMonth).slice(0,12),note:synced.length?'تم تحديث المسير المفتوح ويحتاج مراجعة جديدة قبل الصرف':'تم قيد السلفة؛ سيُحسب القسط عند توليد المسير القادم أو مزامنة مسير مفتوح. المسيرات المعتمدة لا تُعدل تلقائياً'});
 }
 
 if(body.action==='leave_dues_workflow'){
