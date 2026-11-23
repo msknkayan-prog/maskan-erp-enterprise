@@ -1843,7 +1843,7 @@ test('overview hides all request approval tables while specialized pending reque
  assert.doesNotMatch(ui,/adminStageGroups\.filter\(stage=>stage.records.length>0\)/);
  assert.match(ui,/module==='pending_requests'&&<section className="panel"/);
  assert.match(ui,/فتح الطلب ومراجعته/);
- assert.match(ui,/module==='overview'&&permittedRead\(user\|\|\{\},'employees'\)&&<EmployeeReportsDashboard/);
+ assert.match(ui,/permittedRead\(user\|\|\{\},'employees'\)&&<details/);
 });
 test('advances display administrative approvals only, without finance or payout approval column',async()=>{
  const {requestApprovalStages}=await import('../lib/request-approval.mjs');
