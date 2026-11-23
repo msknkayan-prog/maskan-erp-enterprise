@@ -1060,13 +1060,13 @@ if(mod==='returns'){
  .bind(JSON.stringify(updatedLeave),now,mutation,returnLeaveRecord.id,returnLeaveRecord.revision,id));
  // Older returns must not overwrite a later actual return on the employee profile.
  if(!employeeData.last_return_date||String(employeeData.last_return_leave_id||'')===String(data.leave_id)||data.actual_return>=employeeData.last_return_date){
-  const updatedEmployee={...employeeData,last_return_date:data.actual_return,last_return_leave_id:data.leave_id,last_return_absence_days:returnAttendance.absence_days,last_return_payable_days:returnAttendance.payable_days,last_return_absence_amount:salaryAbsenceDeduction(referenceSalary,returnAttendance.absence_days),last_return_payroll_month:currentPayrollMonth,employment_status:employeeOnLeave({data:employeeData})?'active':employeeData.employment_status,employee_status:employeeOnLeave({data:employeeData})&&employeeData.employee_status?'active':employeeData.employee_status,return_recorded_at:now};
+  const updatedEmployee={...employeeData,last_return_date:data.actual_return,last_return_leave_id:data.leave_id,last_return_absence_days:returnAttendance.absence_days,last_return_payable_days:returnAttendance.payable_days,last_return_absence_amount:salaryAbsenceDeduction(referenceSalary,returnAttendance.absence_days),last_return_payroll_month:currentPayrollMonth,employment_status:employeeData.employment_status==='terminated'||employeeData.employment_status==='inactive'?employeeData.employment_status:'active',employee_status:employeeData.employee_status==='terminated'||employeeData.employee_status==='inactive'?employeeData.employee_status:'active',return_recorded_at:now};
   returnSyncUpdates.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
    .bind(JSON.stringify(updatedEmployee),now,mutation,employeeRecord.id,employeeRecord.revision));
  }
  // The return-to-work event updates the current open payroll in the same transaction.
  // Approved, paid, and prior-month batches remain untouched.
- const month=saudiDate().slice(0,7);
+ const month=String(data.actual_return).slice(0,7);
  const attendance=returnAttendance;
  data.absence_days=attendance.absence_days;
  data.payable_days=attendance.payable_days;
@@ -1079,6 +1079,7 @@ if(mod==='returns'){
  const matched=payrollRows.filter((r:any)=>{const d=JSON.parse(r.data||'{}');return String(d.employee_id)===String(data.employee_id)&&String(d.month)===month});
  const current=matched.find((r:any)=>monthlyBatch&&JSON.parse(r.data||'{}').batch_id===monthlyBatch.id);
  data.payroll_sync_month=month;
+ // Reconcile the month of actual attendance; never rewrite a different (current) payroll month.
  if(monthlyBatch&&['draft','manager_review'].includes(monthlyBatch.status)&&current){
   const prior=JSON.parse(current.data||'{}');
   if(prior.excluded){
