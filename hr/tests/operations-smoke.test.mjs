@@ -2542,3 +2542,16 @@ test('manual advance installment uses configured amount with final balance cap a
  ctx.loans[0].status='approved';
  assert.deepEqual(calculateScheduledAdvances(ctx,'employee-test','2026-12'),[]);
 });
+
+
+test('approved advance remains in progress until finance or general manager posts payout, with no duplicate approval gate',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/row.status==='approved'\|\|row.status==='finance_approved'\?'قيد العمل'/);
+ assert.match(ui,/const isAdvancePendingPayout=r=>r.module==='advances'/);
+ assert.match(ui,/pendingStages.includes\(r.status\)\|\|isAdvancePendingPayout\(r\)/);
+ assert.match(ui,/isRequestFinanceActor\(user\)&&<button type="button" className="primary" disabled=\{saving\} onClick=\{\(\)=>gmFinalizeAdvance\(row\)\}>اعتماد مبلغ الصرف وتقييده/);
+ assert.match(api,/if\(mod!=='advances'\|\|!old\|\|!isRequestFinanceActor\(u\)\|\|!\['approved','finance_approved'\].includes\(old.status\)\)/);
+ assert.match(api,/existingLedger.some/);
+ assert.match(api,/status='paid'/);
+});
