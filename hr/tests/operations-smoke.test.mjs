@@ -1740,6 +1740,55 @@ test('project cost center displays staff project and payroll absence amount upda
  assert.match(erp,/absence_days:attendance.absence_days,absence_deduction:salaryAbsenceDeduction/);
  assert.match(erp,/net:newNet,bank_amount:bank/);
 });
+test('payroll newly generated and newly added employee rows derive absence from approved returns',async()=>{
+ const {payrollAttendanceForSalary}=await import('../lib/payroll-month-bridges.mjs');
+ const leave={id:'leave-1',module:'leave',status:'approved',company:'مسكن الكيان',data:{employee_id:'employee-1',leave_type:'unpaid',start:'2026-11-01',end:'2026-11-20'}};
+ const actual={id:'return-1',module:'returns',company:'مسكن الكيان',data:{employee_id:'employee-1',leave_id:'leave-1',actual_return:'2026-11-23'}};
+ const attendance=payrollAttendanceForSalary([leave,actual],'employee-1','2026-11',9000);
+ assert.equal(attendance.absence_days,22);
+ assert.equal(attendance.payable_days,8);
+ assert.equal(attendance.absence_deduction,6600);
+ assert.equal(attendance.return_to_work_at,'2026-11-23');
+ assert.equal(payrollAttendanceForSalary([leave],'employee-1','2026-11',9000).absence_days,0);
+ assert.equal(payrollAttendanceForSalary([{...leave,status:'hr'},actual],'employee-1','2026-11',9000).absence_days,0);
+ const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ assert.equal((backend.match(/payrollAttendanceForSalary\(attendanceRecords,/g)||[]).length>=3,true);
+ assert.match(backend,/action==='sync_deductions'/);
+ assert.match(backend,/return_payable_days:attendance.payable_days/);
+});
+test('outstanding scheduled paid advances continue every month and never overdraw balance',async()=>{
+ const {calculateScheduledAdvances,loanFirstMonth}=await import('../lib/payroll-advance-schedule.mjs');
+ const loan={id:'advance-1',data:{employee_id:'employee-1',amount:5000,installments:10,first_month:'2026-11',schedule_mode:'auto'}};
+ const ctx={loans:[loan],sums:new Map()};
+ assert.equal(calculateScheduledAdvances(ctx,'employee-1','2026-11',900000)[0].amount,500);
+ assert.equal(calculateScheduledAdvances(ctx,'employee-1','2026-12',900000)[0].amount,500);
+ assert.equal(calculateScheduledAdvances(ctx,'employee-1','2027-09',900000)[0].amount,500);
+ assert.equal(calculateScheduledAdvances({...ctx,sums:new Map([['advance-1',480000]])},'employee-1','2027-09',900000)[0].amount,200);
+ assert.deepEqual(calculateScheduledAdvances({...ctx,sums:new Map([['advance-1',500000]])},'employee-1','2027-09',900000),[]);
+ assert.equal(loanFirstMonth({data:{paid_at:'2026-11-23T10:20:00Z'}}),'2026-11');
+ assert.equal(calculateScheduledAdvances({...ctx,loans:[{...loan,data:{...loan.data,first_month:'',paid_at:'2026-11-23T10:20:00Z'}}]},'employee-1','2026-11',900000)[0].amount,500);
+ assert.deepEqual(calculateScheduledAdvances({...ctx,loans:[{...loan,data:{...loan.data,schedule_mode:'manual'}}]},'employee-1','2026-11',900000),[]);
+});
+test('open payroll can re-sync loan installments and return attendance without replaying repayments',()=>{
+ const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(backend,/action==='sync_deductions'/);
+ assert.match(backend,/\['draft','manager_review'\]\.includes\(batch.status\)/);
+ assert.match(backend,/payrollAttendanceForSalary\(attendanceRecords,d.employee_id,batch.data.month,wage\)/);
+ assert.match(backend,/autoAdvanceAllocations\(loans,d.employee_id,batch.data.month/);
+ assert.match(backend,/split_confirmed:false,manager_reviewed:false/);
+ assert.match(backend,/updates.length/);
+ assert.match(ui,/function cycleSyncDeductions/);
+ assert.match(ui,/تحديث أقساط السلف والغياب لجميع الموظفين/);
+ assert.match(ui,/<th>خصم السلف المجدولة<\/th>/);
+ assert.match(backend,/تغيرت أقساط سلف الموظف/);
+ assert.match(backend,/const manualAbsence=Math.max\(0,Number\(d.absence_days\|\|0\)-oldReturnDays\)/);
+ assert.match(backend,/const absence_days=Math.min\(30,manualAbsence\+attendance.absence_days\)/);
+ assert.match(backend,/return_absence_days:attendance.absence_days/);
+ assert.match(backend,/أقساط السلف تغيرت لدى الموظف/);
+ assert.match(ui,/readOnly=\{key==='absence_deduction'\|\|key==='advance_deduction'\}/);
+});
+
 test('employee requests end at HR; finance is a separate disbursement operation',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
@@ -2110,8 +2159,8 @@ test('automatic advance installments skip deferred months and stop at actual rem
 test('payroll installment posting remains tied to confirmed finance payment and loan postponement is audited',()=>{
  const payroll=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- assert.match(payroll,/autoAdvanceAllocations\(advanceContext,e\.id,month,cents\(salary\)\)/);
- assert.match(payroll,/allocateEditedAdvanceTotal\(advanceContext,old\.employee_id,batch\.data\.month/);
+ assert.match(payroll,/autoAdvanceAllocations\(advanceContext,e.id,month,Math.max\(0,cents\(salary\)-cents\(attendance.absence_deduction\)\)\)/);
+ assert.match(payroll,/autoAdvanceAllocations\(advanceContext,old.employee_id,batch.data.month,scheduledCap\)/);
  assert.match(payroll,/if\(action==='finance_pay'\)\{\s*for\(const allocation of financeAllocations\)/);
  assert.match(payroll,/payroll_reference:String\(body\.reference\)\.trim\(\)/);
  assert.match(payroll,/advance_allocations\.reduce\(\(n,a\)=>n\+cents\(a\.amount\),0\)!==cents\(d\.advance_deduction\)/);

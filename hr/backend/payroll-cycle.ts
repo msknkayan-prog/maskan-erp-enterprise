@@ -7,6 +7,7 @@ import {companies,canonicalCompany,permission} from './modules.mjs';
 import {isAuthorizedProjectManagerAccount,magdiProjectManagerName} from './project-manager-roster.mjs';
 import {calculateScheduledAdvances} from '../lib/payroll-advance-schedule.mjs';
 import {salaryAbsenceDeduction} from '../lib/payroll-attendance.mjs';
+import {payrollAttendanceForSalary} from '../lib/payroll-month-bridges.mjs';
 const response=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 const err=(message,status=400)=>response({error:message},status);
 const cents=x=>Math.round(Number(x||0)*100);
@@ -115,6 +116,7 @@ export async function POST(req){
    const all=(await db.prepare("SELECT * FROM records WHERE module='employees'").all()).results.map(parse);
    const existing=(await db.prepare("SELECT company,data FROM records WHERE module='payroll_batches'").all()).results.map(r=>({...r,data:JSON.parse(r.data)}));
    const advanceContext=await paidLoanContext();
+   const attendanceRecords=(await db.prepare("SELECT * FROM records WHERE module IN ('leave','returns')").all()).results.map(parse);
    if(requested.some(co=>existing.some(b=>b.company===co&&b.data.month===month)))throw Error('تم توليد مسير لهذا الشهر مسبقًا لإحدى الشركات المختارة. افتح المسير الموجود للمراجعة.');
    // For employee transfers, old company payroll may be retained as excluded.
    // Creating another active payroll for the same employment/month remains forbidden.
@@ -139,11 +141,12 @@ export async function POST(req){
      const status=d.employment_status||d.employee_status||'';
      const isSuspended=!['active','نشط','على رأس العمل','علي راس العمل'].includes(String(status).trim());
      const salaryMismatch=Math.abs(cents(salary)-cents(basic+housing+transport))>1;
-     const advanceAllocations=autoAdvanceAllocations(advanceContext,e.id,month,cents(salary));
+     const attendance=payrollAttendanceForSalary(attendanceRecords,e.id,month,salary);
+     const advanceAllocations=autoAdvanceAllocations(advanceContext,e.id,month,Math.max(0,cents(salary)-cents(attendance.absence_deduction)));
      const row={batch_id:id,employee_id:e.id,source_company:e.company,working_company:co,month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||e.code||'',employment_status:status,project_id:d.project_id||'',cost_company:co,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
        basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,
-       absence_days:0,absence_deduction:0,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
-       net:rounded(salary-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,
+       absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,return_absence_days:attendance.absence_days,return_payable_days:attendance.payable_days,return_to_work_at:attendance.return_to_work_at,return_parts:attendance.return_parts,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
+       net:rounded(salary-attendance.absence_deduction-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,
        exception_note:'',needs_review:isSuspended||salaryMismatch,review_reason:[isSuspended?'حالة الموظف غير نشطة':'',salaryMismatch?'اختلاف إجمالي الراتب عن مكوناته':''].filter(Boolean).join('؛ '),notes:'',method:'bank'};
      employeeInserts.push([crypto.randomUUID(),'payroll',co,e.id+':'+month+':'+id,JSON.stringify(row),u.email,now,now,mutation]);
     }
@@ -163,6 +166,7 @@ export async function POST(req){
    const ids=body.batch_ids;
    if(!Array.isArray(ids)||!ids.length||ids.length>50||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'))throw Error('قائمة المسيرات غير صحيحة');
    const revisions=body.revisions||{},stmts=[];
+   const bulkLoanContext=await paidLoanContext();
    for(const id of ids){
      const b=await batchOf(id);
      if(!allowed(u,b.company)||b.status!=='draft'||b.data.month!==String(body.month||''))throw Error('مسير غير صالح للإرسال: '+b.company);
@@ -170,6 +174,14 @@ export async function POST(req){
      const details=(await db.prepare("SELECT * FROM records WHERE module='payroll' AND company=?").bind(b.company).all()).results.map(parse).filter(row=>row.data.batch_id===id);
      if(details.length!==Number(b.data.employee_count)||!details.some(row=>!row.data.excluded))throw Error('قائمة المسير غير مكتملة: '+b.company);
      for(const row of details.filter(row=>!row.data.excluded)){
+      const d=row.data;
+      const gross=Number(d.salary??Number(d.basic||0)+Number(d.housing||0)+Number(d.transport||0));
+      const cap=Math.max(0,cents(gross)+cents(d.bonus)+cents(d.extra_allowance)+cents(d.overtime)-cents(d.absence_deduction)-cents(d.deductions));
+      const auto=autoAdvanceAllocations(bulkLoanContext,d.employee_id,b.data.month,cap);
+      const current=Array.isArray(d.advance_allocations)?d.advance_allocations:[];
+      const keyed=a=>JSON.stringify(a.map(x=>[String(x.advance_id),cents(x.amount)]));
+      if(keyed(auto)!==keyed(current)||cents(d.advance_deduction)!==auto.reduce((n,x)=>n+cents(x.amount),0))
+       throw Error('تغيرت أقساط سلف الموظف '+(d.employee_name||'')+'؛ حدّث أقساط السلف والغياب داخل المسير قبل إرساله');
       if(!row.data.split_confirmed||!Number.isFinite(Number(row.data.net))||cents(row.data.cash_amount)+cents(row.data.bank_amount)!==cents(row.data.net)||row.data.needs_review&&!row.data.exception_note)throw Error('مراجعة الأجور غير مكتملة: '+b.company);
        await ensureAssignedPayrollManager(row.data.project_id,b.company,row.data.employee_id);
      }
@@ -183,6 +195,47 @@ export async function POST(req){
   const batch=await batchOf(String(body.batch_id||''));
   if(!allowed(u,batch.company)||!permission(u,'payroll','view'))return err('ليس ضمن نطاق صلاحياتك',403);
   const monthly=(await db.prepare("SELECT * FROM records WHERE module='payroll' AND company=?").bind(batch.company).all()).results.map(parse).filter(r=>r.data.batch_id===batch.id);
+  if(action==='sync_deductions'){
+   if(!prepAllowed||!permission(u,'payroll','edit')||!['draft','manager_review'].includes(batch.status))
+    return err('مزامنة الخصومات متاحة للمسيرات المفتوحة فقط بصلاحية إعداد المسير',403);
+   if(Number(body.batch_revision)!==batch.revision)throw Error('تغير المسير أثناء المزامنة؛ حدّث الصفحة');
+   const attendanceRecords=(await db.prepare("SELECT * FROM records WHERE module IN ('leave','returns')").all()).results.map(parse);
+   const loans=await paidLoanContext();
+   const statements=[],updates=[];
+   for(const row of monthly){
+    if(row.data.excluded)continue;
+    const d=row.data;
+    const wage=rounded(Number(d.basic||0)+Number(d.housing||0)+Number(d.transport||0));
+    const attendance=payrollAttendanceForSalary(attendanceRecords,d.employee_id,batch.data.month,wage);
+    const oldReturnDays=Number.isFinite(Number(d.return_absence_days))?Number(d.return_absence_days):d.return_to_work_at?Number(d.absence_days||0):0;
+    const manualAbsence=Math.max(0,Number(d.absence_days||0)-oldReturnDays);
+    const absence_days=Math.min(30,manualAbsence+attendance.absence_days);
+    const absence_deduction=salaryAbsenceDeduction(wage,absence_days);
+    const scheduled=autoAdvanceAllocations(loans,d.employee_id,batch.data.month,Math.max(0,cents(wage)+cents(d.overtime)+cents(d.bonus)+cents(d.extra_allowance)-cents(absence_deduction)-cents(d.deductions)));
+    const advance_deduction=rounded(scheduled.reduce((n,x)=>n+Number(x.amount),0));
+    const overtime=Number(d.overtime||0),bonus=Number(d.bonus||0),allowance=Number(d.extra_allowance||0),other=Number(d.deductions||0);
+    const net=rounded(wage+overtime+bonus+allowance-absence_deduction-advance_deduction-other);
+    if(net<0)throw Error('خصومات الموظف '+(d.employee_name||d.employee_number||'')+' تتجاوز المستحق؛ راجع البيانات قبل المزامنة');
+    const current=JSON.stringify((Array.isArray(d.advance_allocations)?d.advance_allocations:[]).map(x=>({advance_id:x.advance_id,amount:Number(x.amount)})));
+    const upcoming=JSON.stringify(scheduled);
+    if(cents(d.advance_deduction)===cents(advance_deduction)&&cents(d.absence_deduction)===cents(absence_deduction)&&Number(d.absence_days||0)===absence_days&&current===upcoming)continue;
+    const bank=Math.min(Number(d.bank_amount||0),net);
+    const updated={...d,advance_deduction,advance_allocations:scheduled,absence_days,absence_deduction,return_absence_days:attendance.absence_days,
+      return_payable_days:30-absence_days,return_parts:attendance.return_parts,return_to_work_at:attendance.return_to_work_at||d.return_to_work_at||null,
+      net,bank_amount:bank,cash_amount:rounded(net-bank),split_confirmed:false,manager_reviewed:false,manager_reviewed_by:null,manager_reviewed_at:null,
+      reviewed_by:null,reviewed_at:null,review_reason:[d.review_reason,'مزامنة آلية لخصم السلف والغياب بعد المباشرة؛ يلزم إعادة مراجعة توزيع الراتب'].filter(Boolean).join('؛ '),
+      payroll_deductions_synced_at:now};
+    statements.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND module='payroll' AND EXISTS(SELECT 1 FROM records WHERE id=? AND status IN ('draft','manager_review'))")
+      .bind(JSON.stringify(updated),now,mutation,row.id,row.revision,batch.id));
+    updates.push({id:row.id,employee_id:d.employee_id,loan:advance_deduction,absence:absence_deduction,net});
+   }
+   if(!statements.length)return response({ok:true,updated:0});
+   statements.push(db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)")
+    .bind(crypto.randomUUID(),u.email,batch.id,'payroll_deductions_sync',now,JSON.stringify({month:batch.data.month,updated:updates.length})));
+   const result=await db.batch(statements);
+   if(result.slice(0,-1).some(x=>!x.meta?.changes))throw Error('تغير المسير أثناء المزامنة؛ حدّث الصفحة ثم أعد المحاولة');
+   return response({ok:true,updated:updates.length});
+  }
   if(action==='add_employee'){
    if(!prepAllowed||!permission(u,'payroll','edit')||batch.status!=='draft')return err('الإضافة متاحة لمسير قيد التجهيز وبصلاحية إعداد المسير فقط',403);
    if(batch.data.month!==monthKsa())throw Error('لا يمكن إضافة موظف إلى شهر سابق أو لاحق');
@@ -208,10 +261,12 @@ export async function POST(req){
    const declared=rounded(d.salary??d.total_monthly_salary??salary);
    const mismatch=Math.abs(cents(declared)-cents(salary))>1;
    const advanceContext=await paidLoanContext();
-   const advanceAllocations=autoAdvanceAllocations(advanceContext,employeeId,batch.data.month,cents(salary));
+   const attendanceRecords=(await db.prepare("SELECT * FROM records WHERE module IN ('leave','returns')").all()).results.map(parse);
+   const attendance=payrollAttendanceForSalary(attendanceRecords,employeeId,batch.data.month,salary);
+   const advanceAllocations=autoAdvanceAllocations(advanceContext,employeeId,batch.data.month,Math.max(0,cents(salary)-cents(attendance.absence_deduction)));
    const rowId=crypto.randomUUID();
    const data={batch_id:batch.id,employee_id:employeeId,source_company:original.company,working_company:batch.company,month:batch.data.month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||original.code||'',employment_status:status,project_id:d.project_id||'',cost_company:batch.company,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
-    basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:0,absence_deduction:0,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
+    basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,return_absence_days:attendance.absence_days,return_payable_days:attendance.payable_days,return_to_work_at:attendance.return_to_work_at,return_parts:attendance.return_parts,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
     net:rounded(salary-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,excluded:false,
     exception_note:'',needs_review:mismatch,review_reason:mismatch?'اختلاف إجمالي الراتب عن مكوناته':'',
     notes:'',method:'bank',added_to_batch_at:now,added_to_batch_by:u.email};
@@ -286,10 +341,11 @@ export async function POST(req){
    if(!Number.isFinite(overtime_hours)||overtime_hours<0||overtime_hours>300||!Number.isFinite(absence_days)||absence_days<0||absence_days>31)throw Error('ساعات إضافية أو أيام غياب غير صالحة');
    const overtime=rounded(overtime_hours*(salary/30/8+0.5*basic/30/8));
    const absence_deduction=salaryAbsenceDeduction(salary,absence_days);
-   const advance_deduction=amount(input.advance_deduction??0,'خصم السلف');
-   const advanceContext=await paidLoanContext();
-   const advance_allocations=allocateEditedAdvanceTotal(advanceContext,old.employee_id,batch.data.month,cents(advance_deduction),old.advance_allocations);
    const deductions=amount(input.deductions??0,'خصومات أخرى');
+   const advanceContext=await paidLoanContext();
+   const scheduledCap=Math.max(0,cents(salary+bonus+extra_allowance+overtime-absence_deduction-deductions));
+   const advance_allocations=autoAdvanceAllocations(advanceContext,old.employee_id,batch.data.month,scheduledCap);
+   const advance_deduction=rounded(advance_allocations.reduce((total,a)=>total+Number(a.amount),0));
    const net=rounded(salary+bonus+extra_allowance+overtime-absence_deduction-advance_deduction-deductions);
    if(net<0)throw Error('الصافي سالب');
    const cash_amount=amount(input.cash_amount??0,'الكاش');
@@ -307,6 +363,22 @@ export async function POST(req){
   // Enforce employment status at every approval/payment boundary, including
   // batches created before the employee became inactive.
   const financeAllocations=[];
+  // A loan that becomes payable after the monthly payroll was reviewed cannot
+  // silently disappear from payroll. Require a fresh sync and renewed approvals.
+  if(['submit','finance_pay'].includes(action)){
+   const context=await paidLoanContext();
+   for(const row of monthly.filter(r=>!r.data.excluded)){
+    const d=row.data;
+    const gross=Number(d.salary??Number(d.basic||0)+Number(d.housing||0)+Number(d.transport||0));
+    const cap=Math.max(0,cents(gross)+cents(d.bonus)+cents(d.extra_allowance)+cents(d.overtime)-cents(d.absence_deduction)-cents(d.deductions));
+    const expected=autoAdvanceAllocations(context,d.employee_id,batch.data.month,cap);
+    const current=Array.isArray(d.advance_allocations)?d.advance_allocations:[];
+    const comparable=a=>a.map(x=>({advance_id:String(x.advance_id),amount:cents(x.amount)}));
+    if(JSON.stringify(comparable(expected))!==JSON.stringify(comparable(current))||
+     cents(d.advance_deduction)!==expected.reduce((total,x)=>total+cents(x.amount),0))
+     throw Error('أقساط السلف تغيرت لدى الموظف '+(d.employee_name||d.employee_number||'')+'؛ يجب إعادة المسير إلى التجهيز ومزامنة الخصومات ومراجعتها قبل الاعتماد أو الصرف');
+   }
+  }
   if(['submit','managers_approve','projects_approve','finance_pay','admin_approve','finance_approve'].includes(action)){
    const included=monthly.filter(r=>!r.data.excluded);
    if(included.length){
