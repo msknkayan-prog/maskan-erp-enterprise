@@ -2314,7 +2314,7 @@ test('advance repayment ledger is embedded and sidebar hides redundant repayment
  assert.match(ui,/onClick=\{printRepayments\}>طباعة سجل السداد المعروض/);
  assert.match(ui,/module==='advances'&&permittedRead\(user\|\|\{\},'repayments'\)/);
  assert.match(ui,/r\.module==='repayments'&&!r\.data\?\._deleted/);
- assert.match(ui,/!\['project_managers','repayments'\]\.includes\(k\)/);
+ assert.match(ui,/!\['project_managers','repayments','leave_dues','returns'\]\.includes\(k\)/);
  assert.match(ui,/setLinkedFinance\(\{kind:'repayments',parentId:row.id/);
  assert.match(ui,/سداد افتتاحي/);
  assert.match(modules,/repayments:\{label:'سداد السلف'/);
@@ -2495,4 +2495,17 @@ test('Musab finance controller may approve advance amount with single ledger pos
  assert.match(ui,/قيد اعتماد مبلغ الصرف/);
  assert.match(ui,/تم القيد والصرف/);
  assert.match(ui,/row.data.final_approved_by/);
+});
+
+
+test('leave dues and post-leave return are nested under their parent HR navigation while preserving permissions',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const modules=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ assert.match(ui,/!\\['project_managers','repayments','leave_dues','returns'\\]\\.includes\\(k\\)/);
+ assert.match(ui,/aria-label=\\{\\['leave','leave_dues'\\]\\.includes\\(module\\)\\?'تبويبات الإجازات':'تبويبات التعيين والمباشرة'\\}/);
+ assert.match(ui,/\\['leave','leave_dues'\\]\\.includes\\(module\\)\\?\\[\\['leave','طلبات الإجازات'\\],\\['leave_dues','مستحقات الإجازة'\\]\\]/);
+ assert.match(ui,/\\['appointments','التعيين والمباشرة'\\],\\['returns','المباشرة بعد الإجازة'\\]/);
+ assert.match(ui,/\\.filter\\(\\(\\[key\\]\\)=>allowed\\.includes\\(key\\)\\)/);
+ assert.match(modules,/returns:\\{label:'المباشرة بعد الإجازة'/);
+ assert.match(modules,/leave_dues:\\{label:'مستحقات الإجازة'/);
 });
