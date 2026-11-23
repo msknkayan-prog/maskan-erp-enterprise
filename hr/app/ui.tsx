@@ -10,6 +10,7 @@ import {LayoutDashboard,Users,Building2,FileText,Wallet,ShoppingCart,CalendarDay
 import {companies,canonicalCompany,companyDisplayName,modules,states,annualLeave,leaveAccrualAsOf,nextContractExpiry,canRead,canWrite,workflow,enumOptions,relationModules,operationalModules,saudiDate,fixedLeaveDays,leaveEndDate,leaveNextDate,leaveCalendarDays,leaveChargedDays,permission,permissionChoice,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners} from '../lib/modules.mjs';
 import {Attendance,Migration,Attachments,RecordPaper,RecordHistory} from './operations';
 import ClientFinance from './client-finance';
+import EmployeeReportsDashboard from './employee-dashboard';
 import {companyLogoPath,companyOfficialName} from '../lib/company-brand.mjs';
 import {readXlsx,workbookBytes} from '../lib/sheets.mjs';
 import {preferredProjectManagers,preferredManagerForName,suggestedProjectsForManager,employeeDirectManagerOptions,normalizeManagerName,magdiGeneralManagerEmail,magdiProjectManagerName,isMagdiGeneralManagerAccount} from '../lib/project-manager-roster.mjs';
@@ -1096,6 +1097,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {!adminApprovalRows.length&&<p style={{textAlign:'center',padding:20}}>لا توجد طلبات معلّقة حاليًا ضمن نطاق حسابك.</p>}
  <small style={{display:'block',marginTop:8,color:'#7d6b50'}}>الاعتماد من مسؤول النظام يخص المرحلة الحالية فقط ويُسجّل باسمه، مع الاحتفاظ بالمدير المخوّل الأصلي. لا يتم تخطي المراحل أو تنفيذ الصرف.</small>
  </section>}
+{module==='overview'&&permittedRead(user||{},'employees')&&<EmployeeReportsDashboard rows={rows} user={user} company={company} loading={loading} onRefresh={refresh} onOpenEmployees={()=>setModule('employees')}/>}
 {module==='overview'&&<>{user?.role==='admin'&&<section className="panel" dir="rtl" style={{padding:16,marginBottom:16}}>
  <div style={{display:'flex',gap:12,alignItems:'center',justifyContent:'space-between',flexWrap:'wrap'}}>
  <div><h2 style={{margin:0}}>الفحص التشغيلي وترابط البيانات</h2><small>فحص قراءة فقط للمشاريع والموظفين ومدراء المشاريع وطلبات الإجازات والسلف ومسيرات الرواتب، دون تغيير البيانات</small></div>
