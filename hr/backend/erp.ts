@@ -2,6 +2,8 @@
 import {env} from './runtime.ts';
 import {currentUser} from './runtime.ts';
 import {modules,companies,normalize,workflow,canWrite,canRead,annualLeave,operationalModules,relationModules,visible,permission,saudiDate,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners} from './modules.mjs';
+import {isReturnEligibleLeave,employeeOnLeave} from '../lib/return-to-work.mjs';
+import {calculateScheduledAdvances,advanceCents} from '../lib/payroll-advance-schedule.mjs';
 import {calculateScheduledAdvances,advanceCents} from '../lib/payroll-advance-schedule.mjs';
 import {employeeDirectManagerOptions,normalizeManagerName,magdiGeneralManagerEmail,magdiProjectManagerName,isMagdiGeneralManagerAccount,isAuthorizedProjectManagerAccount,preferredManagerForName} from './project-manager-roster.mjs';
 export const dynamic='force-dynamic';
@@ -957,7 +959,7 @@ if(old&&old.company!==body.company){
 let returnLeaveRecord:any=null;
 for(const field of (modules as any)[mod].fields){if((relationModules as any)[field.type]&&data[field.key]){const target=(relationModules as any)[field.type];const linked=await db.prepare('SELECT * FROM records WHERE id=? AND module=?').bind(data[field.key],target).first<any>();if(!linked||(linked.company!==body.company&&!(target==='projects'&&(JSON.parse(linked.data)._shared_companies||[]).includes(body.company)))||!visible(u,parse(linked),(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('المرجع لا يتبع الشركة أو النطاق المختار');if(field.type==='employee')data.project_id=JSON.parse(linked.data).project_id||'';if(field.type==='employee'&&mod==='terminations'){const employeeData=JSON.parse(linked.data);if(employeeData.hire_date&&data.date<employeeData.hire_date)throw Error('إنهاء الخدمة لا يسبق تاريخ التعيين');if(data.case_status==='completed'&&data.date>saudiDate())throw Error('لا يكتمل التسجيل بتاريخ مستقبلي');if(data.resignation_id){const resignation=await db.prepare("SELECT data FROM records WHERE module='resignations' AND (id=? OR code=?) AND status='approved'").bind(data.resignation_id,data.resignation_id).first<any>();if(!resignation||JSON.parse(resignation.data).employee_id!==data.employee_id)throw Error('مرجع الاستقالة غير معتمد لهذا الموظف');}}if(field.type==='leave'){const leave=JSON.parse(linked.data);data.employee_id=leave.employee_id;data.project_id=leave.project_id||'';if(mod==='returns'){
  returnLeaveRecord=linked;
- if(linked.status!=='approved'||leave.start>saudiDate()||data.actual_return<leave.start||data.actual_return>saudiDate())throw Error('المباشرة لإجازة معتمدة بدأت، وبتاريخ بين بدايتها واليوم');
+ if(!isReturnEligibleLeave({...linked,data:leave})||leave.start>saudiDate()||data.actual_return<leave.start||data.actual_return>saudiDate())throw Error('المباشرة تتطلب إجازة معتمدة بدأت بالفعل، وتاريخ حضور فعلي بين بدايتها واليوم');
  if(old&&!data.notes)throw Error('سبب تصحيح المباشرة مطلوب');
  data.leave_start=String(leave.start||'');
  data.leave_end=String(leave.end||'');
@@ -1037,7 +1039,7 @@ if(mod==='returns'){
  .bind(JSON.stringify(updatedLeave),now,mutation,returnLeaveRecord.id,returnLeaveRecord.revision,id));
  // Older returns must not overwrite a later actual return on the employee profile.
  if(!employeeData.last_return_date||String(employeeData.last_return_leave_id||'')===String(data.leave_id)||data.actual_return>=employeeData.last_return_date){
-  const updatedEmployee={...employeeData,last_return_date:data.actual_return,last_return_leave_id:data.leave_id,employment_status:employeeData.employment_status==='on_leave'?'active':employeeData.employment_status,return_recorded_at:now};
+  const updatedEmployee={...employeeData,last_return_date:data.actual_return,last_return_leave_id:data.leave_id,employment_status:employeeOnLeave({data:employeeData})?'active':employeeData.employment_status,employee_status:employeeOnLeave({data:employeeData})&&employeeData.employee_status?'active':employeeData.employee_status,return_recorded_at:now};
   returnSyncUpdates.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
    .bind(JSON.stringify(updatedEmployee),now,mutation,employeeRecord.id,employeeRecord.revision));
  }
