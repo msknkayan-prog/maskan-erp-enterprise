@@ -2249,7 +2249,7 @@ test('automatic advance installments skip deferred months and stop at actual rem
  assert.ok(first>0&&last>first);
  const {calculateScheduledAdvances}=await import('../lib/payroll-advance-schedule.mjs');
  const schedule=runInNewContext(source.slice(first,last)+';({autoAdvanceAllocations,allocateEditedAdvanceTotal})',{cents:x=>Math.round(Number(x||0)*100),calculateScheduledAdvances});
- const loan={id:'loan-a',data:{employee_id:'employee-a',amount:1200,installments:3,installment_amount:400,final_installment:400,first_month:'2026-11',date:'2026-11-01',schedule_mode:'auto',deferred_months:['2026-12']}};
+ const loan={id:'loan-a',status:'paid',data:{employee_id:'employee-a',amount:1200,installments:3,installment_amount:400,final_installment:400,first_month:'2026-11',date:'2026-11-01',paid_at:'2026-11-01T12:00:00Z',schedule_mode:'auto',deferred_months:['2026-12']}};
  const context={loans:[loan],sums:new Map()};
  const alloc=(month,cap=Infinity)=>schedule.autoAdvanceAllocations(context,'employee-a',month,cap);
  assert.equal(alloc('2026-11')[0].amount,400);
