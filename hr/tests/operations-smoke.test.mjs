@@ -2389,3 +2389,18 @@ test('return-to-work sync targets actual return month and restores active employ
  assert.match(erp,/data\.payroll_sync_month=month/);
  assert.match(erp,/return_record_id:id/);
 });
+
+test('appointment and return views tolerate nested historical data without a full-page render crash',async()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const returns=await import('../lib/return-to-work.mjs');
+ assert.match(ui,/class HRViewErrorBoundary extends Component/);
+ assert.match(ui,/safeRecordText\(value\.name\?\?value\.display_name/);
+ assert.match(ui,/export default function ERP\(\)\{return <HRViewErrorBoundary>/);
+ assert.doesNotThrow(()=>returns.availableReturnLeaves(null));
+ assert.deepEqual(returns.returnToWorkRegister(null),[]);
+ const records=[
+  {id:'leave-legacy',module:'leave',company:'مسكن الكيان',status:'approved',data:{employee_id:'employee-a',start:'2026-11-01',end:'2026-11-10'}},
+  {id:'return-legacy',module:'returns',company:'مسكن الكيان',status:'completed',data:{leave_id:'leave-legacy',actual_return:'2026-11-11'}}
+ ];
+ assert.deepEqual(returns.returnToWorkRegister(records).map(r=>[r.completed,r.actualReturn]),[[true,'2026-11-11']]);
+});
