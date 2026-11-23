@@ -910,7 +910,16 @@ if(old&&old.company!==body.company){
  data._previous_company=old.company;
  data._linked_account_review_required=linkedAccount;
 }
-for(const field of (modules as any)[mod].fields){if((relationModules as any)[field.type]&&data[field.key]){const target=(relationModules as any)[field.type];const linked=await db.prepare('SELECT * FROM records WHERE id=? AND module=?').bind(data[field.key],target).first<any>();if(!linked||(linked.company!==body.company&&!(target==='projects'&&(JSON.parse(linked.data)._shared_companies||[]).includes(body.company)))||!visible(u,parse(linked),(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('المرجع لا يتبع الشركة أو النطاق المختار');if(field.type==='employee')data.project_id=JSON.parse(linked.data).project_id||'';if(field.type==='employee'&&mod==='terminations'){const employeeData=JSON.parse(linked.data);if(employeeData.hire_date&&data.date<employeeData.hire_date)throw Error('إنهاء الخدمة لا يسبق تاريخ التعيين');if(data.case_status==='completed'&&data.date>saudiDate())throw Error('لا يكتمل التسجيل بتاريخ مستقبلي');if(data.resignation_id){const resignation=await db.prepare("SELECT data FROM records WHERE module='resignations' AND (id=? OR code=?) AND status='approved'").bind(data.resignation_id,data.resignation_id).first<any>();if(!resignation||JSON.parse(resignation.data).employee_id!==data.employee_id)throw Error('مرجع الاستقالة غير معتمد لهذا الموظف');}}if(field.type==='leave'){const leave=JSON.parse(linked.data);data.employee_id=leave.employee_id;data.project_id=leave.project_id||'';if(mod==='returns'){if(linked.status!=='approved'||leave.start>saudiDate()||data.actual_return<leave.start||data.actual_return>saudiDate())throw Error('المباشرة لإجازة معتمدة بدأت، وبتاريخ بين بدايتها واليوم');if(old&&!data.notes)throw Error('سبب تصحيح المباشرة مطلوب');}if(mod==='leave_dues'){
+let returnLeaveRecord:any=null;
+for(const field of (modules as any)[mod].fields){if((relationModules as any)[field.type]&&data[field.key]){const target=(relationModules as any)[field.type];const linked=await db.prepare('SELECT * FROM records WHERE id=? AND module=?').bind(data[field.key],target).first<any>();if(!linked||(linked.company!==body.company&&!(target==='projects'&&(JSON.parse(linked.data)._shared_companies||[]).includes(body.company)))||!visible(u,parse(linked),(await db.prepare('SELECT * FROM records').all()).results.map(parse)))throw Error('المرجع لا يتبع الشركة أو النطاق المختار');if(field.type==='employee')data.project_id=JSON.parse(linked.data).project_id||'';if(field.type==='employee'&&mod==='terminations'){const employeeData=JSON.parse(linked.data);if(employeeData.hire_date&&data.date<employeeData.hire_date)throw Error('إنهاء الخدمة لا يسبق تاريخ التعيين');if(data.case_status==='completed'&&data.date>saudiDate())throw Error('لا يكتمل التسجيل بتاريخ مستقبلي');if(data.resignation_id){const resignation=await db.prepare("SELECT data FROM records WHERE module='resignations' AND (id=? OR code=?) AND status='approved'").bind(data.resignation_id,data.resignation_id).first<any>();if(!resignation||JSON.parse(resignation.data).employee_id!==data.employee_id)throw Error('مرجع الاستقالة غير معتمد لهذا الموظف');}}if(field.type==='leave'){const leave=JSON.parse(linked.data);data.employee_id=leave.employee_id;data.project_id=leave.project_id||'';if(mod==='returns'){
+ returnLeaveRecord=linked;
+ if(linked.status!=='approved'||leave.start>saudiDate()||data.actual_return<leave.start||data.actual_return>saudiDate())throw Error('المباشرة لإجازة معتمدة بدأت، وبتاريخ بين بدايتها واليوم');
+ if(old&&!data.notes)throw Error('سبب تصحيح المباشرة مطلوب');
+ data.leave_start=String(leave.start||'');
+ data.leave_end=String(leave.end||'');
+ data.expected_return=String(leave.expected_return||'');
+ if(data.actual_return&&data.expected_return)data.return_difference_days=Math.round((Date.parse(data.actual_return)-Date.parse(data.expected_return))/86400000);
+}if(mod==='leave_dues'){
  if(linked.status!=='approved')throw Error('لا يمكن إنشاء مستحقات إلا لإجازة معتمدة');
  // The request, not a manually entered field, owns the eligible paid-day count.
  const paidDays=leave.leave_type==='annual'?Number(leave.paid_days??leave.days):leave.leave_type==='unpaid'?0:Number(leave.days||0);
@@ -969,6 +978,27 @@ if(mod==='projects'&&(Number(data.radius)<20||Number(data.radius)>5000))throw Er
  if(duplicate)throw Error('مسير الموظف لهذا الشهر موجود بالفعل؛ افتحه للتعديل بدل إنشاء سجل مكرر');
 }
 const id=old?.id||crypto.randomUUID();
+const returnSyncUpdates:any[]=[];
+if(mod==='returns'){
+ if(!returnLeaveRecord)throw Error('اختر إجازة معتمدة لتسجيل المباشرة');
+ const leaveData=JSON.parse(returnLeaveRecord.data||'{}');
+ const existingReturn=await db.prepare("SELECT id FROM records WHERE module='returns' AND company=? AND code=? LIMIT 1").bind(body.company,String(data.leave_id)).first<any>();
+ if(existingReturn&&String(existingReturn.id)!==String(id))throw Error('تم تسجيل مباشرة هذه الإجازة مسبقًا؛ افتح محضر المباشرة الموجود');
+ if(leaveData.return_record_id&&String(leaveData.return_record_id)!==String(id))throw Error('الإجازة مرتبطة مسبقًا بمحضر مباشرة آخر');
+ const employeeRecord=await db.prepare("SELECT id,data,revision FROM records WHERE id=? AND module='employees' AND company=?").bind(data.employee_id,body.company).first<any>();
+ if(!employeeRecord)throw Error('تعذر الوصول إلى سجل الموظف المرتبط بالإجازة');
+ const employeeData=JSON.parse(employeeRecord.data||'{}');
+ const updatedLeave={...leaveData,return_record_id:id,actual_return:data.actual_return,return_recorded_at:now,return_recorded_by:u.email};
+ returnSyncUpdates.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='leave' AND revision=? AND COALESCE(data::jsonb->>'return_record_id','') IN ('',?)")
+ .bind(JSON.stringify(updatedLeave),now,mutation,returnLeaveRecord.id,returnLeaveRecord.revision,id));
+ // Older returns must not overwrite a later actual return on the employee profile.
+ if(!employeeData.last_return_date||String(employeeData.last_return_leave_id||'')===String(data.leave_id)||data.actual_return>=employeeData.last_return_date){
+  const updatedEmployee={...employeeData,last_return_date:data.actual_return,last_return_leave_id:data.leave_id,employment_status:employeeData.employment_status==='on_leave'?'active':employeeData.employment_status,return_recorded_at:now};
+  returnSyncUpdates.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
+   .bind(JSON.stringify(updatedEmployee),now,mutation,employeeRecord.id,employeeRecord.revision));
+ }
+}
+
 const centsOf=(value:any)=>Math.round(Number(value||0)*100);
 const salaryFieldsChanged=mod==='employees'&&Boolean(old)&&['basic','housing','transport','salary'].some(k=>centsOf(previous?.[k])!==centsOf(data[k]));
 const linkedPayrollUpdates:any[]=[];
@@ -1026,4 +1056,4 @@ const stmt=old
   ?db.prepare(employeeInsertSql).bind(id,body.company,JSON.stringify(data),u.email,now,now,mutation)
   :db.prepare('INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
     .bind(id,mod,body.company,code,JSON.stringify(data),'draft',1,u.email,now,now,mutation);
-const result=await db.batch([stmt,...linkedPayrollUpdates,db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,id,old?'update':'create',now,JSON.stringify({module:mod,company:body.company,salary_changed:salaryFieldsChanged,synced_payroll_count:synchronizedMonths.length,...(transferringEmployee?{transfer_from:old.company,transfer_to:body.company,historical_records_preserved:true,linked_account_review_required:linkedAccount}:{})}),id,mutation)]);if(!result[0].meta.changes||linkedPayrollUpdates.some((_:any,i:number)=>i%2===0&&!result[1+i]?.meta?.changes))throw Error('تغير سجل الموظف أو المسير أثناء الحفظ؛ أعد تحميل الصفحة');return json({ok:true,id,...(mod==='employees'&&!old?{employee_code:result[0]?.results?.[0]?.code}:{}),payroll_synced:synchronizedMonths.length,company_transferred:transferringEmployee,linked_account_review_required:linkedAccount});}catch(e:any){return json({error:['401','403'].includes(e.message)?'غير مصرح':e.message?.includes('UNIQUE')?'الرقم أو السجل موجود مسبقًا':e.message||'تعذر الحفظ'},['401','403'].includes(e.message)?Number(e.message):400);}}
+const result=await db.batch([...returnSyncUpdates,stmt,...linkedPayrollUpdates,db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,id,old?'update':'create',now,JSON.stringify({module:mod,company:body.company,leave_id:mod==='returns'?data.leave_id:undefined,actual_return:mod==='returns'?data.actual_return:undefined,salary_changed:salaryFieldsChanged,synced_payroll_count:synchronizedMonths.length,...(transferringEmployee?{transfer_from:old.company,transfer_to:body.company,historical_records_preserved:true,linked_account_review_required:linkedAccount}:{})}),id,mutation)]);if(returnSyncUpdates.some((_:any,i:number)=>!result[i]?.meta?.changes)||!result[returnSyncUpdates.length]?.meta?.changes||linkedPayrollUpdates.some((_:any,i:number)=>i%2===0&&!result[returnSyncUpdates.length+1+i]?.meta?.changes))throw Error('تغير سجل الإجازة أو المباشرة أثناء الحفظ؛ حدّث الصفحة وأعد المحاولة');return json({ok:true,id,...(mod==='employees'&&!old?{employee_code:result[0]?.results?.[0]?.code}:{}),payroll_synced:synchronizedMonths.length,company_transferred:transferringEmployee,linked_account_review_required:linkedAccount});}catch(e:any){return json({error:['401','403'].includes(e.message)?'غير مصرح':e.message?.includes('UNIQUE')?'الرقم أو السجل موجود مسبقًا':e.message||'تعذر الحفظ'},['401','403'].includes(e.message)?Number(e.message):400);}}
