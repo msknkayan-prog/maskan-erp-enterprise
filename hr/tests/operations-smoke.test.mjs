@@ -2153,8 +2153,8 @@ test('automatic advance installments skip deferred months and stop at actual rem
 test('payroll installment posting remains tied to confirmed finance payment and loan postponement is audited',()=>{
  const payroll=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- assert.match(payroll,/autoAdvanceAllocations\(advanceContext,e\.id,month,cents\(salary\)\)/);
- assert.match(payroll,/allocateEditedAdvanceTotal\(advanceContext,old\.employee_id,batch\.data\.month/);
+ assert.match(payroll,/autoAdvanceAllocations\(advanceContext,e.id,month,Math.max\(0,cents\(salary\)-cents\(attendance.absence_deduction\)\)\)/);
+ assert.match(payroll,/autoAdvanceAllocations\(advanceContext,old.employee_id,batch.data.month,scheduledCap\)/);
  assert.match(payroll,/if\(action==='finance_pay'\)\{\s*for\(const allocation of financeAllocations\)/);
  assert.match(payroll,/payroll_reference:String\(body\.reference\)\.trim\(\)/);
  assert.match(payroll,/advance_allocations\.reduce\(\(n,a\)=>n\+cents\(a\.amount\),0\)!==cents\(d\.advance_deduction\)/);
