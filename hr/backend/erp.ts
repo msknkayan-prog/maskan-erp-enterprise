@@ -540,11 +540,22 @@ if(body.action==='hire_from_appointment'){
  form.document_no='APT-'+saudiDate().slice(0,4)+'-'+String(aptSerial).padStart(6,'0');
  form.probation_start=start;form.probation_end=probationEnd;
  form.employee_snapshot={employee_id:employeeId,company,name:employee.name,job:employee.job,identity:employee.identity,project_id:projectId,hire_date:start,salary:Number(employee.salary),probation:duration,probation_end:probationEnd};
- const empInsert=[
+ const employeeInsertSql=[
   "INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation)",
   "SELECT ?, 'employees', ?, next_code.code,",
-  "replace(?::text, '\"code\":\"AUTO\"', '\"code\":\"' || next_code.code || '\"')::jsonb::text,",
-  "'active',1,?,?,?,? FROM (SELECT (COALESCE(MAX(CASE WHEN code ~ '^[0-9]{1,12}
+  "replace(?::text, '\\\"code\\\":\\\"AUTO\\\"', '\\\"code\\\":\\\"' || next_code.code || '\\\"')::jsonb::text,",
+  "'draft',1,?,?,?,? FROM (SELECT (COALESCE(MAX(CASE WHEN code ~ '^[0-9]{1,12}$' THEN code::bigint END),70000)+1)::text AS code FROM records WHERE module='employees') next_code RETURNING code"
+ ].join(' ');
+ const result=await db.batch([
+  db.prepare(employeeInsertSql).bind(employeeId,company,JSON.stringify(employee),u.email,now,now,mutation),
+  db.prepare("INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation) VALUES(?,'appointments',?,?,?,'draft',1,?,?,?,?)").bind(appointmentId,company,null,JSON.stringify(form),u.email,now,now,mutation),
+  db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,employeeId,'employee_created_from_appointment',now,JSON.stringify({appointment_id:appointmentId,document_no:employee.document_no,probation_days:days})),
+  db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,appointmentId,'appointment_hire_created',now,JSON.stringify({employee_id:employeeId,document_no:form.document_no}))
+ ]);
+ if(!result[0]?.meta?.changes||!result[1]?.meta?.changes)throw Error('تعذر حفظ التعيين والموظف معاً');
+ return json({ok:true,id:appointmentId,employee_id:employeeId,employee_code:result[0]?.results?.[0]?.code,appointment_no:form.document_no,probation_end:probationEnd});
+}
+if(body.action==='backfill_appointment_numbers'){
  if(u.role!=='admin')throw Error('403');
  const legacy=(await db.prepare("SELECT id,company,data,revision,created_at FROM records WHERE module='appointments' ORDER BY created_at ASC,id ASC").all()).results;
  const missing=legacy.filter((r:any)=>!String(JSON.parse(r.data||'{}').document_no||'').trim());
