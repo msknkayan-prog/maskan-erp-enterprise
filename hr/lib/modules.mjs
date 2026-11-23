@@ -240,9 +240,8 @@ export function visible(user,row,all=[]){
   const employee=row.module==='employees'?row:all.find(e=>e.module==='employees'&&e.id===row.data?.employee_id);
   const delegated=String(employee?.data?.delegated_manager_email||'').trim().toLowerCase();
   if(user.role==='project_manager'&&['leave','advances','resignations'].includes(row.module)&&row.data?.employee_id){
-    const assignedProject=all.find(p=>p.module==='projects'&&p.id===project);
-    if(!assignedProject||!project||projectScope&&!projectScope.includes(project))return false;
-    return String(assignedProject.data?.manager_email||'').trim().toLowerCase()===accountEmail&&assignedProject.company===row.company;
+    const direct=String(employee?.data?.manager_email||employee?.data?.supervisor_account||row.data?.direct_manager?.email||'').trim().toLowerCase();
+    return Boolean(direct&&direct===accountEmail);
    }
    if(row.module==='employees'&&user.role==='project_manager'){
     const direct=String(row.data?.manager_email||row.data?.supervisor_account||'').trim().toLowerCase();
