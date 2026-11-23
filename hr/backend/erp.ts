@@ -1,7 +1,7 @@
 // @ts-nocheck
 import {env} from './runtime.ts';
 import {currentUser} from './runtime.ts';
-import {modules,companies,normalize,workflow,canWrite,canRead,annualLeave,operationalModules,relationModules,visible,permission,saudiDate,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor} from './modules.mjs';
+import {modules,companies,normalize,workflow,canWrite,canRead,annualLeave,operationalModules,relationModules,visible,permission,saudiDate,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners} from './modules.mjs';
 import {employeeDirectManagerOptions,normalizeManagerName,magdiGeneralManagerEmail,magdiProjectManagerName,isMagdiGeneralManagerAccount,isAuthorizedProjectManagerAccount,preferredManagerForName} from './project-manager-roster.mjs';
 export const dynamic='force-dynamic';
 async function calculateAnnualLeaveSplit(db:any,employeeId:string,company:string,total:number){
@@ -705,47 +705,47 @@ if(body.action==='leave_dues_workflow'){
  if(!result[0].meta.changes)throw Error('تغير بيان المستحقات؛ حدث الصفحة قبل تكرار القرار');
  return json({ok:true,status:next});
 }
-if(body.action==='transition'){if(mod==='leave_dues')throw Error('مستحقات الإجازة تعتمد حصريًا من المدير العام قبل المالية');if(['payroll','payroll_batches'].includes(mod))throw Error('اعتماد المسيرات الشهرية يتم حصريًا من نافذة المسير الشهري');if(!permission(u,mod,'approve'))throw Error('403');if(!old)throw Error('السجل غير موجود');if(operationalModules.includes(mod)||['repayments'].includes(mod))throw Error('هذا السجل لا يتطلب مسار اعتماد');const current=old.status;let next=mod==='payroll'?(current==='draft'?'hr':current==='hr'?'finance':current==='finance'?'approved':null):(current==='draft'?workflow[1]:workflow[workflow.indexOf(current)+1]);const decision=body.decision||'approve';if(decision==='return')next='draft';if(decision==='reject')next='rejected';if(!['approve','return','reject'].includes(decision))throw Error('قرار غير صالح');if(decision!=='approve'&&!String(body.note||'').trim())throw Error('سبب الإعادة أو الرفض مطلوب');if(!next)throw Error('السجل مغلق');if(current==='draft'&&decision!=='approve')throw Error('القرار غير متاح للمسودة');const routedRequest=['leave','advances','resignations'].includes(mod);if(current==='draft'){if(!permittedWrite(u,mod))throw Error('403');}else if(routedRequest?(u.role!=='admin'&&!isRequestStageActor(u,current)):(u.role!=='admin'&&u.role!==current))throw Error('403');const details=JSON.parse(old.data);
+if(body.action==='transition'){if(mod==='leave_dues')throw Error('مستحقات الإجازة تعتمد حصريًا من المدير العام قبل المالية');if(['payroll','payroll_batches'].includes(mod))throw Error('اعتماد المسيرات الشهرية يتم حصريًا من نافذة المسير الشهري');if(!permission(u,mod,'approve'))throw Error('403');if(!old)throw Error('السجل غير موجود');if(operationalModules.includes(mod)||['repayments'].includes(mod))throw Error('هذا السجل لا يتطلب مسار اعتماد');const current=old.status;let next=mod==='payroll'?(current==='draft'?'hr':current==='hr'?'finance':current==='finance'?'approved':null):(current==='draft'?workflow[1]:workflow[workflow.indexOf(current)+1]);const decision=body.decision||'approve';if(decision==='return')next='draft';if(decision==='reject')next='rejected';if(!['approve','return','reject'].includes(decision))throw Error('قرار غير صالح');if(decision!=='approve'&&!String(body.note||'').trim())throw Error('سبب الإعادة أو الرفض مطلوب');if(!next)throw Error('السجل مغلق');if(current==='draft'&&decision!=='approve')throw Error('القرار غير متاح للمسودة');const routedRequest=['leave','advances','resignations'].includes(mod);if(current==='draft'){if(!permittedWrite(u,mod))throw Error('403');}else if(current==='finance'&&!isRequestFinanceActor(u))throw Error('403');else if(routedRequest?(u.role!=='admin'&&!isRequestStageActor(u,current)):(u.role!=='admin'&&u.role!==current))throw Error('403');const details=JSON.parse(old.data);
 if(routedRequest&&!details.employee_id)throw Error('لا يمكن توجيه طلب دون موظف مرتبط بالمدير المباشر');
 
-if(routedRequest&&details.employee_id&&((current==='draft'&&decision==='approve'&&next==='project_manager')||(current==='project_manager'&&u.role!=='admin'))){
+if(routedRequest&&details.employee_id&&(current==='draft'||current==='project_manager')){
  const employeeRecord=await db.prepare("SELECT id,company,data FROM records WHERE id=? AND module='employees' AND company=?").bind(String(details.employee_id),old.company).first<any>();
  if(!employeeRecord)throw Error('لم يتم العثور على الموظف أو أن شركته لا تطابق شركة الطلب');
  const employeeData=JSON.parse(employeeRecord.data||'{}');
  if(employeeData._archived||employeeData._deleted)throw Error('الموظف غير نشط في سجل الموظفين');
- const directEmail=String(employeeData.manager_email||employeeData.supervisor_account||'').trim().toLowerCase();
- if(!directEmail)throw Error('يجب تحديد المدير المباشر المخوّل في سجل الموظف قبل إرسال الطلب للاعتماد');
- const manager=await db.prepare('SELECT email,role,is_active,companies,username FROM members WHERE lower(email)=?').bind(directEmail).first<any>();
- if(!isAuthorizedProjectManagerAccount({...manager,email:directEmail},employeeData.manager||''))throw Error('المدير المباشر المحدد ليس لديه حساب اعتماد نشط');
+ const projectId=String(employeeData.project_id||details.project_id||'');
+ if(!projectId)throw Error('يجب تعيين مشروع الموظف ومدير المشروع قبل إرسال الطلب للاعتماد');
+ const projectRecord=await db.prepare("SELECT id,company,data FROM records WHERE id=? AND module='projects' AND company=?").bind(projectId,old.company).first<any>();
+ if(!projectRecord)throw Error('المشروع المرتبط بالموظف غير موجود في الشركة');
+ const projectData=JSON.parse(projectRecord.data||'{}');
+ const managerEmail=String(projectData.manager_email||'').trim().toLowerCase();
+ if(!managerEmail)throw Error('يجب تعيين مدير المشروع في ملف المشروع قبل إرسال الطلب');
+ const manager=await db.prepare('SELECT email,role,is_active,companies,projects,username FROM members WHERE lower(email)=?').bind(managerEmail).first<any>();
+ if(!manager||manager.is_active===false||!isAuthorizedProjectManagerAccount({...manager,email:managerEmail},projectData.manager_name||''))throw Error('مدير المشروع ليس لديه حساب اعتماد نشط');
  if(manager.companies&&manager.companies!=='*'){
   let scope:any=[];try{scope=JSON.parse(manager.companies)}catch{}
-  if(!Array.isArray(scope)||!scope.includes(old.company))throw Error('المدير المباشر لا يمتلك صلاحية الشركة التابعة للموظف');
+  if(!Array.isArray(scope)||!scope.includes(old.company))throw Error('مدير المشروع لا يمتلك صلاحية الشركة المحددة');
  }
- const validManagers=await availableEmployeeDirectManagers(db,old.company);
- const direct=validManagers.find((item:any)=>item.hasLogin&&item.email===directEmail);
- if(!direct)throw Error('المدير المباشر غير موجود ضمن قائمة المدراء المخولين للاعتماد؛ عيّنه من سجل الموظف');
+ if(manager.projects&&manager.projects!=='*'){
+  let scope:any=[];try{scope=JSON.parse(manager.projects)}catch{}
+  if(!Array.isArray(scope)||!scope.includes(projectId))throw Error('مدير المشروع لا يمتلك صلاحية المشروع المحدد');
+ }
+ const actorEmail=String(u.email||'').trim().toLowerCase();
+ const isDirector=u.role==='admin'&&actorEmail===String(requestApprovalOwners.projects_director.email).toLowerCase();
+ const isManager=actorEmail===managerEmail;
  if(current==='draft'){
-  details.direct_manager={name:direct.name,email:directEmail,phone:direct.phone||'',employee_id:details.employee_id,assigned_at:now};
-  details.project_manager={name:direct.name,email:directEmail,phone:direct.phone||'',project_name:'',approval_role:'direct_manager'};
-  if(employeeData.project_id)details.project_id=employeeData.project_id;
-  if(String(u.email||'').trim().toLowerCase()===directEmail){
+  details.project_id=projectId;
+  details.project_manager={name:projectData.manager_name||manager.username||managerEmail,email:managerEmail,project_name:projectData.name||'',approval_role:'project_manager'};
+  if(isManager||isDirector){
    next='projects_director';
    details.manager_submitted_by=u.email;
    details.manager_submitted_at=now;
   }
- }else{
-  const originalDirectEmail=String(details.direct_manager?.email||'').trim().toLowerCase();
-  const approvedEmail=originalDirectEmail||directEmail;
-  if(approvedEmail!==String(u.email||'').trim().toLowerCase())throw Error('هذا الطلب بانتظار اعتماد المدير المباشر المخوّل، وليس مدير المشروع');
-  if(originalDirectEmail&&approvedEmail!==directEmail)throw Error('تغير المدير المباشر بعد إحالة الطلب؛ أعد الطلب للتجهيز وأرسله إلى المدير الحالي');
-  if(!originalDirectEmail){
-   // Existing in-progress requests were previously tied to a project manager.
-   // Move their next decision to the verified direct supervisor without skipping stages.
-   details.direct_manager={name:direct.name,email:directEmail,phone:direct.phone||'',employee_id:details.employee_id,assigned_at:now,migrated_from_project_manager:true};
-   details.project_manager={name:direct.name,email:directEmail,phone:direct.phone||'',project_name:'',approval_role:'direct_manager'};
-  }
+ }else if(decision==='approve'&&!isManager&&!isDirector){
+  throw Error('هذا الطلب بانتظار اعتماد مدير المشروع المعين على مشروع الموظف');
  }
 }
+
 if(routedRequest){
  // Save verified approver and timestamp for the horizontal status register.
  // Audit entries below remain the authoritative history of all decisions.
@@ -762,6 +762,7 @@ if(routedRequest){
   delete details.manager_submitted_by;
  }
 }
+if(current==='finance'&&u.role==='admin'&&!isRequestFinanceActor(u))throw Error('الإدارة المالية وحدها مخولة بالاعتماد المالي');
 if(mod==='payroll'&&decision==='approve'){
  const rounded=n=>Math.round(Number(n||0)*100);
  if(!Number.isFinite(Number(details.net))||rounded(details.cash_amount)+rounded(details.bank_amount)!==rounded(details.net))throw Error('لا يمكن اعتماد مسير غير موزع بالكامل بين الكاش والتحويل البنكي');
