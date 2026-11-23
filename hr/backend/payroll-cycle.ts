@@ -186,6 +186,43 @@ export async function POST(req){
   const batch=await batchOf(String(body.batch_id||''));
   if(!allowed(u,batch.company)||!permission(u,'payroll','view'))return err('ليس ضمن نطاق صلاحياتك',403);
   const monthly=(await db.prepare("SELECT * FROM records WHERE module='payroll' AND company=?").bind(batch.company).all()).results.map(parse).filter(r=>r.data.batch_id===batch.id);
+  if(action==='sync_deductions'){
+   if(!prepAllowed||!permission(u,'payroll','edit')||!['draft','manager_review'].includes(batch.status))
+    return err('مزامنة الخصومات متاحة للمسيرات المفتوحة فقط بصلاحية إعداد المسير',403);
+   if(Number(body.batch_revision)!==batch.revision)throw Error('تغير المسير أثناء المزامنة؛ حدّث الصفحة');
+   const attendanceRecords=(await db.prepare("SELECT * FROM records WHERE module IN ('leave','returns')").all()).results.map(parse);
+   const loans=await paidLoanContext();
+   const statements=[],updates=[];
+   for(const row of monthly){
+    if(row.data.excluded)continue;
+    const d=row.data;
+    const wage=rounded(Number(d.basic||0)+Number(d.housing||0)+Number(d.transport||0));
+    const attendance=payrollAttendanceForSalary(attendanceRecords,d.employee_id,batch.data.month,wage);
+    const scheduled=autoAdvanceAllocations(loans,d.employee_id,batch.data.month,Math.max(0,cents(wage)-cents(attendance.absence_deduction)));
+    const advance_deduction=rounded(scheduled.reduce((n,x)=>n+Number(x.amount),0));
+    const overtime=Number(d.overtime||0),bonus=Number(d.bonus||0),allowance=Number(d.extra_allowance||0),other=Number(d.deductions||0);
+    const net=rounded(wage+overtime+bonus+allowance-attendance.absence_deduction-advance_deduction-other);
+    if(net<0)throw Error('خصومات الموظف '+(d.employee_name||d.employee_number||'')+' تتجاوز المستحق؛ راجع البيانات قبل المزامنة');
+    const current=JSON.stringify((Array.isArray(d.advance_allocations)?d.advance_allocations:[]).map(x=>({advance_id:x.advance_id,amount:Number(x.amount)})));
+    const upcoming=JSON.stringify(scheduled);
+    if(cents(d.advance_deduction)===cents(advance_deduction)&&cents(d.absence_deduction)===cents(attendance.absence_deduction)&&Number(d.absence_days||0)===attendance.absence_days&&current===upcoming)continue;
+    const bank=Math.min(Number(d.bank_amount||0),net);
+    const updated={...d,advance_deduction,advance_allocations:scheduled,absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,
+      return_payable_days:attendance.payable_days,return_parts:attendance.return_parts,return_to_work_at:attendance.return_to_work_at||d.return_to_work_at||null,
+      net,bank_amount:bank,cash_amount:rounded(net-bank),split_confirmed:false,manager_reviewed:false,manager_reviewed_by:null,manager_reviewed_at:null,
+      reviewed_by:null,reviewed_at:null,review_reason:[d.review_reason,'مزامنة آلية لخصم السلف والغياب بعد المباشرة؛ يلزم إعادة مراجعة توزيع الراتب'].filter(Boolean).join('؛ '),
+      payroll_deductions_synced_at:now};
+    statements.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND module='payroll' AND EXISTS(SELECT 1 FROM records WHERE id=? AND status IN ('draft','manager_review'))")
+      .bind(JSON.stringify(updated),now,mutation,row.id,row.revision,batch.id));
+    updates.push({id:row.id,employee_id:d.employee_id,loan:advance_deduction,absence:attendance.absence_deduction,net});
+   }
+   if(!statements.length)return response({ok:true,updated:0});
+   statements.push(db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)")
+    .bind(crypto.randomUUID(),u.email,batch.id,'payroll_deductions_sync',now,JSON.stringify({month:batch.data.month,updated:updates.length})));
+   const result=await db.batch(statements);
+   if(result.slice(0,-1).some(x=>!x.meta?.changes))throw Error('تغير المسير أثناء المزامنة؛ حدّث الصفحة ثم أعد المحاولة');
+   return response({ok:true,updated:updates.length});
+  }
   if(action==='add_employee'){
    if(!prepAllowed||!permission(u,'payroll','edit')||batch.status!=='draft')return err('الإضافة متاحة لمسير قيد التجهيز وبصلاحية إعداد المسير فقط',403);
    if(batch.data.month!==monthKsa())throw Error('لا يمكن إضافة موظف إلى شهر سابق أو لاحق');
