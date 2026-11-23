@@ -1441,15 +1441,16 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {!canConfigure&&<p className="review-warning-box">التعديل متاح لمسؤول النظام والمالية فقط.</p>}
  <form style={{display:'grid',gap:11}} onSubmit={async e=>{
   e.preventDefault();if(!canConfigure)return;
-  const request={action:'configure_advance_schedule',module:'advances',id:loan.id,revision:loan.revision,kind:schedulePanel.kind,month:schedulePanel.month,schedule_mode:schedulePanel.mode};
+  const request={action:'configure_advance_schedule',module:'advances',id:loan.id,revision:loan.revision,kind:schedulePanel.kind,month:schedulePanel.month,schedule_mode:schedulePanel.mode,monthly_deduction:schedulePanel.monthly_deduction??loan.data.monthly_deduction??loan.data.installment_amount};
   if(!window.confirm('تأكيد تحديث جدول السلفة؟ ستنعكس التغييرات في المسيرات التي لم تُنشأ بعد فقط.'))return;
   setSaving(true);
   try{await post(request);await refresh();close();notify('تم تحديث جدولة السلفة. راجع مسير الرواتب قبل الاعتماد.')}catch(err){notify(err.message||'تعذر حفظ جدول السلفة')}finally{setSaving(false)}
  }}>
  <label>طريقة التحصيل<select value={schedulePanel.mode} onChange={e=>setSchedulePanel(p=>({...p,mode:e.target.value,kind:'set_mode'}))}><option value="auto">خصم تلقائي من مسير الرواتب</option><option value="manual">سداد يدوي — دون خصم تلقائي</option></select></label>
- <label>الإجراء<select value={schedulePanel.kind} onChange={e=>setSchedulePanel(p=>({...p,kind:e.target.value}))}><option value="set_mode">تغيير طريقة التحصيل</option><option value="defer_installment">تأجيل قسط شهر واحد</option><option value="defer_loan">تأجيل السلفة بالكامل حتى نهاية الشهر المحدد</option><option value="resume">إلغاء التأجيل للأشهر من الحالي إلى المحدد</option></select></label>
- {schedulePanel.kind!=='set_mode'&&<label>الشهر المستهدف<input type="month" required min={currentMonth} value={schedulePanel.month} onChange={e=>setSchedulePanel(p=>({...p,month:e.target.value}))}/></label>}
- <small>تأجيل القسط يستبعد الشهر المختار من الجدولة، ثم يستمر التحصيل في الأشهر التالية حتى سداد كامل الرصيد. إذا تم توليد مسير للفترة، يجب تعديل خصمه من المسير ولا يُغيَّر بصمت.</small>
+ <label>الإجراء<select value={schedulePanel.kind} onChange={e=>setSchedulePanel(p=>({...p,kind:e.target.value}))}><option value="set_mode">تغيير طريقة التحصيل</option><option value="set_amount">تعديل مبلغ الاستقطاع الشهري</option><option value="defer_installment">تأجيل قسط شهر واحد</option><option value="defer_loan">تأجيل السلفة بالكامل حتى نهاية الشهر المحدد</option><option value="resume">إلغاء التأجيل للأشهر من الحالي إلى المحدد</option></select></label>
+ {!['set_mode','set_amount'].includes(schedulePanel.kind)&&<label>الشهر المستهدف<input type="month" required min={currentMonth} value={schedulePanel.month} onChange={e=>setSchedulePanel(p=>({...p,month:e.target.value}))}/></label>}
+ {schedulePanel.kind==='set_amount'&&<label>مبلغ الاستقطاع الشهري الجديد (ريال سعودي)<input type="number" min="0.01" max={Number(loan.data.amount||0)} step="0.01" required value={schedulePanel.monthly_deduction??loan.data.monthly_deduction??loan.data.installment_amount??''} onChange={e=>setSchedulePanel(p=>({...p,monthly_deduction:e.target.value}))}/></label>}
+  <small>تأجيل القسط يستبعد الشهر المختار من الجدولة، ثم يستمر التحصيل في الأشهر التالية حتى سداد كامل الرصيد. إذا تم توليد مسير للفترة، يجب تعديل خصمه من المسير ولا يُغيَّر بصمت.</small>
  <div className="row-actions" style={{display:'flex',gap:8}}><button type="submit" className="primary" disabled={saving||!canConfigure}>حفظ الجدولة</button><button type="button" disabled={saving} onClick={close}>إغلاق</button></div>
  </form>
  </section></div>;
