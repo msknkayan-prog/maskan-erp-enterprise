@@ -23,7 +23,7 @@ export const modules={
 };
 // Worksite company is distinct from the legal employer used for access and payroll.
 modules.employees.fields.splice(2,0,f('working_company','الشركة التي يعمل بها','work_company'));
-export const workflow=['draft','project_manager','projects_director','hr','finance','approved'];
+export const workflow=['draft','project_manager','projects_director','hr','approved'];
 // The finance approver also manages the Accounting project. Permissions for
 // approval stages are tied to existing verified accounts, not exclusive roles.
 export const requestApprovalOwners={

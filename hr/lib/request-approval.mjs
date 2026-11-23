@@ -3,8 +3,7 @@
 export const requestApprovalStages=[
  {id:'project_manager',title:'اعتماد مدير المشروع',name:'مدير المشروع'},
  {id:'projects_director',title:'اعتماد إدارة المشاريع',name:'مجدي محجوب — المدير العام'},
- {id:'hr',title:'مراجعة شؤون الموظفين',name:'م. محمد يوسف'},
- {id:'finance',title:'اعتماد المالية والصرف',name:'مصعب عبد القيوم'}
+ {id:'hr',title:'اعتماد شؤون الموظفين',name:'م. محمد يوسف'}
 ];
 
 export function requestStageView(row,stage){
@@ -14,7 +13,7 @@ export function requestStageView(row,stage){
  if(current==='rejected')return {kind:'stopped',label:'مرفوض'};
  if(current==='returned')return index===0?{kind:'returned',label:'معاد للتصحيح'}:{kind:'future',label:'معلّق'};
  if(current==='draft')return index===0?{kind:'waiting',label:'إعداد الطلب'}:{kind:'future',label:'لم يبدأ'};
- const next=current==='approved'||current==='paid'?requestApprovalStages.length:requestApprovalStages.findIndex(item=>item.id===current);
+ const next=['approved','paid','finance'].includes(current)?requestApprovalStages.length:requestApprovalStages.findIndex(item=>item.id===current);
  if(next<0)return {kind:'future',label:'لم يبدأ'};
  if(index<next)return {kind:'done',label:'تم الاعتماد'};
  if(index===next)return {kind:'waiting',label:'بانتظار الاعتماد'};

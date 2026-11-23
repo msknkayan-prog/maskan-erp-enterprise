@@ -46,15 +46,15 @@ import {employeeRegisterValue,employeeRegisterFields} from '../lib/employee-regi
 import {requestApprovalStages,requestStageView,requestStageTimestamp} from '../lib/request-approval.mjs';
 
 test('request approval register shows four role-specific status columns with no invented dates',()=>{
- assert.deepEqual(requestApprovalStages.map(stage=>stage.id),['project_manager','projects_director','hr','finance']);
+ assert.deepEqual(requestApprovalStages.map(stage=>stage.id),['project_manager','projects_director','hr']);
  const statuses=[
-  ['draft',['waiting','future','future','future']],
-  ['project_manager',['waiting','future','future','future']],
-  ['projects_director',['done','waiting','future','future']],
-  ['hr',['done','done','waiting','future']],
-  ['finance',['done','done','done','waiting']],
-  ['approved',['done','done','done','done']],
-  ['paid',['done','done','done','done']]
+  ['draft',['waiting','future','future']],
+  ['project_manager',['waiting','future','future']],
+  ['projects_director',['done','waiting','future']],
+  ['hr',['done','done','waiting']],
+  ['finance',['done','done','done']],
+  ['approved',['done','done','done']],
+  ['paid',['done','done','done']]
  ];
  for(const [status,expected] of statuses)assert.deepEqual(requestApprovalStages.map(stage=>requestStageView({status},stage.id).kind),expected,status);
  assert.equal(requestStageView({status:'returned'},'project_manager').kind,'returned');
@@ -1593,6 +1593,18 @@ test('employee direct manager is a verified roster choice reflected in request s
  assert.match(ui,/setMembers\(d\.rows\)/);
  assert.match(ui,/f\.type!=='internal'/);
 });
+test('employee requests end at HR; finance is a separate disbursement operation',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const mod=readFileSync(new URL('../backend/modules.mjs',import.meta.url),'utf8');
+ assert.equal(requestApprovalStages.length,3);
+ assert.equal(requestApprovalStages.some(stage=>stage.id==='finance'),false);
+ assert.match(mod,/workflow=\['draft','project_manager','projects_director','hr','approved'\]/);
+ assert.match(ui,/مدير المشروع ← مجدي محجوب، المدير العام \/ إدارة المشاريع ← م\. محمد يوسف، شؤون الموظفين/);
+ assert.match(server,/routedRequest&&current==='finance'\?'approved'/);
+ assert.match(server,/legacy_finance_stage_migrated_at/);
+ assert.match(server,/action==='disburse'/);
+});
 test('leave and advance approvals show assigned project manager and horizontal stages',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const print=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
@@ -1970,7 +1982,7 @@ test('employee requests are assigned to project owner, and director cannot appro
  assert.match(backend,/const managerEmail=String\(projectData\.manager_email/);
  assert.match(backend,/details\.project_manager=\{name:projectData\.manager_name/);
  assert.match(backend,/هذا الطلب بانتظار اعتماد مدير المشروع المعين/);
- assert.match(backend,/current==='finance'&&!isRequestFinanceActor\(u\)/);
+ assert.match(backend,/current==='finance'&&routedRequest&&!\['admin','hr'\].includes\(u.role\)/);
  assert.match(ui,/اعتماد مدير المشروع/);
 });
 test('project manager can see own employee requests but a separate supervisor cannot',async()=>{
