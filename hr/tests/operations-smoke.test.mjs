@@ -32,7 +32,7 @@ test('Musab receives finance requests across projects, while other project data 
  assert.equal(visible(musab,atDirector,records),false);
  assert.equal(visible(musab,worker,records),true);
  assert.equal(visible(musab,project,records),false);
- assert.equal(visible(other,atFinance,records),true); // Its assigned project manager remains eligible.
+ assert.equal(visible(other,atFinance,records),false); // Financial requests no longer route to the project owner.
  assert.equal(visible(musab,{...worker,id:'not-in-finance',data:{project_id:'project2'}},records),false);
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  assert.match(backend,/routedRequest\?\(u\.role!=='admin'&&\!isRequestStageActor\(u,current\)\)/);
@@ -1822,11 +1822,11 @@ test('finance approval of advances requires named finance controller or active s
  assert.match(backend,/advance_receipt_amount:Number/);
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/async function financeApproveAdvance/);
- assert.match(ui,/اعتماد المالية — مصعب عبد القيوم \/ مدير النظام/);
+ assert.match(ui,/اعتماد صرف المبلغ/);
  assert.match(ui,/async function disburse/);
  assert.match(ui,/function advanceReceipt/);
  assert.match(ui,/سند تسليم عهدة \/ سلفة موظف/);
- assert.match(ui,/row.status==='paid'&&<button type="button" onClick=\{\(\)=>advanceReceipt\(row\)\}/);
+ assert.match(ui,/onClick=\{\(\)=>advanceReceipt\(row\)\}>إيصال صرف السلفة/);
 });
 test('payroll cost center follows employee project on synchronizing existing payroll',()=>{
  const api=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
@@ -2304,8 +2304,8 @@ test('project manager can see own employee requests but a separate supervisor ca
  const supervisor={role:'project_manager',email:'supervisor@example.test',projects:'[]',companies:'*'};
  const owner={...supervisor,email:'projectowner@example.test',projects:'["p"]'};
  for(const request of requests){
-  assert.equal(visible(supervisor,request,rows),false);
-  assert.equal(visible(owner,request,rows),true);
+  assert.equal(visible(supervisor,request,rows),true);
+  assert.equal(visible(owner,request,rows),false);
  }
  assert.equal(visible(owner,project,rows),true);
  assert.equal(visible({...owner,companies:'["رياح الاعمار"]'},requests[0],rows),false);
@@ -2328,7 +2328,7 @@ test('advance repayment ledger is embedded and sidebar hides redundant repayment
  assert.match(ui,/module==='advances'&&permittedRead\(user\|\|\{\},'repayments'\)/);
  assert.match(ui,/r\.module==='repayments'&&!r\.data\?\._deleted/);
  assert.match(ui,/!\['project_managers','repayments'\]\.includes\(k\)/);
- assert.match(ui,/setLinkedFinance\(\{kind:module==='leave'\?'leave_dues':'repayments'/);
+ assert.match(ui,/setLinkedFinance\(\{kind:'repayments',parentId:row.id/);
  assert.match(ui,/سداد افتتاحي/);
  assert.match(modules,/repayments:\{label:'سداد السلف'/);
  assert.match(modules,/leave_dues:\{label:'مستحقات الإجازة'/);
