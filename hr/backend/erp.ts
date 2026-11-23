@@ -674,7 +674,7 @@ if(body.action==='record_opening_advance_repayment'){
  if(body.action==='approve_advance_finance')throw Error('تم إلغاء مرحلة المالية المنفصلة؛ يعتمد المدير العام السلفة ويقيدها مباشرة في سجل الموظف');
  if(body.action==='gm_approve_advance'||body.action==='disburse'){
  // The GM is the only final authorizer. Old finance-approved records can be finalized without replaying approvals.
- if(mod!=='advances'||!old||u.role!=='admin'||!permission(u,mod,'approve')||!['approved','finance_approved'].includes(old.status))throw Error('اعتماد وقيد السلفة النهائي من صلاحية المدير العام وبعد استكمال الاعتمادات الإدارية');
+ if(mod!=='advances'||!old||!isRequestFinanceActor(u)||!(permission(u,mod,'approve')||String(u.email||'').trim().toLowerCase()===requestApprovalOwners.finance.email)||!['approved','finance_approved'].includes(old.status))throw Error('اعتماد مبلغ السلفة من صلاحية المدير العام أو مصعب عبد القيوم (المالية) بعد الاعتمادات الإدارية');
  const source=JSON.parse(old.data||'{}');
  const reference='ADV-'+String(old.code||old.id).replace(/[^\p{L}\p{N}-]/gu,'').slice(0,40);
  if(!(Number(source.amount)>0)||!Number.isFinite(Number(source.amount)))throw Error('مبلغ السلفة غير صالح للاعتماد');
@@ -687,7 +687,7 @@ if(body.action==='record_opening_advance_repayment'){
  const amount=Math.round(Number(source.amount)*100)/100;
  const entry={advance_id:old.id,amount,reference,approved_at:now,approved_by:u.email,company:old.company,project_id:source.project_id||employeeData.project_id||''};
  const updatedEmployee={...employeeData,advance_disbursement_ledger:[...existingLedger,entry],advance_total_received:Math.round((Number(employeeData.advance_total_received||0)+amount)*100)/100,last_advance_receipt_reference:reference,last_advance_receipt_at:now};
- const data={...source,payment_reference:reference,paid_at:now,paid_by:u.email,gm_approved_at:now,gm_approved_by:u.email,advance_receipt_no:reference,advance_receipt_date:saudiDate(),advance_receipt_amount:amount,approval_accounting_type:'general_manager_direct',advance_recorded_in_employee_ledger:true};
+ const data={...source,payment_reference:reference,paid_at:now,paid_by:u.email,final_approved_at:now,final_approved_by:u.email,...(u.role==='admin'?{gm_approved_at:now,gm_approved_by:u.email}:{finance_approved_at:now,finance_approved_by:u.email}),advance_receipt_no:reference,advance_receipt_date:saudiDate(),advance_receipt_amount:amount,approval_accounting_type:u.role==='admin'?'general_manager_direct':'authorized_finance_direct',advance_recorded_in_employee_ledger:true};
  const paidLoans=(await db.prepare("SELECT * FROM records WHERE module='advances' AND status='paid'").all()).results.map(parse).filter((r:any)=>!r.data?._deleted);
  const repayments=(await db.prepare("SELECT * FROM records WHERE module='repayments'").all()).results.map(parse).filter((r:any)=>!r.data?._deleted);
  const sums=new Map();
@@ -726,7 +726,7 @@ if(body.action==='record_opening_advance_repayment'){
   synced.push({row_id:row.id,month,discount:discount/100});
  }
  statements.push(db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)')
- .bind(crypto.randomUUID(),u.email,old.id,'record_disbursement',now,JSON.stringify({reference,payroll_synced:synced,employee_id:employee.id,amount,gm_direct:true}),old.id,mutation));
+ .bind(crypto.randomUUID(),u.email,old.id,'record_disbursement',now,JSON.stringify({reference,payroll_synced:synced,employee_id:employee.id,amount,approved_by:u.email,approver_role:u.role}),old.id,mutation));
  const result=await db.batch(statements);
  if(result.slice(0,-1).some((v:any)=>!v.meta?.changes))throw Error('تغير سجل السلفة أو مسير الرواتب أثناء الحفظ؛ حدّث الصفحة ثم أعد المحاولة');
  return json({ok:true,status:'paid',employee_id:employee.id,receipt_no:reference,payroll_synced:synced.length});
