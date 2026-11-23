@@ -507,8 +507,17 @@ if(body.action==='configure_advance_schedule'){
  if(!['approved','finance_approved','paid'].includes(old.status))throw Error('تعديل الجدولة متاح للسلف المعتمدة أو المصروفة فقط');
  const data=JSON.parse(old.data||'{}'),kind=String(body.kind||''),month=String(body.month||'');
  const todayMonth=saudiDate().slice(0,7);
- if(!['set_mode','defer_installment','defer_loan','resume'].includes(kind))throw Error('إجراء الجدولة غير صالح');
- if(kind==='set_mode'){
+ if(!['set_mode','set_amount','defer_installment','defer_loan','resume'].includes(kind))throw Error('إجراء الجدولة غير صالح');
+ if(kind==='set_amount'){
+   const cents=advanceCents(body.monthly_deduction),original=advanceCents(data.amount);
+   if(!Number.isFinite(Number(body.monthly_deduction))||cents<=0||cents>original||!Number.isSafeInteger(cents))throw Error('مبلغ الاستقطاع الشهري غير صالح');
+   const payrollRows=(await db.prepare("SELECT * FROM records WHERE module='payroll'").all()).results.map(parse).filter((r:any)=>r.data?.employee_id===data.employee_id&&Array.isArray(r.data?.advance_allocations)&&r.data.advance_allocations.some((item:any)=>item.advance_id===old.id));
+   const batches=(await db.prepare("SELECT id,status FROM records WHERE module='payroll_batches'").all()).results;
+   const paidBatches=new Set(batches.filter((b:any)=>b.status==='paid').map((b:any)=>b.id));
+   if(payrollRows.some((r:any)=>!paidBatches.has(r.data.batch_id)&&r.data.month>=todayMonth))throw Error('يوجد مسير مفتوح مرتبط بالسلفة؛ اعتمد أو صحح خصمه قبل تعديل القسط');
+   data.monthly_deduction=cents/100;
+   data.installment_amount=cents/100;
+ }else if(kind==='set_mode'){
   if(!['auto','manual'].includes(body.schedule_mode))throw Error('اختر جدولة تلقائية أو سدادًا يدويًا');
   if(body.schedule_mode==='auto'&&(!Number(data.installments)||!data.first_month))throw Error('حدد عدد الأقساط وشهر أول قسط قبل تفعيل الجدولة');
   data.schedule_mode=body.schedule_mode;
@@ -533,10 +542,10 @@ if(body.action==='configure_advance_schedule'){
  }
  const res=await db.batch([
   db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='advances' AND revision=? AND status IN ('paid','approved','finance_approved')").bind(JSON.stringify(data),now,mutation,old.id,old.revision),
-  db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,old.id,'advance_schedule_change',now,JSON.stringify({kind,month:month||null,schedule_mode:data.schedule_mode,deferred_months:data.deferred_months||[]}))
+  db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,old.id,'advance_schedule_change',now,JSON.stringify({kind,month:month||null,schedule_mode:data.schedule_mode,monthly_deduction:data.monthly_deduction,deferred_months:data.deferred_months||[]}))
  ]);
  if(!res[0].meta.changes)throw Error('تم تعديل السلفة من مستخدم آخر؛ حدث الصفحة');
- return json({ok:true,deferred_months:data.deferred_months||[],schedule_mode:data.schedule_mode||'auto'});
+ return json({ok:true,deferred_months:data.deferred_months||[],schedule_mode:data.schedule_mode||'auto',monthly_deduction:data.monthly_deduction||data.installment_amount||0});
 }
 
 if(body.action==='record_opening_advance_repayment'){
