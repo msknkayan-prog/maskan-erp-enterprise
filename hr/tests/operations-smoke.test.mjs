@@ -2676,3 +2676,21 @@ test('employee forms show immutable automatically generated numbers and preserve
  assert.match(api,/\['appointments','employees'\]\.includes\(mod\)&&!originalNo/);
  assert.match(api,/mod==='employees'\?'EMP':'APT'/);
 });
+
+
+test('new appointment can create the full employee master and probation in one atomic write',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const modules=readFileSync(new URL('../backend/modules.mjs',import.meta.url),'utf8');
+ assert.match(ui,/action:'hire_from_appointment'/);
+ assert.match(ui,/تعيين موظف جديد وإضافته للسجل تلقائيًا/);
+ assert.match(ui,/setNewHire/);
+ assert.match(backend,/body.action==='hire_from_appointment'/);
+ assert.match(backend,/employee_created_from_appointment/);
+ assert.match(backend,/appointment_hire_created/);
+ assert.match(backend,/if\(duplicate\)throw Error/);
+ assert.match(backend,/probation_end:probationEnd/);
+ assert.match(backend,/db.batch\(\[/);
+ assert.match(modules,/f\('probation_end','نهاية فترة التجربة','date'\)/);
+ assert.match(modules,/f\('employee_id','الموظف','employee'\)/);
+});
