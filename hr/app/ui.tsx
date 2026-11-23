@@ -469,7 +469,7 @@ async function gmFinalizeAdvance(row){
  if(!['approved','finance_approved'].includes(row.status))return notify('أكمل الاعتمادات الإدارية أولاً');
  if(!window.confirm('اعتماد السلفة بمبلغ '+money(row.data.amount)+' ر.س وقيدها في سجل الموظف وإصدار سند صرف؟ هذا لا ينفذ حوالة بنكية، ويستلزم توقيع المستلم لإثبات التسليم.'))return;
  setSaving(true);
- try{const result=await post({action:'gm_approve_advance',module:'advances',id:row.id,revision:row.revision});await refresh();notify('تم قيد السلفة للموظف، سند رقم '+result.receipt_no+'. يمكن طباعته الآن.');}
+ try{const result=await post({action:'gm_approve_advance',module:'advances',id:row.id,revision:row.revision});await refresh();notify('تم قيد السلفة للموظف بسند '+result.receipt_no+'؛ '+result.note+' · بداية الخصم: '+(result.first_deduction_month||'حسب الجدولة')+'.');}
  catch(e){notify(e.message||'تعذر اعتماد السلفة')}finally{setSaving(false)}
 }
 
@@ -521,7 +521,7 @@ async function gmApproveAllStages(row){
   if(row.module==='advances'){
    const result=await post({action:'gm_approve_advance',module:'advances',id:row.id,revision});
    completed++;
-   notify('تم اعتماد السلفة وقيدها للموظف مباشرة بسند '+result.receipt_no+'. يمكن طباعة السند من خانة الإجراءات.');
+   notify('تم اعتماد السلفة وقيدها للموظف بسند '+result.receipt_no+'؛ '+result.note+'.');
   }else notify('تم اعتماد طلب الإجازة بعد '+completed+' مراحل.');
  }catch(error){
   notify('لم تكتمل كل الاعتمادات: '+(error?.message||'خطأ غير معروف')+'. تم حفظ '+completed+' مرحلة صحيحة فقط، وقد لا يكون القيد المالي اكتمل؛ تحقق من حالة الطلب بعد تحديث البيانات.');
