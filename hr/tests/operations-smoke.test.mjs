@@ -2465,3 +2465,19 @@ test('return save computes payroll attendance in its own transaction and suggest
  assert.match(ui,/actual_return:expected&&expected<=today\?expected:''/);
  assert.match(ui,/يمكن تصحيحه يدويًا/);
 });
+
+test('GM unified employee request action approves stages with an audit trail and does not mark loan as paid',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/async function gmApproveAllStages\(row\)/);
+ assert.match(ui,/await post\(\{action:'transition',module:row.module,id:row.id,revision,decision:'approve'/);
+ assert.match(ui,/await post\(\{action:'approve_advance_finance',module:'advances',id:row.id,revision/);
+ assert.match(ui,/اعتماد موحد حتى المالية/);
+ assert.match(ui,/اعتماد الإجازة بالكامل/);
+ assert.match(ui,/module==='advances'\?\[\.\.\.approvalStages,\{id:'advance_finance'/);
+ assert.match(ui,/توثيق الصرف وإصدار الإيصال/);
+ assert.match(api,/const isDirector=u.role==='admin'&&u.is_active!==false/);
+ assert.match(api,/advance_finance_approval/);
+ assert.match(api,/if\(body.action==='disburse'\)/);
+ assert.doesNotMatch(ui.slice(ui.indexOf('async function gmApproveAllStages'),ui.indexOf('const normalizeSearch=')),/action:'disburse'/);
+});
