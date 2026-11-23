@@ -758,12 +758,29 @@ if(body.action==='leave_dues_workflow'){
  if(decision==='approve')details.dues_approval={...tracking,director_by:u.email,director_at:now,director_name:magdiProjectManagerName};
  if(decision==='return'||decision==='reject')details.dues_approval={...tracking,decision_by:u.email,decision_at:now,decision_reason:reason,...(decision==='return'?{director_by:null,director_at:null}:{})};
  if(decision==='pay'){details.payment_reference=reference;details.payment_method=method;details.paid_at=now;details.paid_by=u.email;}
+ // Atomically record approved payouts in the employee's monetary ledger, not the leave-days balance.
+ const employeeId=String(JSON.parse(leave.data||'{}').employee_id||'');
+ let employeeLedgerStatement:any=null;
+ if(decision==='pay'){
+  if(!employeeId)throw Error('طلب الإجازة غير مرتبط بموظف؛ لا يمكن توثيق الصرف');
+  const employeeRecord=await db.prepare("SELECT id,data,revision FROM records WHERE id=? AND module='employees' AND company=?").bind(employeeId,old.company).first<any>();
+  if(!employeeRecord)throw Error('سجل الموظف المستفيد غير موجود في الشركة');
+  const employeeData=JSON.parse(employeeRecord.data||'{}');
+  const paidAmount=Math.round(Number(details.net)*100)/100;
+  const ledger=Array.isArray(employeeData.leave_payment_ledger)?employeeData.leave_payment_ledger:[];
+  if(ledger.some((entry:any)=>String(entry.dues_id)===String(old.id)))throw Error('تم تسجيل صرف هذه المستحقات سابقًا في رصيد الموظف');
+  const ledgerEntry={dues_id:old.id,leave_id:details.leave_id,amount:paidAmount,reference,method,at:now,by:u.email};
+  const updatedEmployee={...employeeData,leave_payment_ledger:[...ledger,ledgerEntry],leave_dues_paid_total:Math.round((Number(employeeData.leave_dues_paid_total||0)+paidAmount)*100)/100,last_leave_payment_amount:paidAmount,last_leave_payment_at:now,last_leave_payment_reference:reference};
+  employeeLedgerStatement=db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND company=? AND revision=?")
+    .bind(JSON.stringify(updatedEmployee),now,mutation,employeeId,old.company,employeeRecord.revision);
+ }
  const result=await db.batch([
   db.prepare("UPDATE records SET status=?,data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND status=?").bind(next,JSON.stringify(details),now,mutation,old.id,old.revision,state),
+  ...(employeeLedgerStatement?[employeeLedgerStatement]:[]),
   db.prepare("INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)").bind(crypto.randomUUID(),u.email,old.id,'leave_dues_'+decision,now,JSON.stringify({from:state,to:next,reason,reference:decision==='pay'?reference:undefined,amount:details.net}),old.id,mutation)
  ]);
- if(!result[0].meta.changes)throw Error('تغير بيان المستحقات؛ حدث الصفحة قبل تكرار القرار');
- return json({ok:true,status:next});
+ if(!result[0]?.meta?.changes||(employeeLedgerStatement&&!result[1]?.meta?.changes))throw Error('لم يكتمل حفظ مستحقات الإجازة ورصيد الموظف؛ أعد تحديث السجلات وتحقق من مرجع الصرف');
+ return json({ok:true,status:next,employee_id:decision==='pay'?employeeId:undefined,employee_ledger_updated:decision==='pay'});
 }
 if(body.action==='transition'){if(mod==='leave_dues')throw Error('مستحقات الإجازة تعتمد حصريًا من المدير العام قبل المالية');if(['payroll','payroll_batches'].includes(mod))throw Error('اعتماد المسيرات الشهرية يتم حصريًا من نافذة المسير الشهري');if(!permission(u,mod,'approve'))throw Error('403');if(!old)throw Error('السجل غير موجود');if(operationalModules.includes(mod)||['repayments'].includes(mod))throw Error('هذا السجل لا يتطلب مسار اعتماد');const current=old.status;const routedRequest=['leave','advances','resignations'].includes(mod);let next=mod==='payroll'?(current==='draft'?'hr':current==='hr'?'finance':current==='finance'?'approved':null):(routedRequest&&current==='finance'?'approved':current==='draft'?workflow[1]:workflow[workflow.indexOf(current)+1]);const decision=body.decision||'approve';if(decision==='return')next='draft';if(decision==='reject')next='rejected';if(!['approve','return','reject'].includes(decision))throw Error('قرار غير صالح');if(decision!=='approve'&&!String(body.note||'').trim())throw Error('سبب الإعادة أو الرفض مطلوب');if(!next)throw Error('السجل مغلق');if(current==='draft'&&decision!=='approve')throw Error('القرار غير متاح للمسودة');if(current==='draft'){if(!permittedWrite(u,mod))throw Error('403');}else if(current==='finance'&&routedRequest&&!['admin','hr'].includes(u.role))throw Error('هذه مرحلة قديمة؛ ترحيل الطلب متاح لشؤون الموظفين أو المدير العام فقط');else if(current==='finance'&&!routedRequest&&!isRequestFinanceActor(u))throw Error('403');else if(routedRequest?(u.role!=='admin'&&!isRequestStageActor(u,current)):(u.role!=='admin'&&u.role!==current))throw Error('403');const details=JSON.parse(old.data);
 if(routedRequest&&!details.employee_id)throw Error('لا يمكن توجيه طلب دون موظف مرتبط بمشروع');
