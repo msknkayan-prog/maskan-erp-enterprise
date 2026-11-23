@@ -2583,3 +2583,19 @@ test('new HR records receive automatic immutable database-sequenced document num
  assert.match(ui,/f.key==='document_no'\?<input type="text" readOnly/);
  assert.match(paper,/row.data\?\.document_no\|\|row.data\?\.reference\|\|row.code/);
 });
+
+
+test('Dashboard navigation and compact executive layout do not expose recent activity',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const start=ui.indexOf("{module==='overview'&&(()=>{");
+ const end=ui.indexOf("\\n{spec&&<>",start);
+ const dashboard=ui.slice(start,end);
+ assert.match(ui,/<LayoutDashboard size=\{19\}\/>Dashboard<\/button>/);
+ assert.match(ui,/overview:'Dashboard \| لوحة المؤشرات'/);
+ assert.match(dashboard,/dashboard-company-summary/);
+ assert.match(dashboard,/ملخص الشركات/);
+ assert.match(dashboard,/الملخص التنفيذي/);
+ assert.doesNotMatch(dashboard,/آخر العمليات/);
+ assert.doesNotMatch(dashboard,/activity-list/);
+ assert.doesNotMatch(dashboard,/من أين تبدأ/);
+});
