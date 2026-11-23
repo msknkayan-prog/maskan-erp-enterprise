@@ -1593,6 +1593,27 @@ test('employee direct manager is a verified roster choice reflected in request s
  assert.match(ui,/setMembers\(d\.rows\)/);
  assert.match(ui,/f\.type!=='internal'/);
 });
+test('approved leaves automatically appear in return-to-work queue and load employee details',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ for(const text of ['الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة','إجازة بانتظار المباشرة','تسجيل المباشرة','leave.data.employee_id','return_record_id','leave.data.expected_return','setEdit({company:leave.company','آخر مباشرة من إجازة مسجلة'])assert.ok(ui.includes(text),text);
+ assert.match(ui,/r\.module==='leave'&&r\.status==='approved'/);
+ assert.match(ui,/r\.module==='returns'&&r\.company===leave.company&&r\.data\?\.leave_id===leave\.id/);
+ assert.match(ui,/actual_return:''/);
+});
+test('return-to-work records link leave and employee with duplicate and stale-write protection',()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const client=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ const server=readFileSync(new URL('../backend/modules.mjs',import.meta.url),'utf8');
+ for(const source of [client,server]){
+  assert.match(source,/f\('last_return_date','آخر مباشرة بعد إجازة','internal'\)/);
+  assert.match(source,/f\('return_record_id','مرجع محضر المباشرة','internal'\)/);
+  assert.match(source,/f\('leave_id','طلب الإجازة المعتمد','leave',true\)/);
+ }
+ for(const marker of ['returnLeaveRecord=linked','leave_start=String(leave.start','leave_end=String(leave.end','existingReturn&&String(existingReturn.id)!==String(id)','updatedLeave={...leaveData,return_record_id:id','last_return_date:data.actual_return','returnSyncUpdates','leave_id:mod===\'returns\'?data.leave_id','module=\'employees\' AND revision=?'])assert.ok(backend.includes(marker),marker);
+ assert.match(backend,/UPDATE records SET data=\?,revision=revision\+1,updated_at=\?,mutation=\? WHERE id=\? AND module='leave' AND revision=\?/);
+ assert.match(backend,/returnSyncUpdates\.some/);
+});
+
 test('employee requests end at HR; finance is a separate disbursement operation',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
