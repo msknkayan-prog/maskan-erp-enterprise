@@ -911,8 +911,8 @@ test('manager account company permissions are checked at project linking and req
  const source=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  assert.match(source,/SELECT role,is_active,companies FROM members WHERE email=\?/);
  assert.match(source,/manager\.companies/);
- assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة المحددة/);
- assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة المحددة/);
+ assert.match(source,/المدير المباشر لا يملك صلاحية شركة الموظف/);
+ assert.match(source,/المدير المباشر لا يملك صلاحية شركة الموظف/);
 });
 
 test('leave dues select employee then filter approved leave and populate salary and days',()=>{
@@ -1066,7 +1066,7 @@ test('project assignment and employee request details use project manager direct
  assert.match(ui,/managerDirectoryForRequest\(edit,edit\.company\)/);
  assert.match(erp,/سجّل بيانات مدير المشروع أولًا في دليل مدراء المشاريع للشركة/);
  assert.match(erp,/data\.project_manager=\{name:manager\?\.name/);
- assert.match(erp,/details\.project_manager=\{name:projectData\.manager_name/);
+ assert.match(erp,/details\.direct_manager=\{name:managerName/);
  assert.match(erp,/UPDATE records SET status=\?,data=\?,revision=revision\+1/);
 });
 
