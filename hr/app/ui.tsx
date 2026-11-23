@@ -34,7 +34,7 @@ function ApprovalStageCell({row,stage,managerName}){
 function ApprovalCompactStrip({row,managerName,approvable=false,saving=false,onApprove,onReturn,onReject,canFinance=false,onFinanceApprove,onDisburse}){
  const title=stage=>stage.id==='project_manager'?(row.data?.direct_manager?.name||row.data?.project_manager?.name||managerName||stage.name):stage.name;
  return <div dir="rtl" role="group" aria-label="مراحل اعتماد الطلب" style={{display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',minWidth:'max-content',padding:'4px 2px'}}>
-  {(row.module==='advances'?[...requestApprovalStages,advanceFinanceStage,advanceDisbursementStage]:requestApprovalStages).map(stage=>{
+  {(requestApprovalStages).map(stage=>{
    const current=requestStageView(row,stage.id);
    const bg=current.kind==='done'?'#e7f4e8':current.kind==='waiting'?'#fff0d1':current.kind==='stopped'?'#fde4e4':'#f0f1ee';
    const color=current.kind==='done'?'#216c37':current.kind==='waiting'?'#925f08':current.kind==='stopped'?'#a52323':'#68746f';
@@ -461,16 +461,15 @@ async function gmConfirmReturn(leave,employee,expected){
  }catch(err){notify(err.message||'تعذر اعتماد مباشرة الموظف')}
  finally{setSaving(false)}
 }
-async function financeApproveAdvance(row){
- if(!window.confirm('تأكيد اعتماد المالية لصرف السلفة بقيمة '+money(row.data.amount)+' ر.س؟ هذه موافقة مالية مستقلة قبل توثيق الصرف.'))return;
- setSaving(true);try{await post({action:'approve_advance_finance',module:'advances',id:row.id,revision:row.revision});notify('تم اعتماد السلفة للصرف من المالية');await refresh()}catch(e){notify(e.message)}finally{setSaving(false)}
+async function gmFinalizeAdvance(row){
+ if(user?.role!=='admin')return notify('اعتماد السلفة وتقييدها في حساب الموظف للمدير العام فقط');
+ if(!['approved','finance_approved'].includes(row.status))return notify('أكمل الاعتمادات الإدارية أولاً');
+ if(!window.confirm('اعتماد السلفة بمبلغ '+money(row.data.amount)+' ر.س وقيدها في سجل الموظف وإصدار سند صرف؟ هذا لا ينفذ حوالة بنكية، ويستلزم توقيع المستلم لإثبات التسليم.'))return;
+ setSaving(true);
+ try{const result=await post({action:'gm_approve_advance',module:'advances',id:row.id,revision:row.revision});await refresh();notify('تم قيد السلفة للموظف، سند رقم '+result.receipt_no+'. يمكن طباعته الآن.');}
+ catch(e){notify(e.message||'تعذر اعتماد السلفة')}finally{setSaving(false)}
 }
-async function disburse(row){
- const reference=window.prompt('مرجع صرف السلفة الفعلي (سند/حوالة) — هذا الإجراء يوثّق الصرف بعد اعتماد المالية ولا ينفذ تحويلاً بنكياً');
- if(!reference?.trim())return;
- if(!window.confirm('تأكيد صرف السلفة فعلياً بقيمة '+money(row.data.amount)+' ر.س؟ بعد الصرف ستبدأ الجدولة ويتاح سند التسليم.'))return;
- setSaving(true);try{await post({action:'disburse',module:'advances',id:row.id,revision:row.revision,reference:reference.trim()});notify('تم توثيق صرف السلفة وربطها بجدولة الاستقطاع. يمكن طباعة سند التسليم');await refresh()}catch(e){notify(e.message)}finally{setSaving(false)}
-}
+
 function advanceReceipt(row){
  if(row.module!=='advances'||row.status!=='paid'||!row.data?.payment_reference||!row.data?.paid_at){notify('سند تسليم السلفة متاح بعد توثيق الصرف الفعلي فقط');return;}
  const safe=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
@@ -484,11 +483,11 @@ function advanceReceipt(row){
  const reference=row.data.advance_receipt_no||'ADV-'+(row.code||row.id);
  const html='<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>سند تسليم عهدة / سلفة - '+safe(reference)+'</title><style>@page{size:A4 portrait;margin:14mm}*{box-sizing:border-box}body{font:13px/1.8 Tahoma,Arial,sans-serif;color:#202c28;margin:0;padding:10px;direction:rtl}.top{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #ae8b3f;padding-bottom:12px}h1{font-size:21px;text-align:center;margin:20px 0 8px;color:#755b25}.ref{text-align:center;color:#666;margin-bottom:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #e0d5bd;padding:8px 10px;text-align:right}th{width:38%;background:#faf5e9}.statement{border:1px solid #d4bd8c;border-radius:8px;padding:13px;margin-top:18px}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px}.signature{border-top:1px solid #b8a781;padding-top:10px;min-height:95px}.note{font-size:11px;color:#555;margin-top:15px}.print{display:block;margin:20px auto;padding:9px 30px;background:#ae8b3f;color:#fff;border:0;border-radius:6px}@media print{.print{display:none}}</style></head><body><div class="top"><div><strong>'+safe(companyName)+'</strong><div>شؤون الموظفين · الإدارة المالية</div></div>'+logo+'</div><h1>سند تسليم عهدة / سلفة موظف</h1><div class="ref">رقم السند: '+safe(reference)+'</div><table>'+
   col('الشركة',companyName)+col('اسم الموظف',employee?.data?.name||row.data.employee_name||'—')+col('الرقم الوظيفي',employee?.data?.code||row.data.employee_number||'—')+
-  col('المشروع',project?.data?.name||'غير محدد')+col('قيمة السلفة',money(amount)+' ريال سعودي')+col('تاريخ اعتماد المالية',String(row.data.finance_approved_at||'').slice(0,10))+
-  col('المعتمد المالي',row.data.finance_approved_by||'—')+col('تاريخ توثيق الصرف',String(row.data.paid_at||'').slice(0,10))+
-  col('مرجع الصرف الفعلي',row.data.payment_reference)+col('عدد الأقساط',row.data.installments||'—')+
+  col('المشروع',project?.data?.name||'غير محدد')+col('قيمة السلفة',money(amount)+' ريال سعودي')+col('تاريخ اعتماد المدير العام',String(row.data.gm_approved_at||row.data.paid_at||'').slice(0,10))+
+  col('المعتمد النهائي',row.data.gm_approved_by||row.data.finance_approved_by||'—')+col('تاريخ توثيق الصرف',String(row.data.paid_at||'').slice(0,10))+
+  col('مرجع قيد السلفة',row.data.payment_reference)+col('عدد الأقساط',row.data.installments||'—')+
   col('شهر أول قسط',row.data.first_month||String(row.data.paid_at||'').slice(0,7))+
-  '</table><div class="statement">أقر أنا الموظف الموضح أعلاه باستلام مبلغ السلفة/العهدة المبين بهذا السند، وأوافق على جدول الاستقطاع المعتمد وفق سياسة الشركة. يثبت هذا السند واقعة الصرف المسجلة ولا يُعد إثباتاً لتسلم الموظف ما لم يوقع أدناه.</div><div class="signatures"><div class="signature"><b>الموظف المستلم</b><div>الاسم: '+safe(employee?.data?.name||'')+'</div><div>التوقيع: __________________</div></div><div class="signature"><b>المالية / المسلم</b><div>الاسم: __________________</div><div>التوقيع: __________________</div></div></div><div class="note">تم استخراج السند من السلفة المصروفة المسجلة في المنصة، والمرجع مرتبط بسجل السلفة وجدول الاستقطاع. لا يتم تعديل الرصيد أو الصرف بمجرد طباعة السند.</div><button class="print" onclick="window.print()">طباعة / حفظ PDF</button></body></html>';
+  '</table><div class="statement">أقر أنا الموظف الموضح أعلاه باستلام مبلغ السلفة/العهدة المبين بهذا السند، وأوافق على جدول الاستقطاع المعتمد وفق سياسة الشركة. يثبت هذا السند واقعة الصرف المسجلة ولا يُعد إثباتاً لتسلم الموظف ما لم يوقع أدناه.</div><div class="signatures"><div class="signature"><b>الموظف المستلم</b><div>الاسم: '+safe(employee?.data?.name||'')+'</div><div>التوقيع: __________________</div></div><div class="signature"><b>المالية / المسلم</b><div>الاسم: __________________</div><div>التوقيع: __________________</div></div></div><div class="note">تم إصدار السند بناء على اعتماد المدير العام وقيد السلفة في حساب الموظف، ويلزم توقيع المستلم لإثبات التسليم الفعلي. لا يتم تعديل الرصيد أو الصرف بمجرد طباعة السند.</div><button class="print" onclick="window.print()">طباعة / حفظ PDF</button></body></html>';
  const w=window.open('','_blank');if(!w){notify('اسمح بالنوافذ المنبثقة لطباعة سند التسليم');return;}w.document.open();w.document.write(html);w.document.close();
 }
 async function decideLeaveDues(row,decision){
@@ -506,7 +505,7 @@ async function gmApproveAllStages(row){
  const stages=row.status==='draft'?['draft','projects_director','hr']:row.status==='project_manager'?['project_manager','projects_director','hr']:row.status==='projects_director'?['projects_director','hr']:row.status==='hr'?['hr']:['finance'];
  const sick=row.module==='leave'&&row.data?.leave_type==='sick'&&stages.includes('hr');
  if(sick&&!window.confirm('الإجازة المرضية: هل راجعت المرفق الطبي وتحققت من صحته؟'))return;
- if(!window.confirm('اعتماد المراحل المتبقية لطلب '+(employee.data?.name||row.code||'الموظف')+' بصلاحية المدير العام؟ ستُسجّل كل مرحلة واعتمادها بالتاريخ والحساب نفسه. لا يعني ذلك صرف أموال فعليًا.'))return;
+ if(!window.confirm('اعتماد المراحل المتبقية لطلب '+(employee.data?.name||row.code||'الموظف')+' بصلاحية المدير العام؟ ستُسجّل كل مرحلة واعتمادها بالتاريخ والحساب نفسه. سيُقيد مبلغ السلفة ويصدر سند قابل للتوقيع، دون تنفيذ حوالة بنكية تلقائياً.'))return;
  let completed=0;
  setSaving(true);
  try{
@@ -515,14 +514,13 @@ async function gmApproveAllStages(row){
    await post({action:'transition',module:row.module,id:row.id,revision,decision:'approve',note:'اعتماد موحد من المدير العام مع حفظ تتبع كل مرحلة',medical_verified:sick&&stage==='hr'});
    revision++;completed++;
   }
-  // The financial authorization is a separate auditable decision, never an actual payout.
   if(row.module==='advances'){
-   await post({action:'approve_advance_finance',module:'advances',id:row.id,revision,note:'اعتماد مالي من المدير العام بعد استكمال الموافقات الإدارية'});
+   const result=await post({action:'gm_approve_advance',module:'advances',id:row.id,revision});
    completed++;
-  }
-  notify('تم اعتماد '+completed+' مرحلة للموظف. '+(row.module==='advances'?'السلفة معتمدة للصرف؛ توثيق الصرف الفعلي لا يزال إجراء مستقلاً.':'تم اعتماد طلب الإجازة.'));
+   notify('تم اعتماد السلفة وقيدها للموظف مباشرة بسند '+result.receipt_no+'. يمكن طباعة السند من خانة الإجراءات.');
+  }else notify('تم اعتماد طلب الإجازة بعد '+completed+' مراحل.');
  }catch(error){
-  notify('لم تكتمل كل الاعتمادات: '+(error?.message||'خطأ غير معروف')+'. تم حفظ '+completed+' مرحلة صحيحة فقط، ولم يُوثق صرف تلقائي.');
+  notify('لم تكتمل كل الاعتمادات: '+(error?.message||'خطأ غير معروف')+'. تم حفظ '+completed+' مرحلة صحيحة فقط، وقد لا يكون القيد المالي اكتمل؛ تحقق من حالة الطلب بعد تحديث البيانات.');
  }finally{await refresh();setSaving(false)}
 }
 
@@ -1016,8 +1014,8 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  </nav>}
 {['leave','advances','resignations'].includes(module)&&<section className="panel request-approval-guide" aria-label="مسار اعتماد طلبات الموظفين" dir="rtl">
  <div className="request-approval-top"><strong>دورة الاعتماد والصلاحيات</strong><small>المدير المباشر ← مجدي محجوب، المدير العام / إدارة المشاريع ← م. محمد يوسف، شؤون الموظفين</small></div>
- <div className="request-approval-flow">{(module==='advances'?[...approvalStages,{id:'advance_finance',label:'اعتماد المالية / المدير العام'},{id:'advance_disbursement',label:'توثيق الصرف وإصدار الإيصال'}]:approvalStages).map((step,i)=><div className="request-approval-step" key={step.id}><span>{i+1}</span><b>{step.label}</b></div>)}</div>
- <small>تُوجَّه طلبات الإجازات والسلف والاستقالات إلى المدير المباشر ثم إدارة المشاريع وشؤون الموظفين. يمكن للمدير العام اعتماد المراحل المتبقية بما فيها المالية في إجراء واحد موثق لكل مرحلة. ولا تُعد السلفة مصروفة إلا بعد توثيق الصرف الفعلي بمرجع مالي، ومنه يبدأ الاستقطاع ويصدر الإيصال.</small>
+ <div className="request-approval-flow">{(approvalStages).map((step,i)=><div className="request-approval-step" key={step.id}><span>{i+1}</span><b>{step.label}</b></div>)}</div>
+ <small>تُوجَّه طلبات الإجازات والسلف والاستقالات إلى المدير المباشر ثم إدارة المشاريع وشؤون الموظفين. يعتمد المدير العام السلفة نهائياً، ويُقيد مبلغها في سجل الموظف ويصدر سند الصرف دون مرحلة مالية إضافية. لا يثبت السند التسلم الفعلي إلا بعد توقيع الموظف.</small>
  </section>}
  {module==='project_managers'&&user?.role==='admin'&&<section className="panel" dir="rtl" style={{padding:16,marginBottom:12}}>
  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
@@ -1618,10 +1616,9 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {['project_manager','projects_director','hr'].includes(row.status)&&approvable&&<button type="button" disabled={saving} onClick={()=>{const reason=window.prompt('سبب إعادة الطلب للمراجعة');if(reason?.trim())transition(row,'return',reason)}}>إعادة</button>}
  {['project_manager','projects_director','hr'].includes(row.status)&&approvable&&<button type="button" className="danger-action" disabled={saving} onClick={()=>{const reason=window.prompt('سبب رفض السلفة');if(reason?.trim())transition(row,'reject',reason)}}>رفض</button>}
  {row.status==='draft'&&['admin','hr'].includes(user?.role)&&permittedWrite(user||{},'advances')&&permission(user||{},'advances','edit')&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteDraftRequest(row)}>حذف</button>}
- {user?.role==='admin'&&['draft','project_manager','projects_director','hr','finance'].includes(row.status)&&<button type="button" className="primary" disabled={saving} onClick={()=>gmApproveAllStages(row)}>اعتماد موحد حتى المالية</button>}
- {row.status==='approved'&&isRequestFinanceActor(user)&&permission(user||{},'advances','approve')&&<button type="button" className="primary" disabled={saving} onClick={()=>financeApproveAdvance(row)}>اعتماد صرف المبلغ</button>}
- {row.status==='finance_approved'&&isRequestFinanceActor(user)&&permission(user||{},'advances','approve')&&<button type="button" className="primary" disabled={saving} onClick={()=>disburse(row)}>صرف المبلغ وتوثيقه</button>}
- {row.status==='paid'&&<button type="button" onClick={()=>advanceReceipt(row)}>إيصال صرف السلفة</button>}
+ {user?.role==='admin'&&['draft','project_manager','projects_director','hr','finance'].includes(row.status)&&<button type="button" className="primary" disabled={saving} onClick={()=>gmApproveAllStages(row)}>اعتماد السلفة وقيدها</button>}
+ {['approved','finance_approved'].includes(row.status)&&user?.role==='admin'&&<button type="button" className="primary" disabled={saving} onClick={()=>gmFinalizeAdvance(row)}>اعتماد السلفة وتقييدها</button>}
+ {row.status==='paid'&&<button type="button" onClick={()=>advanceReceipt(row)}>طباعة سند الصرف</button>}
  {row.status==='paid'&&<button type="button" onClick={()=>{setLinkedFinance({kind:'repayments',parentId:row.id,amount:'',date:saudiDate(),reference:'',method:'cash',travel_amount:'0',other_amount:'0',deductions:'0',notes:''})}}>السداد والأقساط</button>}
  </div>}
  {module==='leave'&&user?.role==='admin'&&['draft','project_manager','projects_director','hr','finance'].includes(row.status)&&<button type="button" className="primary" disabled={saving} onClick={()=>gmApproveAllStages(row)}>اعتماد الإجازة بالكامل</button>}
@@ -1721,7 +1718,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <small style={{display:'block',marginTop:6}}>المدير المباشر المحدد للموظف هو المعتمد الأول للطلب، ويجب ربطه بحساب دخول نشط.</small>
  </div>:null;})()}
 {module==='employees'&&edit.id&&<div className="employee-edit-mode"><span>{employeeReadOnly?'وضع العرض: الحقول للقراءة فقط':'وضع التعديل: يمكن تغيير البيانات ثم حفظ السجل'}</span>{employeeReadOnly&&permittedWrite(user||{},'employees')&&<button type="button" disabled={saving} onClick={()=>setEmployeeReadOnly(false)}>تفعيل تعديل بيانات الموظف</button>}</div>}{module==='employees'&&edit.id&&['admin','hr'].includes(user?.role)&&permittedWrite(user||{},'employees')&&<div style={{padding:'8px 0 12px',display:'flex',gap:8,flexWrap:'wrap'}}><button type="button" className="primary" disabled={saving} onClick={()=>cloneEmployeeToSecondCompany(edit)}>إضافة الموظف إلى شركة ثانية (سجل مستقل)</button><small>للنقل الكامل: فعّل التعديل، ثم اختر الشركة الجديدة من حقل الشركة. يحتفظ النظام بمعاملات الشركة السابقة.</small></div>}{module==='employees'&&edit.dual_source_id&&<div className="employee-company-transfer-note" role="status"><strong>إضافة توظيف ثانٍ مستقل</strong><span>الأصل: {edit.dual_source_company} / رقم {edit.dual_source_code}. اختر شركة مختلفة؛ وسيتم توليد رقم وظيفي جديد تلقائيًا عند الحفظ. بيانات الهوية منسوخة للمراجعة، بينما الراتب والبدلات والتحويل البنكي قابلة للتعديل باستقلال. لن يتغير سجل الشركة الأولى.</span></div>}{module==='employees'&&edit.id&&<div style={{padding:'12px 0',display:'flex',gap:8,flexWrap:'wrap'}}>{[['leave','الإجازات'],['advances','السلف'],['warnings','الإنذارات'],['resignations','الاستقالات'],['returns','المباشرة'],['terminations','إنهاء الخدمة'],['leave_dues','مستحقات الإجازة'],['settlements','المخالصات']].filter(([key])=>allowed.includes(key)).map(([key,label])=><button key={key} type="button" disabled={saving} onClick={()=>{setLinkedEmployee({id:edit.id,name:edit.data.name||edit.data.employee_name||edit.data.code||'الموظف'});setEdit(null);setModule(key);}}>{label} ({rows.filter(x=>x.module===key&&x.data?.employee_id===edit.id).length})</button>)}</div>}{edit&&['leave','advances','resignations','returns','terminations','leave_dues','settlements','warnings','appointments'].includes(module)&&managerDirectoryForRequest(edit,edit.company)&&<div className="employee-payout-summary" role="status"><strong>مسؤولية المدير والموافقات</strong><div>المدير المباشر للموظف: {managerDirectoryForRequest(edit,edit.company).direct_name||'لم يربط بعد'}</div><div>بريد المدير المباشر: {managerDirectoryForRequest(edit,edit.company).direct_email||'غير محدد'}</div><div>{'المشروع: '+managerDirectoryForRequest(edit,edit.company).project}</div><div>{'مدير المشروع: '+(managerDirectoryForRequest(edit,edit.company).name||'لم يتم تعيينه')}</div><div>{'بريد المدير: '+(managerDirectoryForRequest(edit,edit.company).email||'غير محدد')}</div><small>تُرسل الإجازات والسلف إلى المدير المباشر للموظف للاعتماد الأول، ثم إدارة المشاريع وشؤون الموظفين. واعتماد صرف السلفة وتوثيقها للمالية أو مدير النظام فقط. ويجوز للمدير العام اعتماد المراحل غير المالية.</small></div>}{edit&&['leave','advances','resignations'].includes(module)&&<div className="request-approval-summary" role="status"><strong>دورة اعتماد الطلب</strong>
- <div className="request-approval-flow approval-modal-tracking">{(module==='advances'?[...requestApprovalStages,advanceFinanceStage,advanceDisbursementStage]:requestApprovalStages).map((stage,i)=>{const state=requestStageView(edit,stage.id);return <div key={stage.id} className={'request-approval-step '+(state.kind==='done'?'done':state.kind==='waiting'?'current':'future')}><span>{state.kind==='done'?'✓':i+1}</span><div><b>{stage.title}</b><ApprovalStageCell row={edit} stage={stage} managerName={managerDirectoryForRequest(edit,edit.company)?.direct_name}/></div></div>})}</div>
+ <div className="request-approval-flow approval-modal-tracking">{(requestApprovalStages).map((stage,i)=>{const state=requestStageView(edit,stage.id);return <div key={stage.id} className={'request-approval-step '+(state.kind==='done'?'done':state.kind==='waiting'?'current':'future')}><span>{state.kind==='done'?'✓':i+1}</span><div><b>{stage.title}</b><ApprovalStageCell row={edit} stage={stage} managerName={managerDirectoryForRequest(edit,edit.company)?.direct_name}/></div></div>})}</div>
  <small>المدير المباشر المعتمد: {managerDirectoryForRequest(edit,edit.company)?.direct_name||'غير محدد؛ اربط مديرًا مباشرًا بحساب نشط قبل الإرسال'} · المرحلة: {states[edit.status||'draft']||'إعداد الطلب'}</small></div>}
  {edit.data._review_flags?.length>0&&<div className="review-warning-box"><b>بيانات تحتاج استكمال</b>{edit.data._source_company&&<p>الشركة كما وردت في المصدر: {edit.data._source_company}</p>}<ul>{edit.data._review_flags.map((f,i)=><li key={i}>{f}</li>)}</ul></div>}<form onSubmit={save}><fieldset disabled={saving||(module==='employees'?(employeeReadOnly||!permittedWrite(user||{},'employees')):(!!edit.id&&((edit.status!=='draft'&&!(module==='returns'&&user?.role==='admin'&&edit.status==='completed'))||!permittedWrite(user||{},module))))}><label className="full">الشركة{module==='projects'&&<input type="search" aria-label="بحث الشركة" placeholder="ابحث عن الشركة بالاسم" value={projectCompanySearch} onChange={e=>setProjectCompanySearch(e.target.value)} style={{marginBottom:8}}/>}<select required value={edit.company} disabled={module!=='employees'&&!!edit.id&&edit.company!=='غير محددة'} onChange={e=>{
  const nextCompany=e.target.value;
