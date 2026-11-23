@@ -1640,7 +1640,7 @@ test('approved and HR-approved legacy leaves appear in return-to-work queue',()=
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  for(const marker of ['الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة','بانتظار تسجيل المباشرة','تسجيل المباشرة','leave.data.employee_id','return_record_id','leave.data.expected_return','setEdit({company:leave.company','آخر مباشرة من إجازة مسجلة','availableReturnLeaves(rows,company)'])assert.ok(ui.includes(marker),marker);
  assert.match(ui,/employeeOnLeave\(r\)/);
- assert.match(ui,/actual_return:''/);
+ assert.match(ui,/actual_return:expected&&expected<=today\?expected:''/);
 });
 test('return-to-work records link leave and employee with duplicate and stale-write protection',()=>{
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
