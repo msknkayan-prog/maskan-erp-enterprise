@@ -513,6 +513,10 @@ if(body.action==='hire_from_appointment'){
  if(!String(rawHire.name||'').trim()||!String(rawHire.job||'').trim())throw Error('اسم الموظف ومسمّاه الوظيفي مطلوبان');
  if(!(Number(rawHire.salary)>0))throw Error('حدد الراتب الشهري الجديد بقيمة أكبر من صفر');
  const projectId=String(rawHire.project_id||'').trim();
+ const scopedRows=(await db.prepare("SELECT * FROM records").all()).results.map(parse);
+ if(!visible(u,{module:'employees',company,data:{project_id:projectId}},scopedRows)
+ ||!visible(u,{module:'appointments',company,data:{project_id:projectId}},scopedRows))throw Error('403');
+
  if(projectId){
   const project=await db.prepare("SELECT company,data FROM records WHERE module='projects' AND id=?").bind(projectId).first();
   if(!project)throw Error('المشروع المختار غير موجود');
@@ -531,7 +535,14 @@ if(body.action==='hire_from_appointment'){
  employee.employment_status='active';employee.working_company=company;
  employee.probation=duration;employee.probation_start=start;employee.probation_end=probationEnd;employee.appointment_record_id=appointmentId;
  if(projectId)employee.project_id=projectId;
- if(rawForm.direct_manager)employee.manager=String(rawForm.direct_manager).slice(0,250);
+ const managerLabel=String(rawForm.direct_manager||rawHire.manager||'').trim();
+ if(managerLabel){
+  const choices=await availableEmployeeDirectManagers(db,company);
+  const manager=choices.find((m:any)=>m.eligible&&normalizeManagerName(m.name)===normalizeManagerName(managerLabel));
+  if(manager)setEmployeeDirectManager(employee,{name:manager.name,email:manager.email,phone:manager.phone||'',directory_id:manager.directory_id||''},true);
+  else employee.manager=managerLabel.slice(0,250);
+ }
+
  const empSerial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
  const aptSerial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
  if(!/^\d{4,12}$/.test(String(empSerial||''))||!/^\d{4,12}$/.test(String(aptSerial||'')))throw Error('تعذر توليد رقم النموذج');
