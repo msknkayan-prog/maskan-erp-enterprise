@@ -2568,3 +2568,18 @@ test('executive HR dashboard replaces bulky landing cards and uses deployed comm
  assert.doesNotMatch(ui,/من أين تبدأ؟/);
  assert.doesNotMatch(ui,/MASKAN HR · V87 · CLOUD/);
 });
+
+
+test('new HR records receive automatic immutable database-sequenced document numbers',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const paper=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
+ assert.match(erp,/nextval\('hr.project_code_seq'\)::text AS serial/);
+ assert.match(erp,/data.document_no=prefix\+'-'\+saudiDate\(\).slice\(0,4\)/);
+ assert.match(erp,/if\(old\)\{\s*const originalNo=/);
+ assert.match(erp,/appointments:'APT'/);
+ assert.match(erp,/leave:'LEV'/);
+ assert.match(erp,/advances:'ADV'/);
+ assert.match(ui,/f.key==='document_no'\?<input type="text" readOnly/);
+ assert.match(paper,/row.data\?\.document_no\|\|row.data\?\.reference\|\|row.code/);
+});
