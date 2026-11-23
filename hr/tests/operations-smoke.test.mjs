@@ -110,7 +110,7 @@ test('Magdi onboarding and project approval preserve the general manager role in
  assert.match(backend,/const adminMagdi=isMagdiGeneralManagerAccount\(existing,name\)/);
  assert.match(backend,/\}else if\(!adminMagdi\)\{/);
  assert.match(backend,/isAuthorizedProjectManagerAccount\(manager,data\.manager_name/);
- assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:managerEmail\}/);
+ assert.match(backend,/const managerEmail=String\(employeeData\.manager_email/);
  assert.match(backend,/if\(!adminMagdi&&manager\.projects!=='\*'/);
 });
 
@@ -849,11 +849,11 @@ test('request workflow requires an assigned active manager before routing and ch
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(backend,/current==='draft'\|\|current==='project_manager'/);
- assert.match(backend,/يجب تعيين مدير المشروع في ملف المشروع قبل إرسال الطلب/);
- assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:managerEmail\}/);
+ assert.match(backend,/المدير المباشر للموظف لا يمتلك بريد اعتماد/);
+ assert.match(backend,/const managerEmail=String\(employeeData\.manager_email/);
  assert.match(backend,/current==='project_manager'/);
- assert.match(backend,/هذا الطلب بانتظار اعتماد مدير المشروع المعين/);
- assert.match(backend,/const managerEmail=String\(projectData\.manager_email/);
+ assert.match(backend,/هذا الطلب بانتظار اعتماد المدير المباشر المحدد/);
+ assert.match(backend,/const managerEmail=String\(employeeData\.manager_email/);
  assert.match(ui,/module==='projects'&&f\.key==='manager_email'/);
  assert.match(ui,/directManagerChoices\(rows,members,edit\.company\)/);
 });
@@ -1681,7 +1681,7 @@ test('project manager may also be verified HR approver without changing the acco
  assert.equal(isAuthorizedProjectManagerAccount({...manager,is_active:false}),false);
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  assert.match(erp,/const isManager=actorEmail===managerEmail/);
- assert.match(erp,/manager.role!=='hr'&&manager.projects/);
+ assert.match(erp,/manager.role==='project_manager'&&manager.projects/);
 });
 test('loan disbursement automatically recalculates draft payroll, preserves approval/review locks',()=>{
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
@@ -1909,7 +1909,7 @@ test('employee requests end at HR; finance is a separate disbursement operation'
  assert.equal(requestApprovalStages.length,3);
  assert.equal(requestApprovalStages.some(stage=>stage.id==='finance'),false);
  assert.match(mod,/workflow=\['draft','project_manager','projects_director','hr','approved'\]/);
- assert.match(ui,/مدير المشروع ← مجدي محجوب، المدير العام \/ إدارة المشاريع ← م\. محمد يوسف، شؤون الموظفين/);
+ assert.match(ui,/المدير المباشر ← مجدي محجوب، المدير العام \/ إدارة المشاريع ← م\. محمد يوسف، شؤون الموظفين/);
  assert.match(server,/routedRequest&&current==='finance'\?'approved'/);
  assert.match(server,/legacy_finance_stage_migrated_at/);
  assert.match(server,/action==='disburse'/);
@@ -1917,7 +1917,7 @@ test('employee requests end at HR; finance is a separate disbursement operation'
 test('leave and advance approvals show assigned project manager and horizontal stages',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const print=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
- for(const term of ['request-approval-guide','request-approval-summary','approvalStages','مدير المشروع المختص','دورة اعتماد الطلب'])assert.ok(ui.includes(term),term);
+ for(const term of ['request-approval-guide','request-approval-summary','approvalStages','المدير المباشر المختص','دورة اعتماد الطلب'])assert.ok(ui.includes(term),term);
  for(const term of ['Direct Manager','Project Manager','التسلسل: إعداد الطلب'])assert.ok(print.includes(term),term);
 });
 test('payroll approval requires authorized project managers for every staff row and protects final handoff',()=>{
@@ -2288,12 +2288,12 @@ test('employee requests are assigned to project owner, and director cannot appro
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const {requestApprovalStages}=await import('../lib/request-approval.mjs');
- assert.equal(requestApprovalStages[0].title,'اعتماد مدير المشروع');
- assert.match(backend,/const managerEmail=String\(projectData\.manager_email/);
- assert.match(backend,/details\.project_manager=\{name:projectData\.manager_name/);
- assert.match(backend,/هذا الطلب بانتظار اعتماد مدير المشروع المعين/);
+ assert.equal(requestApprovalStages[0].title,'اعتماد المدير المباشر');
+ assert.match(backend,/const managerEmail=String\(employeeData\.manager_email/);
+ assert.match(backend,/details\.direct_manager=\{name:managerName/);
+ assert.match(backend,/هذا الطلب بانتظار اعتماد المدير المباشر المحدد/);
  assert.match(backend,/current==='finance'&&routedRequest&&!\['admin','hr'\].includes\(u.role\)/);
- assert.match(ui,/اعتماد مدير المشروع/);
+ assert.match(ui,/اعتماد المدير المباشر/);
 });
 test('project manager can see own employee requests but a separate supervisor cannot',async()=>{
  const {visible}=await import('../backend/modules.mjs');
@@ -2426,4 +2426,18 @@ test('advance approval, finance payout and installment activation are separate a
  assert.match(ui,/onDisburse=\{\(\)=>disburse\(row\)\}/);
  assert.match(api,/loans:\[\.\.\.paidLoans,\{\.\.\.old,status:'paid',data\}\]/);
  assert.match(api,/status='paid'/);
+});
+
+test('advance workflow routes first approval to direct manager and shows horizontal finance receipt actions',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ for(const label of ['إرسال','اعتماد','تعديل','رفض','حذف','اعتماد صرف المبلغ','صرف المبلغ وتوثيقه','إيصال صرف السلفة'])assert.ok(ui.includes(label),label);
+ assert.match(ui,/className="advance-row-actions"/);
+ assert.match(ui,/flexDirection:'row',alignItems:'center',flexWrap:'nowrap'/);
+ assert.match(ui,/onClick=\{\(\)=>advanceReceipt\(row\)\}/);
+ assert.match(backend,/const managerEmail=String\(employeeData\.manager_email/);
+ assert.match(backend,/details\.direct_manager=\{name:managerName/);
+ assert.match(backend,/action==='approve_advance_finance'/);
+ assert.match(backend,/action==='disburse'/);
+ assert.match(backend,/payment_reference:reference/);
 });
