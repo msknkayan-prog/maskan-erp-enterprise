@@ -2560,6 +2560,7 @@ test('approved advance remains in progress until finance or general manager post
 test('executive HR dashboard replaces bulky landing cards and uses deployed commit revision',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA/);
+ assert.match(ui,/NEXT_PUBLIC_MASKAN_BUILD_VERSION/);
  assert.match(ui,/MASKAN HR · \{buildVersion\} · CLOUD/);
  assert.match(ui,/الملخص التنفيذي/);
  assert.match(ui,/ملخص الشركات/);
@@ -2598,4 +2599,16 @@ test('Dashboard navigation and compact executive layout do not expose recent act
  assert.doesNotMatch(dashboard,/آخر العمليات/);
  assert.doesNotMatch(dashboard,/activity-list/);
  assert.doesNotMatch(dashboard,/من أين تبدأ/);
+});
+
+
+test('release identifier is generated every build and approved advance guidance is actionable',()=>{
+ const cfg=readFileSync(new URL('../next.config.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(cfg,/const buildVersion='V'\+now\.slice/);
+ assert.match(cfg,/NEXT_PUBLIC_MASKAN_BUILD_VERSION:buildVersion/);
+ assert.match(ui,/const buildVersion=process\.env\.NEXT_PUBLIC_MASKAN_BUILD_VERSION/);
+ assert.match(ui,/حالة «قيد العمل» تعني اكتمال الاعتمادات الإدارية/);
+ assert.match(ui,/اعتماد مبلغ الصرف وتقييده/);
+ assert.doesNotMatch(ui,/قيد العمل حتى اعتماد صرف المبلغ من المدير العام أو المالية؛ التعديل المباشر للطلب متاح للمسودات فقط/);
 });
