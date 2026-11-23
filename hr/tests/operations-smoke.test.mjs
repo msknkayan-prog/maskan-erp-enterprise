@@ -1178,7 +1178,7 @@ test('project managers choose authorized projects via searchable checkbox list o
  assert.match(ui,/memberEdit\.role==='project_manager'&&<ManagerProjectPicker/);
  assert.match(backend,/حدد مشروعًا واحدًا على الأقل لمدير المشروع/);
  assert.match(backend,/يمكن منح المدير صلاحية المشاريع المعيّن مديرًا لها فقط/);
- assert.match(backend,/مدير المشروع ليس لديه حساب اعتماد نشط/);
+ assert.match(backend,/المدير المباشر لا يملك حساب اعتماد نشطاً/);
 });
 test('project manager visibility requires both assigned manager and explicit selected project scope',async()=>{
  const {visible}=await import('../lib/modules.mjs');
