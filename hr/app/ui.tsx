@@ -651,8 +651,8 @@ const payrollManagedRows=payrollManagedBatch?cyclePayroll.filter(row=>row.data.b
 const payrollManagedIncluded=payrollManagedRows.filter(row=>!row.data.excluded);
  const payrollManagedFilteredRows=payrollManagedRows.filter(row=>payrollEmployeeMatches(row,payrollListedSearch));
 const payrollManagedReviewed=payrollManagedIncluded.filter(row=>row.data.split_confirmed).length;
-const payrollStages=['draft','manager_review','projects_review','finance_review','paid'];
-const payrollStageLabels=['مساعد الإدارة','مدراء المشاريع','إدارة المشاريع','المالية / الصرف'];
+const payrollStages=['draft','manager_review','projects_review','finance_review','finance_approved','paid'];
+const payrollStageLabels=['مساعد الإدارة','مدراء المشاريع','إدارة المشاريع','المالية · اعتماد','المالية · صرف'];
 const payrollBatchReady=b=>{const items=cyclePayroll.filter(r=>r.data.batch_id===b.id),inCount=items.filter(r=>!r.data.excluded);return !!inCount.length&&items.length===Number(b.data.employee_count)&&inCount.every(r=>r.data.split_confirmed&&Number.isFinite(Number(r.data.net))&&Math.round((Number(r.data.cash_amount||0)+Number(r.data.bank_amount||0))*100)===Math.round(Number(r.data.net)*100)&&(!r.data.needs_review||r.data.exception_note));};
 const payrollAvailableEmployees=payrollManagedBatch?rows.filter(row=>row.module==='employees'&&canonicalCompany(row.data?.working_company||row.company)===payrollManagedBatch.company
  &&['active','نشط','على رأس العمل','علي راس العمل'].includes(String(row.data?.employment_status||row.data?.employee_status||'').trim())
@@ -664,7 +664,7 @@ const cycleTotals=cyclePayroll.filter(r=>!r.data.excluded).reduce((a,r)=>({count
 const cycleCostProjectName=(id,fallback='')=>{const project=rows.find(r=>r.module==='projects'&&r.id===id);return project?(project.data?.name||project.code||'مشروع دون اسم'):fallback|| (id?'مشروع غير مرتبط بالدليل — '+id:'غير محدد في سجل الموظف');};
 const cycleCostProjectOptions=rows.filter(r=>{if(r.module!=='projects'||r.data?._deleted||r.data?._archived)return false;return r.company===cycleEdit?.data?.cost_company||Array.isArray(r.data?._shared_companies)&&r.data._shared_companies.includes(cycleEdit?.data?.cost_company);});
 const cycleCostBreakdown=Object.values(cyclePayroll.filter(r=>!r.data.excluded).reduce((acc,row)=>{const d=row.data,co=d.cost_company||row.company,staff=rows.find(e=>e.module==='employees'&&e.id===d.employee_id),pid=staff?.data?.project_id||d.cost_project_id||d.project_id||'',key=co+'|'+pid;if(!acc[key])acc[key]={key,company:co,project_id:pid,count:0,net:0};acc[key].count++;acc[key].net+=cycleNumeric(d.net);return acc;},{}));
-const cycleStatus={draft:'مساعد الإدارة · قيد التجهيز',manager_review:'مدراء المشاريع · تحت المراجعة',projects_review:'إدارة المشاريع · تحت الاعتماد',finance_review:'الإدارة المالية · المراجعة والصرف',paid:'تم الاعتماد والصرف',admin_review:'مرحلة سابقة · تتطلب ترحيل',finance:'مرحلة سابقة · تتطلب ترحيل'};
+const cycleStatus={draft:'مساعد الإدارة · قيد التجهيز',manager_review:'مدراء المشاريع · تحت المراجعة',projects_review:'إدارة المشاريع · تحت الاعتماد',finance_review:'المالية · بانتظار الاعتماد',finance_approved:'المالية · معتمد وجاهز للصرف',paid:'تم الاعتماد والصرف',admin_review:'مرحلة سابقة · تتطلب ترحيل',finance:'مرحلة سابقة · تتطلب ترحيل'};
 async function cyclePost(payload){const response=await fetch('/api/payroll-cycle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,workflow_version:2})});const result=await response.json();if(!response.ok)throw Error(result.error||'تعذر تنفيذ طلب المسير');return result;}
 async function cycleGenerate(){
  if(payrollMonth!==ksaMonth){notify('يسمح بتوليد مسير الشهر الحالي فقط. الأشهر السابقة للعرض دون إنشاء.');return;}
@@ -740,6 +740,7 @@ async function cycleRestoreEmployee(row){
 async function cycleTransition(b,action){
  let extras={};
  if(action==='return'){const note=window.prompt('سبب إعادة المسير إلى التجهيز:');if(!note?.trim())return;extras.note=note;}
+ if(action==='finance_approve'&&!window.confirm('هل تؤكد اعتماد مسير '+b.company+' لشهر '+b.data.month+' مالياً بعد مراجعة جميع الخصومات والمستحقات؟ لا يتم الصرف في هذه الخطوة.'))return;
  if(action==='finance_pay'){const reference=window.prompt('مرجع إثبات صرف الرواتب (الحوالة/سند الصرف):');if(!reference?.trim())return;if(!window.confirm('هل تؤكد صرف جميع مستحقات مسير '+b.company+' لشهر '+b.data.month+' بالفعل؟ سيُفتح إصدار سندات الاستلام بعد التأكيد.'))return;extras.reference=reference;extras.confirm_payment=true;}
  if(action==='managers_approve'&&!window.confirm('هل اكتملت مراجعة جميع مدراء المشاريع وإرسال المسير لإدارة المشاريع؟'))return;
  
@@ -939,7 +940,7 @@ const approvalStages=[{id:'project_manager',label:'مدير المشروع\nإع
  const approvalStateIndex=stage=>stage==='approved'||stage==='paid'?approvalStages.length:stage==='draft'?0:Math.max(0,approvalStages.findIndex(x=>x.id===stage));
  const requestCanApprove=(row)=>['leave','advances','resignations'].includes(row.module)?row.status==='draft'?permittedWrite(user||{},row.module):(row.status==='finance'?['admin','hr'].includes(user?.role):user?.role==='admin'||isRequestStageActor(user,row.status)):user?.role==='admin'||row.status==='draft'&&permittedWrite(user||{},row.module)||row.status===user?.role;
  const requestVisibleInInbox=(r)=>user?.role!=='project_manager'||r.module==='payroll_batches'&&r.status==='manager_review'||['draft','project_manager'].includes(r.status)||isRequestFinanceActor(user)&&['leave','advances'].includes(r.module)&&r.status==='finance';
- const pendingStages=['draft','returned','project_manager','projects_director','hr','finance','manager_review','projects_review','finance_review'];
+ const pendingStages=['draft','returned','project_manager','projects_director','hr','finance','manager_review','projects_review','finance_review','finance_approved'];
 const pendingRecordIndex=new Map(rows.map(r=>[r.id,r]));
 const pendingRequestRows=rows.filter(requestVisibleInInbox).filter(r=>accessiblePendingTypes.includes(r.module)&&pendingStages.includes(r.status)&&(!company||r.company===company)&&(!pendingType||r.module===pendingType)&&(!pendingStage||r.status===pendingStage)).filter(r=>r.module!=='payroll_batches'||(rows.some(item=>item.module==='payroll'&&item.data?.batch_id===r.id&&!item.data?.excluded))).filter(r=>{
  if(!pendingSearch.trim())return true;
@@ -1085,34 +1086,6 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {pendingRequestRows.length===0&&<tr><td colSpan={7} style={{padding:24,textAlign:'center'}}>لا توجد طلبات قيد الإجراء تطابق الفلاتر.</td></tr>}
  </tbody></table></div>
  </section>}
-{module==='overview'&&user?.role==='admin'&&<section className="panel" dir="rtl" style={{padding:14,marginBottom:15,border:'1px solid #dac391'}}>
- <div className="panel-head" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap',marginBottom:10}}>
-  <div><h2 style={{margin:0}}>موافقات مسؤول النظام حسب المدير المخوّل</h2><small>تظهر الطلبات في خانة المسؤول عن اعتماد المرحلة الحالية، ويمكنك اتخاذ القرار نيابة عنه مع توثيق المسؤول الفعلي.</small></div>
-  <div style={{display:'flex',alignItems:'center',gap:8}}><strong style={{padding:'5px 12px',borderRadius:20,background:'#fff1d2',color:'#7c5518'}}>{adminApprovalRows.length} طلب قيد الإجراء</strong><button type="button" onClick={()=>{setPendingType('');setPendingStage('');setPendingSearch('');setModule('pending_requests')}}>فتح جميع الطلبات</button></div>
- </div>
- <div style={{display:'flex',flexWrap:'wrap',gap:6,margin:'8px 0 12px'}}>
-  {adminStageGroups.map(stage=><div key={stage.id} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 9px',background:'#faf5e9',border:'1px solid #e5d9c4',borderRadius:8,fontSize:11}}><strong>{stage.title}</strong><span>{stage.records.length}</span></div>)}
- </div>
- {adminStageGroups.filter(stage=>stage.records.length>0).map(stage=><div key={stage.id} style={{marginBottom:12,border:'1px solid #e5dcc9',borderRadius:9,overflow:'hidden'}}>
-  <div style={{display:'flex',gap:8,alignItems:'center',background:'#f7f0e1',padding:'7px 10px',flexWrap:'wrap'}}><strong style={{fontSize:13}}>{stage.title}</strong><small>{stage.owner}</small><span style={{marginInlineStart:'auto',fontSize:11}}>{stage.records.length} طلب</span></div>
-  <div className="table-wrap"><table><thead><tr><th>الشركة</th><th>الطلب</th><th>الموظف / الشهر</th><th>المرحلة الحالية</th><th>الإجراء عند المدير المخوّل</th></tr></thead><tbody>
-  {stage.records.map(request=>{
-   const canDirect=!operationalModules.includes(request.module)&&request.module!=='payroll_batches'&&['draft','project_manager','projects_director','hr',...(request.module==='leave'||request.module==='advances'||request.module==='resignations'?['finance']:[])].includes(request.status)&&permission(user,request.module,'approve')&&(request.status!=='draft'||permittedWrite(user,request.module))&&(request.status!=='finance'||['admin','hr'].includes(user?.role));
-   const isPayroll=request.module==='payroll_batches';
-   const open=()=>{if(isPayroll){setPayrollMonth(request.data?.month||payrollMonth);setPayrollCompany(request.company);setPayrollManageBatchId(request.id);setModule('payroll')}else{setModule(request.module);setEdit({...request,data:{...request.data}})}};
-   return <tr key={request.id}><td>{companyDisplayName(request.company)}</td><td>{modules[request.module]?.singular||request.module}</td><td>{pendingEmployeeName(request)}</td><td><span className={'badge '+request.status}>{states[request.status]||cycleStatus[request.status]||request.status}</span></td><td><div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
-    <button type="button" onClick={open} disabled={saving}>عرض</button>
-    {user?.role==='admin'&&draftManagerProblem(request)&&<button type="button" disabled={saving} onClick={()=>repairDraftManager(request)} style={{fontSize:11}}>تعيين المدير المباشر</button>}
-    {canDirect&&<><button type="button" className="primary" disabled={saving} onClick={()=>transition(request)}>{request.status==='draft'?'إرسال للاعتماد':request.status==='finance'?'ترحيل اعتماد قديم':'اعتماد نيابة عن المخوّل'}</button>
-    {request.status!=='draft'&&<><button type="button" disabled={saving} onClick={()=>{const note=window.prompt('سبب إعادة الطلب للمراجعة');if(note?.trim())transition(request,'return',note.trim())}}>إعادة</button><button type="button" className="danger-action" disabled={saving} onClick={()=>{const note=window.prompt('سبب رفض الطلب');if(note?.trim())transition(request,'reject',note.trim())}}>رفض</button></>}</>}
-    {isPayroll&&<small>تُعتمد الرواتب من نافذة المسير</small>}
-    {!canDirect&&!isPayroll&&<small>افتح الطلب لمراجعته</small>}
-   </div></td></tr>;
-  })}</tbody></table></div>
- </div>)}
- {!adminApprovalRows.length&&<p style={{textAlign:'center',padding:20}}>لا توجد طلبات معلّقة حاليًا ضمن نطاق حسابك.</p>}
- <small style={{display:'block',marginTop:8,color:'#7d6b50'}}>الاعتماد من مسؤول النظام يخص المرحلة الحالية فقط ويُسجّل باسمه، مع الاحتفاظ بالمدير المخوّل الأصلي. لا يتم تخطي المراحل أو تنفيذ الصرف.</small>
- </section>}
 {module==='overview'&&permittedRead(user||{},'employees')&&<EmployeeReportsDashboard rows={rows} user={user} company={company} loading={loading} onRefresh={refresh} onOpenEmployees={()=>setModule('employees')}/>}
 {module==='overview'&&<>{user?.role==='admin'&&<section className="panel" dir="rtl" style={{padding:16,marginBottom:16}}>
  <div style={{display:'flex',gap:12,alignItems:'center',justifyContent:'space-between',flexWrap:'wrap'}}>
@@ -1146,7 +1119,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
 {module==='payroll'&&<section className="panel" style={{padding:20,marginBottom:18}}>
  <div className="panel-head payroll-main-heading"><div><h2>مركز مراجعة واعتماد مسيرات الرواتب</h2><span>لوحة موحدة لجميع الشركات · مراحل واضحة ومتابعة مباشرة</span></div><strong className="payroll-month-pill">شهر المسير: {new Date(payrollMonth+'-01T00:00:00').toLocaleDateString('ar-SA',{month:'long',year:'numeric'})}</strong></div>
  <div className="payroll-approval-flow" aria-label="تسلسل اعتماد مسير الرواتب">{payrollStageLabels.map((stage,i)=><div key={stage} className="payroll-flow-step"><span className="payroll-flow-num">{i+1}</span><span>{stage}</span></div>)}</div><div className="payroll-legend"><span><i className="dot complete"/>تم الاعتماد</span><span><i className="dot active"/>تحت الإجراء</span><span><i className="dot upcoming"/>مرحلة لاحقة</span></div>
- <p>يبدأ المسير لدى مساعد الإدارة، ثم يراجعه مدراء المشاريع ويحدّثون بيانات الموظفين وملاحظاتهم، ثم تعتمد إدارة المشاريع ويراجع قسم المالية ويصرف. يمكن مراجعة مسيرات جميع الشركات وإرسال المكتمل منها دفعة واحدة.</p>
+ <p>يبدأ المسير لدى مساعد الإدارة، ثم يراجعه مدراء المشاريع ويحدّثون بيانات الموظفين وملاحظاتهم، ثم تعتمد إدارة المشاريع، وبعدها تعتمد المالية المسير أولاً ثم توثّق صرفه الفعلي بخطوة مستقلة. يمكن مراجعة مسيرات جميع الشركات وإرسال المكتمل منها دفعة واحدة.</p>
  <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',margin:'16px 0'}}>
   <label>شهر المسير <input type="month" value={payrollMonth} max={ksaMonth} onChange={e=>setPayrollMonth(e.target.value)} style={{marginInlineStart:8}}/></label>
   <label>الشركة <select value={payrollCompany} onChange={e=>setPayrollCompany(e.target.value)} style={{marginInlineStart:8}}><option value="__all__">جميع الشركات</option>{payrollCompanies.map(co=><option key={co} value={co}>{co}</option>)}</select></label>
@@ -1168,7 +1141,8 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
     {b.status==='draft'&&['admin','administrative_assistant'].includes(user?.role)&&<button disabled={saving||confirmed!==eligible.length||!eligible.length} onClick={()=>cycleTransition(b,'submit')}>إرسال لمدراء المشاريع</button>}
     {b.status==='manager_review'&&['admin','projects_director'].includes(user?.role)&&<><button disabled={saving||eligible.some(e=>!e.data.manager_reviewed)} onClick={()=>cycleTransition(b,'managers_approve')}>إرسال لإدارة المشاريع بعد مراجعة المدراء</button></>}{b.status==='manager_review'&&['admin','project_manager'].includes(user?.role)&&<button disabled={saving} onClick={()=>cycleTransition(b,'return')}>إعادة للتجهيز</button>}
     {b.status==='projects_review'&&['admin','projects_director'].includes(user?.role)&&<><button disabled={saving} onClick={()=>cycleTransition(b,'projects_approve')}>اعتماد وإرسال للمالية</button><button disabled={saving} onClick={()=>cycleTransition(b,'return')}>إعادة للمراجعة</button></>}
-    {b.status==='finance_review'&&['admin','finance'].includes(user?.role)&&<><button disabled={saving} onClick={()=>cycleTransition(b,'finance_pay')}>مراجعة واعتماد الصرف</button><button disabled={saving} onClick={()=>cycleTransition(b,'return')}>إعادة للمراجعة</button></>}
+    {b.status==='finance_review'&&['admin','finance'].includes(user?.role)&&<><button disabled={saving} onClick={()=>cycleTransition(b,'finance_approve')}>اعتماد المالية للمسير</button><button disabled={saving} onClick={()=>cycleTransition(b,'return')}>إعادة للمراجعة</button></>}
+    {b.status==='finance_approved'&&['admin','finance'].includes(user?.role)&&<><button disabled={saving} onClick={()=>cycleTransition(b,'finance_pay')}>توثيق الصرف الفعلي</button><button disabled={saving} onClick={()=>cycleTransition(b,'return')}>إعادة المسير للتجهيز</button></>}
     {b.status==='paid'&&<b>مصروف · السندات متاحة</b>}
    </div>
   </div>})}
