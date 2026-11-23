@@ -840,7 +840,7 @@ test('project managers only see the project assigned to their own login, even wi
  assert.equal(visible(pm,requests[1],all),false);
  assert.equal(visible(pm,projects[1],all),false);
  assert.equal(visible({...pm,email:'unassigned@example.test'},requests[0],all),false);
- assert.equal(visible({...pm,projects:'[]'},requests[0],all),true,'direct manager can approve regardless of project-scope assignment');
+ assert.equal(visible({...pm,projects:'[]'},requests[0],all),false,'project manager requires explicit project scope');
 });
 test('request workflow requires an assigned active manager before routing and checks ownership at review',()=>{
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
@@ -885,8 +885,10 @@ test('named employee delegation overrides project owner for both visibility rule
  const owner={...newManager,email:'owner@example.test',projects:'["technical"]'};
  for(const modulePath of ['../lib/modules.mjs','../backend/modules.mjs']){
   const {visible}=await import(modulePath);
-  for(const record of [project,delegated,request,salary,batch])assert.equal(visible(newManager,record,rows),true,modulePath+' '+record.module);
-  for(const record of [delegated,request,salary,batch])assert.equal(visible(owner,record,rows),false,modulePath+' '+record.module);
+  for(const record of [project,delegated,salary,batch])assert.equal(visible(newManager,record,rows),true,modulePath+' '+record.module);
+  assert.equal(visible(newManager,request,rows),false,modulePath+' request follows project owner');
+  for(const record of [delegated,salary,batch])assert.equal(visible(owner,record,rows),false,modulePath+' '+record.module);
+  assert.equal(visible(owner,request,rows),true,modulePath+' project owner approves request');
   assert.equal(visible(owner,legacy,rows),true,modulePath+' legacy worker');
   assert.equal(visible({...newManager,companies:'["رياح الاعمار"]'},request,rows),false,'company isolation');
  }
@@ -907,7 +909,7 @@ test('manager account company permissions are checked at project linking and req
  assert.match(source,/SELECT role,is_active,companies FROM members WHERE email=\?/);
  assert.match(source,/manager\.companies/);
  assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة المحددة/);
- assert.match(source,/المدير المباشر لا يمتلك صلاحية الشركة التابعة للموظف/);
+ assert.match(source,/مدير المشروع لا يمتلك صلاحية الشركة المحددة/);
 });
 
 test('leave dues select employee then filter approved leave and populate salary and days',()=>{
@@ -1173,7 +1175,7 @@ test('project managers choose authorized projects via searchable checkbox list o
  assert.match(ui,/memberEdit\.role==='project_manager'&&<ManagerProjectPicker/);
  assert.match(backend,/حدد مشروعًا واحدًا على الأقل لمدير المشروع/);
  assert.match(backend,/يمكن منح المدير صلاحية المشاريع المعيّن مديرًا لها فقط/);
- assert.match(backend,/المدير المباشر المحدد ليس لديه حساب اعتماد نشط/);
+ assert.match(backend,/مدير المشروع ليس لديه حساب اعتماد نشط/);
 });
 test('project manager visibility requires both assigned manager and explicit selected project scope',async()=>{
  const {visible}=await import('../lib/modules.mjs');
