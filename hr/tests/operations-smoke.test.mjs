@@ -1780,6 +1780,9 @@ test('open payroll can re-sync loan installments and return attendance without r
  assert.match(backend,/updates.length/);
  assert.match(ui,/function cycleSyncDeductions/);
  assert.match(ui,/تحديث أقساط السلف والغياب لجميع الموظفين/);
+ assert.match(ui,/<th>خصم السلف المجدولة<\/th>/);
+ assert.match(backend,/تغيرت أقساط سلف الموظف/);
+ assert.match(backend,/أقساط السلف تغيرت لدى الموظف/);
  assert.match(ui,/readOnly=\{key==='absence_deduction'\|\|key==='advance_deduction'\}/);
 });
 
