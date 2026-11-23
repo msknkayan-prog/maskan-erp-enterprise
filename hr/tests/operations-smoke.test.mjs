@@ -1593,11 +1593,10 @@ test('employee direct manager is a verified roster choice reflected in request s
  assert.match(ui,/setMembers\(d\.rows\)/);
  assert.match(ui,/f\.type!=='internal'/);
 });
-test('approved leaves automatically appear in return-to-work queue and load employee details',()=>{
+test('approved and HR-approved legacy leaves appear in return-to-work queue',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- for(const text of ['الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة','إجازة بانتظار المباشرة','تسجيل المباشرة','leave.data.employee_id','return_record_id','leave.data.expected_return','setEdit({company:leave.company','آخر مباشرة من إجازة مسجلة'])assert.ok(ui.includes(text),text);
- assert.match(ui,/r\.module==='leave'&&r\.status==='approved'/);
- assert.match(ui,/r\.module==='returns'&&r\.company===leave.company&&r\.data\?\.leave_id===leave\.id/);
+ for(const marker of ['الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة','إجازة معتمدة','تسجيل المباشرة','leave.data.employee_id','return_record_id','leave.data.expected_return','setEdit({company:leave.company','آخر مباشرة من إجازة مسجلة','availableReturnLeaves(rows,company)'])assert.ok(ui.includes(marker),marker);
+ assert.match(ui,/employeeOnLeave\(r\)/);
  assert.match(ui,/actual_return:''/);
 });
 test('return-to-work records link leave and employee with duplicate and stale-write protection',()=>{
@@ -1652,6 +1651,38 @@ test('loan disbursement automatically recalculates draft payroll, preserves appr
  assert.match(erp,/advance_schedule_synced_at:now/);
  assert.match(erp,/payroll_synced:synced.length/);
  assert.match(ui,/لم يُوثّق صرفها بعد/);
+});
+
+test('return-to-work list includes approved, paid and legacy finance-stage leaves plus on-leave staff',async()=>{
+ const {isReturnEligibleLeave,availableReturnLeaves,employeeOnLeave}=await import('../lib/return-to-work.mjs');
+ const make=(id,status,employee='e')=>({id,module:'leave',status,company:'مسكن الكيان',data:{employee_id:employee,start:'2026-11-01',end:'2026-11-20'}});
+ const all=[make('a','approved'),make('b','paid'),make('c','finance'),make('d','hr'),make('e','rejected')];
+ assert.deepEqual(availableReturnLeaves(all).map(x=>x.id),['a','b','c']);
+ assert.equal(isReturnEligibleLeave(make('d','hr')),false);
+ assert.equal(employeeOnLeave({data:{employment_status:'on_leave'}}),true);
+ assert.equal(employeeOnLeave({data:{employment_status:'في إجازة'}}),true);
+ assert.equal(employeeOnLeave({data:{employment_status:'active'}}),false);
+ assert.deepEqual(availableReturnLeaves([...all,{id:'x',module:'returns',company:'مسكن الكيان',data:{leave_id:'c'}}]).map(x=>x.id),['a','b']);
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/availableReturnLeaves\(rows,company\)/);
+ assert.match(ui,/const pendingLeaves=rows\.filter/);
+ assert.match(ui,/employeeOnLeave\(r\)/);
+ assert.match(ui,/حالة الموظف وحدها لا تثبت اعتماد الإجازة/);
+ assert.match(ui,/تحديث بيانات الإجازات والموظفين/);
+});
+test('return-to-work approval updates employee and open payroll atomically without touching paid batches',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(erp,/isReturnEligibleLeave\(\{\.\.\.linked,data:leave\}\)/);
+ assert.match(erp,/employeeOnLeave\(\{data:employeeData\}\)\?'active'/);
+ assert.match(erp,/module='payroll_batches' AND company=\?/);
+ assert.match(erp,/monthlyBatch&&\['draft','manager_review'\]\.includes\(monthlyBatch.status\)&&current/);
+ assert.match(erp,/return_to_work_at:data\.actual_return/);
+ assert.match(erp,/split_confirmed:false,manager_reviewed:false/);
+ assert.match(erp,/monthlyBatch\.status==='draft'&&!matched\.some/);
+ assert.match(erp,/added_reason:'approved_return_to_work'/);
+ assert.match(erp,/advance_allocations:allocations/);
+ assert.match(erp,/return_payroll_sync:mod==='returns'\?returnPayrollSync/);
+ assert.match(erp,/returnSyncUpdates\.some/);
 });
 
 test('employee requests end at HR; finance is a separate disbursement operation',()=>{
