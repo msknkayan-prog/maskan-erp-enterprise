@@ -1716,7 +1716,7 @@ test('return-to-work list includes approved, paid and legacy finance-stage leave
 test('return-to-work approval updates employee and open payroll atomically without touching paid batches',()=>{
  const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  assert.match(erp,/isReturnEligibleLeave\(\{\.\.\.linked,data:leave\}\)/);
- assert.match(erp,/employeeOnLeave\(\{data:employeeData\}\)\?'active'/);
+ assert.match(erp,/employment_status:employeeData\.employment_status==='terminated'/);
  assert.match(erp,/module='payroll_batches' AND company=\?/);
  assert.match(erp,/monthlyBatch&&\['draft','manager_review'\]\.includes\(monthlyBatch.status\)&&current/);
  assert.match(erp,/return_to_work_at:data\.actual_return/);
