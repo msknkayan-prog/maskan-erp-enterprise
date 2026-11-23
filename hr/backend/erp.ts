@@ -680,7 +680,7 @@ if(body.action==='record_opening_advance_repayment'){
  const context={loans:[...paidLoans,{...old,data}],sums};
  const batches=(await db.prepare("SELECT id,status FROM records WHERE module='payroll_batches'").all()).results;
  const drafts=new Set(batches.filter((b:any)=>b.status==='draft').map((b:any)=>b.id));
- const payrollRows=(await db.prepare("SELECT * FROM records WHERE module='payroll' AND company IN (SELECT company FROM records WHERE id=? AND module='employees')").bind(String(data.employee_id)).all()).results;
+ const payrollRows=(await db.prepare("SELECT * FROM records WHERE module='payroll'").all()).results;
  const synced:any[]=[];
  const statements=[db.prepare("UPDATE records SET data=?,status='paid',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND status='approved'")
  .bind(JSON.stringify(data),now,mutation,old.id,old.revision)];
@@ -770,7 +770,7 @@ if(routedRequest&&details.employee_id&&(current==='draft'||current==='project_ma
   let scope:any=[];try{scope=JSON.parse(manager.companies)}catch{}
   if(!Array.isArray(scope)||!scope.includes(old.company))throw Error('مدير المشروع لا يمتلك صلاحية الشركة المحددة');
  }
- if(manager.projects&&manager.projects!=='*'){
+ if(manager.role!=='hr'&&manager.projects&&manager.projects!=='*'){
   let scope:any=[];try{scope=JSON.parse(manager.projects)}catch{}
   if(!Array.isArray(scope)||!scope.includes(projectId))throw Error('مدير المشروع لا يمتلك صلاحية المشروع المحدد');
  }
