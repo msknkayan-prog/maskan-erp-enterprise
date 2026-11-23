@@ -1862,6 +1862,8 @@ test('finance separately approves monthly payroll before recording payment',()=>
  assert.match(ui,/توثيق الصرف الفعلي/);
  assert.match(ui,/المالية · اعتماد','المالية · صرف/);
  assert.match(backend,/action==='finance_approve'/);
+ assert.match(backend,/const isFinance=u=>\['admin','finance'\]\.includes\(u.role\)\|\|isRequestFinanceActor\(u\)/);
+ assert.match(ui,/b.status==='finance_review'&&\(\['admin','finance'\]\.includes\(user\?\.role\)\|\|isRequestFinanceActor\(user\)\)/);
  assert.match(backend,/finance_approve:'finance_approved',finance_pay:'paid'/);
  assert.match(backend,/modern\?'finance_approved':'finance'/);
  assert.match(backend,/finance_approved_at:now,finance_approved_by:u.email/);
