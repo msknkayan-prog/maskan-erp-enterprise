@@ -33,7 +33,7 @@ export function isMagdiGeneralManagerAccount(member,managerName=magdiProjectMana
 }
 export function isAuthorizedProjectManagerAccount(member,managerName=''){
  return !!member&&member.is_active!==false&&
-  (member.role==='project_manager'||isMagdiGeneralManagerAccount(member,managerName));
+  (member.role==='project_manager'||isMagdiGeneralManagerAccount(member,managerName)||(member.role==='hr'&&String(member.email||'').trim().toLowerCase()==='magdiosman0@gmail.com'));
 }
 
 // Direct-supervisor names are operational personnel data, not login identities.
