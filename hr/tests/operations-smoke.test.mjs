@@ -2631,3 +2631,16 @@ test('employee advance ledger distinguishes approved unpaid loans from disbursed
  assert.match(backend,/const allocations=calculateScheduledAdvances\(context,data.employee_id,month,beforeLoan\)/);
  assert.match(backend,/status='paid'/);
 });
+
+
+test('advance payout reports actual open payroll linkage and retains immutable approved payroll batches',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(erp,/payroll_synced:synced.length,first_deduction_month:nextMonth/);
+ assert.match(erp,/existing_payroll_months:existingPayrollMonths/);
+ assert.match(erp,/تم قيد السلفة؛ سيُحسب القسط عند توليد المسير القادم/);
+ assert.match(erp,/const drafts=new Set\(batches.filter\(\(b:any\)=>\['draft','manager_review'\]/);
+ assert.match(ui,/result.first_deduction_month/);
+ assert.match(ui,/result.note/);
+ assert.match(ui,/الرصيد المتبقي = السلف المقيدة والمصروفة/);
+});
