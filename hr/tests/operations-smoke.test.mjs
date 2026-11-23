@@ -1828,6 +1828,24 @@ test('employee opening leave starts zero and previously confirmed manual balance
  assert.match(ui,/تُحفظ جميع الأرصدة السابقة المعتمدة والمدخلة يدوياً/);
 });
 
+test('company employee dashboard offers live KPIs and filtered staff report export',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const board=readFileSync(new URL('../app/employee-dashboard.tsx',import.meta.url),'utf8');
+ assert.match(ui,/import EmployeeReportsDashboard from '.\/employee-dashboard'/);
+ assert.match(ui,/module==='overview'&&permittedRead\(user\|\|\{\},'employees'\)/);
+ assert.match(ui,/onOpenEmployees=\{\(\)=>setModule\('employees'\)\}/);
+ for(const label of ['لوحة كشوف موظفي الشركات','فلترة كشف الموظفين حسب الشركة','فلترة كشف الموظفين حسب المشروع','فلترة كشف الموظفين حسب الحالة','فلترة كشف الموظفين حسب القسم','فلترة كشف الموظفين حسب الكفالة','كشف مختصر','كشف وظيفي ومشاريع','كشف التواصل','كشف مفصل (للمخولين)','تصدير كشف Excel','طباعة / حفظ PDF'])assert.ok(board.includes(label),label);
+ assert.match(board,/employees=useMemo\(\(\)=>rows.filter\(r=>r.module==='employees'/);
+ assert.match(board,/!r.data\?\._archived&&!r.data\?\._deleted/);
+ assert.match(board,/const canDetailed=\['admin','hr'\]/);
+ assert.match(board,/const canContact=canDetailed\|\|user\?\.role==='administrative_assistant'/);
+ assert.match(board,/const table=\[fields.map\(x=>x\[1\]\),\.\.\.filtered.map/);
+ assert.match(board,/workbookBytes\(table\)/);
+ assert.match(board,/filtered.slice\(0,100\)/);
+ assert.match(board,/جميع النتائج المطابقة، وليس أول 100 فقط/);
+ assert.match(board,/companyDisplayName\(row.company\)/);
+});
+
 test('employee requests end at HR; finance is a separate disbursement operation',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
