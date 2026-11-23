@@ -1752,7 +1752,7 @@ test('project cost center displays staff project and payroll absence amount upda
  assert.match(ui,/salaryAbsenceDeduction\(cycleSalarySummary\(cycleEdit.data\)\.gross/);
  assert.match(backend,/const cost_project_id=assignedProjectId/);
  assert.match(backend,/const absence_deduction=salaryAbsenceDeduction\(salary,absence_days\)/);
- assert.match(erp,/const returnAttendance=returnPeriodAttendance\(leaveData,data.actual_return,currentPayrollMonth\)/);
+ assert.match(erp,/const returnAttendance=returnPeriodAttendance\(leaveData,data.actual_return/);
  assert.match(erp,/last_return_absence_days:returnAttendance.absence_days/);
  assert.match(erp,/absence_days:attendance.absence_days,absence_deduction:salaryAbsenceDeduction/);
  assert.match(erp,/net:newNet,bank_amount:bank/);
