@@ -37,11 +37,11 @@ export function isRequestStageActor(user,stage){
  const email=String(user.email||'').trim().toLowerCase();
  if(stage==='project_manager')return user.role==='project_manager'||user.role==='admin'&&email===requestApprovalOwners.projects_director.email; // The backend additionally matches the request's specific direct supervisor.
  if(stage==='projects_director')return user.role==='admin'&&email===requestApprovalOwners.projects_director.email;
- if(stage==='hr')return user.role==='hr'&&email===requestApprovalOwners.hr.email;
+ if(stage==='hr')return user.role==='hr'&&email===requestApprovalOwners.hr.email||user.role==='admin'&&email===requestApprovalOwners.projects_director.email;
  if(stage==='finance')return isRequestFinanceActor(user);
  return false;
 }
-export const states={draft:'مسودة',project_manager:'المدير المباشر',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
+export const states={draft:'مسودة',project_manager:'مدير المشروع',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
 export const saudiDate=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,10);
 export function annualLeave(hire,at=saudiDate()){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(hire||''))return null;
@@ -215,11 +215,20 @@ export function visible(user,row,all=[]){
   const accountEmail=String(user.email||'').trim().toLowerCase();
   const worker=row.module==='employees'?row:all.find(e=>e.module==='employees'&&e.id===row.data?.employee_id);
   const delegated=String(worker?.data?.delegated_manager_email||'').trim().toLowerCase();
+  if(['leave','advances','resignations'].includes(row.module)&&row.data?.employee_id){
+   const assigned=all.find(p=>p.module==='projects'&&p.id===project);
+   if(!assigned||!project)return false;
+   if(user.projects&&user.projects!=='*'){
+    let scope=[];try{scope=JSON.parse(user.projects)}catch{return false}
+    if(!Array.isArray(scope)||!scope.includes(project))return false;
+   }
+   return assigned.company===row.company&&String(assigned.data?.manager_email||'').trim().toLowerCase()===accountEmail;
+  }
   if(row.module==='employees'&&user.role==='project_manager'){
    const direct=String(row.data?.manager_email||row.data?.supervisor_account||'').trim().toLowerCase();
    if(direct&&direct===accountEmail)return true;
   }
-  if(['leave','advances','resignations','returns','terminations','warnings','appointments'].includes(row.module)&&row.data?.employee_id){
+  if(['returns','terminations','warnings','appointments'].includes(row.module)&&row.data?.employee_id){
    const direct=String(worker?.data?.manager_email||worker?.data?.supervisor_account||'').trim().toLowerCase();
    if(direct&&user.role==='project_manager')return direct===accountEmail;
   }
