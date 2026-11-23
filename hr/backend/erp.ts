@@ -770,43 +770,41 @@ if(routedRequest&&!details.employee_id)throw Error('لا يمكن توجيه ط�
 
 if(routedRequest&&details.employee_id&&(current==='draft'||current==='project_manager')){
  const employeeRecord=await db.prepare("SELECT id,company,data FROM records WHERE id=? AND module='employees' AND company=?").bind(String(details.employee_id),old.company).first<any>();
- if(!employeeRecord)throw Error('لم يتم العثور على الموظف أو أن شركته لا تطابق شركة الطلب');
+ if(!employeeRecord)throw Error('الموظف المرتبط بالطلب غير موجود في الشركة');
  const employeeData=JSON.parse(employeeRecord.data||'{}');
- const currentPayrollMonth=saudiDate().slice(0,7);
- const returnAttendance=returnPeriodAttendance(leaveData,data.actual_return,currentPayrollMonth);
- if(!returnAttendance.valid)throw Error('فترة الإجازة وتاريخ المباشرة غير صالحين للحساب');
- const referenceSalary=Number(employeeData.salary||Number(employeeData.basic||0)+Number(employeeData.housing||0)+Number(employeeData.transport||0));
- if(employeeData._archived||employeeData._deleted)throw Error('الموظف غير نشط في سجل الموظفين');
+ if(employeeData._archived||employeeData._deleted)throw Error('الموظف مؤرشف أو محذوف');
  const projectId=String(employeeData.project_id||details.project_id||'');
- if(!projectId)throw Error('يجب تعيين مشروع الموظف ومدير المشروع قبل إرسال الطلب للاعتماد');
+ if(!projectId)throw Error('يجب تحديد مشروع الموظف ومركز تكلفته');
  const projectRecord=await db.prepare("SELECT id,company,data FROM records WHERE id=? AND module='projects' AND company=?").bind(projectId,old.company).first<any>();
- if(!projectRecord)throw Error('المشروع المرتبط بالموظف غير موجود في الشركة');
+ if(!projectRecord)throw Error('مشروع الموظف غير موجود');
  const projectData=JSON.parse(projectRecord.data||'{}');
- const managerEmail=String(projectData.manager_email||'').trim().toLowerCase();
- if(!managerEmail)throw Error('يجب تعيين مدير المشروع في ملف المشروع قبل إرسال الطلب');
+ // Approval follows the employee's explicitly assigned direct manager, independently of the project manager.
+ const managerEmail=String(employeeData.manager_email||details.direct_manager?.email||'').trim().toLowerCase();
+ const managerName=String(employeeData.manager||details.direct_manager?.name||'').trim();
+ if(!managerEmail)throw Error('المدير المباشر للموظف لا يمتلك بريد اعتماد محدداً؛ حدّث سجل الموظف');
  const manager=await db.prepare('SELECT email,role,is_active,companies,projects,username FROM members WHERE lower(email)=?').bind(managerEmail).first<any>();
- if(!manager||manager.is_active===false||!isAuthorizedProjectManagerAccount({...manager,email:managerEmail},projectData.manager_name||''))throw Error('مدير المشروع ليس لديه حساب اعتماد نشط');
+ if(!manager||manager.is_active===false||!['project_manager','hr','admin','projects_director'].includes(manager.role))throw Error('المدير المباشر لا يملك حساب اعتماد نشطاً');
  if(manager.companies&&manager.companies!=='*'){
   let scope:any=[];try{scope=JSON.parse(manager.companies)}catch{}
-  if(!Array.isArray(scope)||!scope.includes(old.company))throw Error('مدير المشروع لا يمتلك صلاحية الشركة المحددة');
+  if(!Array.isArray(scope)||!scope.includes(old.company))throw Error('المدير المباشر لا يملك صلاحية شركة الموظف');
  }
- if(manager.role!=='hr'&&manager.projects&&manager.projects!=='*'){
+ if(manager.role==='project_manager'&&manager.projects&&manager.projects!=='*'){
   let scope:any=[];try{scope=JSON.parse(manager.projects)}catch{}
-  if(!Array.isArray(scope)||!scope.includes(projectId))throw Error('مدير المشروع لا يمتلك صلاحية المشروع المحدد');
+  if(!Array.isArray(scope)||!scope.includes(projectId))throw Error('المدير المباشر لا يملك صلاحية مشروع الموظف');
  }
  const actorEmail=String(u.email||'').trim().toLowerCase();
  const isDirector=u.role==='admin'&&actorEmail===String(requestApprovalOwners.projects_director.email).toLowerCase();
  const isManager=actorEmail===managerEmail;
  if(current==='draft'){
   details.project_id=projectId;
-  details.project_manager={name:projectData.manager_name||manager.username||managerEmail,email:managerEmail,project_name:projectData.name||'',approval_role:'project_manager'};
+  details.direct_manager={name:managerName||manager.username||managerEmail,email:managerEmail,project_name:projectData.name||'',approval_role:'project_manager'};
   if(isManager||isDirector){
    next='projects_director';
    details.manager_submitted_by=u.email;
    details.manager_submitted_at=now;
   }
  }else if(!isManager&&!isDirector){
-  throw Error('هذا الطلب بانتظار اعتماد مدير المشروع المعين على مشروع الموظف');
+  throw Error('هذا الطلب بانتظار اعتماد المدير المباشر المحدد في سجل الموظف');
  }
 }
 
