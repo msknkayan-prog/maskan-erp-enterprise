@@ -1614,6 +1614,45 @@ test('return-to-work records link leave and employee with duplicate and stale-wr
  assert.match(backend,/returnSyncUpdates\.some/);
 });
 
+test('scheduled loan installments are deterministic and recorded only after disbursement',async()=>{
+ const {calculateScheduledAdvances}=await import('../lib/payroll-advance-schedule.mjs');
+ const auto={id:'a1',data:{employee_id:'e1',amount:5000,installments:10,first_month:'2026-11',schedule_mode:'auto',date:'2026-11-23'}};
+ const manual={id:'a2',data:{...auto.data,schedule_mode:'manual'}};
+ const ctx={loans:[auto,manual],sums:new Map()};
+ assert.deepEqual(calculateScheduledAdvances(ctx,'e1','2026-11',350000),[{advance_id:'a1',amount:500}]);
+ assert.deepEqual(calculateScheduledAdvances(ctx,'e1','2026-10',350000),[]);
+ assert.deepEqual(calculateScheduledAdvances({...ctx,loans:[]},'e1','2026-11',350000),[]);
+ assert.deepEqual(calculateScheduledAdvances(ctx,'e1','2026-11',30000),[{advance_id:'a1',amount:300}]);
+ const deferred={...auto,data:{...auto.data,deferred_months:['2026-11']}};
+ assert.deepEqual(calculateScheduledAdvances({...ctx,loans:[deferred]},'e1','2026-11',350000),[]);
+ const contextPaid={...ctx,sums:new Map([['a1',475000]])};
+ assert.deepEqual(calculateScheduledAdvances(contextPaid,'e1','2026-11',350000),[{advance_id:'a1',amount:250}]);
+});
+test('project manager may also be verified HR approver without changing the account role',async()=>{
+ const {isAuthorizedProjectManagerAccount}=await import('../backend/project-manager-roster.mjs');
+ const {isRequestStageActor,requestApprovalOwners}=await import('../backend/modules.mjs');
+ const manager={email:requestApprovalOwners.hr.email,role:'hr',is_active:true};
+ assert.equal(isAuthorizedProjectManagerAccount(manager,'م محمد يوسف'),true);
+ assert.equal(isRequestStageActor(manager,'project_manager'),true);
+ assert.equal(isRequestStageActor(manager,'hr'),true);
+ assert.equal(isAuthorizedProjectManagerAccount({...manager,email:'someone@example.com'}),false);
+ assert.equal(isAuthorizedProjectManagerAccount({...manager,is_active:false}),false);
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(erp,/const isManager=actorEmail===managerEmail/);
+ assert.match(erp,/manager.role!=='hr'&&manager.projects/);
+});
+test('loan disbursement automatically recalculates draft payroll, preserves approval/review locks',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(erp,/action==='disburse'/);
+ assert.match(erp,/calculateScheduledAdvances\(context,data.employee_id,month,beforeLoan\)/);
+ assert.match(erp,/drafts\.has\(current.batch_id\)/);
+ assert.match(erp,/split_confirmed:false/);
+ assert.match(erp,/advance_schedule_synced_at:now/);
+ assert.match(erp,/payroll_synced:synced.length/);
+ assert.match(ui,/لم يُوثّق صرفها بعد/);
+});
+
 test('employee requests end at HR; finance is a separate disbursement operation',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
