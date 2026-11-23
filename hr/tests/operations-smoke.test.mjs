@@ -2706,3 +2706,18 @@ test('every HR register and printed form exposes the persistent form number and 
  assert.match(paper,/مرجع طلب الإجازة \/ Leave Reference/);
  assert.match(paper,/const parentLeave=row\.data\?\.leave_id/);
 });
+
+
+test('new hire searchable registered master data and authorized manager linking',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/\['job','department','nationality'\]\.map\(key=>/);
+ assert.match(ui,/r\.module==='employees'&&!r\.data\?\._deleted/);
+ assert.match(ui,/<datalist id=\{'hire-filter-'\+key\}>/);
+ assert.match(ui,/placeholder=\{'ابحث أو اختر '\+title\}/);
+ assert.match(ui,/employeeManagerOptions\[edit\.company\]\|\|\[\]\)\.filter\(m=>m\.hasLogin&&m\.email\)/);
+ assert.match(ui,/datalist id="hire-direct-manager-options"/);
+ assert.match(api,/const manager=choices\.find\(\(m:any\)=>m\.hasLogin&&m\.email/);
+ assert.match(api,/اختر المدير المباشر من القائمة المسجلة وله صلاحية اعتماد نشطة/);
+ assert.match(api,/setEmployeeDirectManager\(employee,/);
+});
