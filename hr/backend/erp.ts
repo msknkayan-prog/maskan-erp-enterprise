@@ -538,9 +538,9 @@ if(body.action==='hire_from_appointment'){
  const managerLabel=String(rawForm.direct_manager||rawHire.manager||'').trim();
  if(managerLabel){
   const choices=await availableEmployeeDirectManagers(db,company);
-  const manager=choices.find((m:any)=>m.eligible&&normalizeManagerName(m.name)===normalizeManagerName(managerLabel));
-  if(manager)setEmployeeDirectManager(employee,{name:manager.name,email:manager.email,phone:manager.phone||'',directory_id:manager.directory_id||''},true);
-  else employee.manager=managerLabel.slice(0,250);
+  const manager=choices.find((m:any)=>m.hasLogin&&m.email&&normalizeManagerName(m.name)===normalizeManagerName(managerLabel));
+  if(!manager)throw Error('اختر المدير المباشر من القائمة المسجلة وله صلاحية اعتماد نشطة');
+  setEmployeeDirectManager(employee,{name:manager.name,email:manager.email,phone:manager.phone||'',directory_id:manager.directory_id||''},true);
  }
 
  const empSerial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
