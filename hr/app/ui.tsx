@@ -1369,10 +1369,12 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    <small style={{fontSize:10,color:'#87745a'}}>يمكن التمرير بالسحب أيضًا</small>
   </div>
   <div className="table-wrap" ref={advanceTableScrollRef} dir="rtl" style={{overflowX:'auto',scrollBehavior:'smooth',scrollbarGutter:'stable'}}><table className="employee-register">
-   <thead><tr><th>الشركة</th><th>الرقم الوظيفي</th><th>اسم الموظف</th><th>المشروع</th><th>عدد السلف</th><th>إجمالي السلف المعتمدة</th><th>السداد الافتتاحي</th><th>إجمالي السداد</th><th>المتبقي</th><th>الإجراءات</th></tr></thead>
+   <thead><tr><th>الشركة</th><th>الرقم الوظيفي</th><th>اسم الموظف</th><th>المشروع</th><th>عدد السلف</th><th>معتمد بانتظار الصرف</th><th>السلف المقيدة والمصروفة</th><th>السداد الافتتاحي</th><th>إجمالي السداد</th><th>المتبقي</th><th>الإجراءات</th></tr></thead>
    <tbody>{matchingEmployees.map(employee=>{
     const loans=allAdvances.filter(advance=>advance.data?.employee_id===employee.id&&advance.company===employee.company);
-    const issued=loans.filter(advance=>['approved','paid'].includes(advance.status));
+    const issued=loans.filter(advance=>advance.status==='paid'&&advance.data?.paid_at);
+    const pendingDisbursement=loans.filter(advance=>['approved','finance_approved'].includes(advance.status)&&!advance.data?.paid_at);
+    const pendingAmount=pendingDisbursement.reduce((sum,advance)=>sum+Number(advance.data?.amount||0),0);
     const loanIds=new Set(issued.map(advance=>advance.id));
     const settled=allRepayments.filter(payment=>loanIds.has(payment.data?.advance_id)&&!payment.data?._deleted);
     const totalIssued=issued.reduce((sum,advance)=>sum+Number(advance.data?.amount||0),0);
@@ -1385,7 +1387,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
      <td><span className="company-tag">{companyDisplayName(employee.company)}</span></td>
      <td>{employee.data?.code||employee.code||'—'}</td><td><strong>{employee.data?.name||'غير محدد'}</strong></td>
      <td>{project?.data?.name||employee.data?.project_name||'—'}</td>
-     <td>{loans.length}</td><td>{money(totalIssued)} ر.س</td><td>{money(openingPaid)} ر.س</td><td>{money(totalPaid)} ر.س</td><td><strong>{money(balance)} ر.س</strong></td>
+     <td>{loans.length}</td><td><strong>{money(pendingAmount)} ر.س</strong>{pendingDisbursement.length>0&&<small style={{display:'block',color:'#936d2c'}}>بانتظار توثيق الصرف</small>}</td><td>{money(totalIssued)} ر.س</td><td>{money(openingPaid)} ر.س</td><td>{money(totalPaid)} ر.س</td><td><strong>{money(balance)} ر.س</strong></td>
 
      <td style={{minWidth:350}}><div className="row-actions" style={{display:'flex',flexDirection:'row',gap:4,alignItems:'center',justifyContent:'flex-start',flexWrap:'nowrap',width:'max-content',whiteSpace:'nowrap'}}>
       {canCreate&&<button type="button" className="primary" style={{fontSize:11,padding:'5px 8px',minHeight:28}} onClick={()=>{setFormError('');setLinkedEmployee(null);setEdit({company:employee.company,data:{employee_id:employee.id,amount:'0',date:saudiDate(),installments:'1',first_month:saudiDate().slice(0,7),notes:''}})}}>+ إضافة</button>}
@@ -1400,7 +1402,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
     </tr>;
    })}</tbody>
   </table></div></>}
-  <div className="footnote" style={{padding:'9px 14px'}}>الأزرار الأساسية أفقية. حذف السلفة متاح للمسودات فقط؛ السداد الافتتاحي إجراء مالي موثق بمرجع وتاريخ، ويُخصم من السلف المعتمدة الأقدم. إجمالي السداد يشمل السداد الافتتاحي والسدادات الأخرى مرة واحدة، والمتبقي = إجمالي السلف المعتمدة − إجمالي السداد.</div>
+  <div className="footnote" style={{padding:'9px 14px'}}>الأزرار الأساسية أفقية. حذف السلفة متاح للمسودات فقط؛ السداد الافتتاحي إجراء مالي موثق بمرجع وتاريخ، ويُخصم من السلف المعتمدة الأقدم. إجمالي السداد يشمل السداد الافتتاحي والسدادات الأخرى مرة واحدة. الرصيد المتبقي = السلف المقيدة والمصروفة − السدادات الفعلية؛ المعتمد بانتظار الصرف يظهر منفصلًا ولا يدخل جدول خصم الرواتب حتى يوثق المعتمد صرفه.</div>
  </section>;
 })()}
 
@@ -1457,8 +1459,10 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    <div className="table-wrap"><table><thead><tr><th>التاريخ</th><th>المبلغ</th><th>حالة السلفة</th><th>الإجراء</th></tr></thead><tbody>{visibleLoans.map(loan=><tr key={loan.id}><td>{loan.data?.date||'—'}</td><td>{money(loan.data?.amount)} ر.س</td><td>{states[loan.status]||loan.status}</td><td><div className="row-actions" style={{display:'flex',gap:6,flexWrap:'nowrap'}}>
     <button type="button" onClick={()=>{setAdvanceManager(null);setLinkedEmployee(null);setEdit({...loan,data:{...loan.data}})}}>{loan.status==='draft'&&canChange?'تعديل':'عرض'}</button>
     {loan.status==='draft'&&canRemove&&<button type="button" className="danger-action" disabled={saving} onClick={async()=>{await deleteDraftRequest(loan);setAdvanceManager(null);}}>حذف</button>}
-    {['paid','approved'].includes(loan.status)&&<button type="button" onClick={()=>{setAdvanceManager(null);setSchedulePanel({id:loan.id,mode:loan.data?.schedule_mode||'auto',kind:'defer_installment',month:saudiDate().slice(0,7)})}}>الجدولة / التأجيل</button>}
- {loan.status==='paid'&&<button type="button" onClick={()=>{setAdvanceManager(null);setLinkedFinance({kind:'repayments',parentId:loan.id,amount:'',date:saudiDate(),reference:'',method:'cash',travel_amount:'0',other_amount:'0',deductions:'0',notes:''})}}>سداد / السجل</button>}
+    {['paid','approved','finance_approved'].includes(loan.status)&&<button type="button" onClick={()=>{setAdvanceManager(null);setSchedulePanel({id:loan.id,mode:loan.data?.schedule_mode||'auto',kind:'defer_installment',month:saudiDate().slice(0,7)})}}>الجدولة / التأجيل</button>}
+ {['approved','finance_approved'].includes(loan.status)&&isRequestFinanceActor(user)&&<button type="button" className="primary" disabled={saving} onClick={async()=>{await gmFinalizeAdvance(loan);setAdvanceManager(null);}}>اعتماد الصرف وربطه بالرواتب</button>}
+    {loan.status==='paid'&&<small>سلفة مقيدة في حساب الموظف · الخصم الشهري {money(loan.data?.monthly_deduction||loan.data?.installment_amount||0)} ر.س · بدء الجدولة {loan.data?.first_month||'—'}</small>}
+    {loan.status==='paid'&&<button type="button" onClick={()=>{setAdvanceManager(null);setLinkedFinance({kind:'repayments',parentId:loan.id,amount:'',date:saudiDate(),reference:'',method:'cash',travel_amount:'0',other_amount:'0',deductions:'0',notes:''})}}>سداد / السجل</button>}
     {loan.status!=='draft'&&<small>معتمد/قيد إجراء — لا يُحذف</small>}
    </div></td></tr>)}</tbody></table></div>}
   {advanceManager.mode==='delete'&&!canRemove&&<p className="footnote">حذف المسودات يتطلب صلاحية المدير العام أو شؤون الموظفين وصلاحية التعديل.</p>}
