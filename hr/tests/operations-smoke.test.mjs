@@ -1621,7 +1621,7 @@ test('return-to-work register preserves completed records, actual dates and pend
 
 test('approved and HR-approved legacy leaves appear in return-to-work queue',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- for(const marker of ['الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة','إجازة معتمدة','تسجيل المباشرة','leave.data.employee_id','return_record_id','leave.data.expected_return','setEdit({company:leave.company','آخر مباشرة من إجازة مسجلة','availableReturnLeaves(rows,company)'])assert.ok(ui.includes(marker),marker);
+ for(const marker of ['الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة','بانتظار تسجيل المباشرة','تسجيل المباشرة','leave.data.employee_id','return_record_id','leave.data.expected_return','setEdit({company:leave.company','آخر مباشرة من إجازة مسجلة','availableReturnLeaves(rows,company)'])assert.ok(ui.includes(marker),marker);
  assert.match(ui,/employeeOnLeave\(r\)/);
  assert.match(ui,/actual_return:''/);
 });
