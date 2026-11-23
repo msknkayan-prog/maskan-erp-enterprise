@@ -2379,3 +2379,13 @@ test('V87 manual contract date accrues leave from hire date, not saved manual 84
  assert.match(ui,/contract_expiry_mode:'manual',leave_balance_mode:'auto'/);
  assert.match(backend,/e.contract_expiry_mode!=='manual'&&e.leave_balance_mode==='manual'/);
 });
+
+// Regression: a return in a prior month must not rewrite the current month's payroll.
+test('return-to-work sync targets actual return month and restores active employment without reviving terminated employees',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(erp,/const month=String\(data\.actual_return\)\.slice\(0,7\)/);
+ assert.match(erp,/employment_status:employeeData\.employment_status==='terminated'/);
+ assert.match(erp,/employee_status:employeeData\.employee_status==='terminated'/);
+ assert.match(erp,/data\.payroll_sync_month=month/);
+ assert.match(erp,/return_record_id:id/);
+});
