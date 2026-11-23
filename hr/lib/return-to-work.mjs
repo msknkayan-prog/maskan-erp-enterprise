@@ -10,3 +10,14 @@ export const availableReturnLeaves=(records,company='')=>{
  const all=records.filter(r=>r.module==='leave'&&(!company||r.company===company)&&isReturnEligibleLeave(r));
  return all.filter(leave=>!leave.data?.return_record_id&&!records.some(r=>r.module==='returns'&&r.company===leave.company&&r.data?.leave_id===leave.id&&!r.data?._deleted));
 };
+
+export const returnToWorkRegister=(records,company='')=>{
+ const leaves=records.filter(r=>r.module==='leave'&&(!company||r.company===company)&&isReturnEligibleLeave(r));
+ const returns=records.filter(r=>r.module==='returns'&&(!company||r.company===company)&&!r.data?._deleted);
+ return leaves.map(leave=>{
+  const returnRecord=returns.find(record=>record.data?.leave_id===leave.id||record.id===leave.data?.return_record_id)||null;
+  const actualReturn=String(returnRecord?.data?.actual_return||leave.data?.actual_return||'');
+  const completed=Boolean(actualReturn&&(returnRecord||leave.data?.return_record_id||leave.data?.return_status==='completed'));
+  return {leave,returnRecord,actualReturn,completed,status:completed?'تمت المباشرة':'بانتظار تسجيل المباشرة'};
+ });
+};

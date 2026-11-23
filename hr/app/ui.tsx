@@ -4,7 +4,7 @@ import {useEffect,useState,useRef,useMemo,Fragment} from 'react';
 import {employeeRegisterFields,employeeRegisterValue} from '../lib/employee-register.mjs';
 import {projectRegisterFields as projectRegisterBaseFields,projectRegisterValue} from '../lib/project-register.mjs';
 import {requestApprovalStages,requestStageView,requestStageTimestamp} from '../lib/request-approval.mjs';
-import {availableReturnLeaves,employeeOnLeave,isReturnEligibleLeave} from '../lib/return-to-work.mjs';
+import {availableReturnLeaves,employeeOnLeave,isReturnEligibleLeave,returnToWorkRegister} from '../lib/return-to-work.mjs';
 import {returnPeriodAttendance,salaryAbsenceDeduction} from '../lib/payroll-attendance.mjs';
 import {LayoutDashboard,Users,Building2,FileText,Wallet,ShoppingCart,CalendarDays,TriangleAlert,ChartNoAxesCombined,Search,Plus,ArrowUpLeft,Cloud,ChevronLeft,Download,Upload,X,Check,ShieldCheck,LogOut,RefreshCw,ArrowRight,MapPin} from 'lucide-react';
 import {companies,canonicalCompany,companyDisplayName,modules,states,annualLeave,leaveAccrualAsOf,nextContractExpiry,canRead,canWrite,workflow,enumOptions,relationModules,operationalModules,saudiDate,fixedLeaveDays,leaveEndDate,leaveNextDate,leaveCalendarDays,leaveChargedDays,permission,permissionChoice,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners} from '../lib/modules.mjs';
@@ -379,7 +379,7 @@ async function deleteProjectManager(row){
   const result=await post({action:'save',module,...payload});
  setEdit(null);
  if(module==='employees'&&!edit.id&&result.employee_code){notify('تم تسجيل الموظف بنجاح، الرقم الوظيفي: '+result.employee_code);await refresh();return;}
- notify(result.company_transferred?(result.linked_account_review_required?'تم نقل تبعية الموظف وحفظ التاريخ؛ راجع نطاق صلاحيات حساب دخوله':'تم نقل تبعية الموظف مع الاحتفاظ بالسجلات السابقة'):(result.payroll_synced?'حُفظ الراتب وتم تحديث '+result.payroll_synced+' سجل في المسيرات المفتوحة؛ يلزم إعادة المراجعة':'تم حفظ جميع بيانات السجل'));
+ notify(module==='returns'?'تم حفظ المباشرة بتاريخ '+edit.data.actual_return+' وتحديث حالة الإجازة إلى تمت المباشرة':result.company_transferred?(result.linked_account_review_required?'تم نقل تبعية الموظف وحفظ التاريخ؛ راجع نطاق صلاحيات حساب دخوله':'تم نقل تبعية الموظف مع الاحتفاظ بالسجلات السابقة'):(result.payroll_synced?'حُفظ الراتب وتم تحديث '+result.payroll_synced+' سجل في المسيرات المفتوحة؛ يلزم إعادة المراجعة':'تم حفظ جميع بيانات السجل'));
 
  await refresh();
  if(repairRequest&&((module==='projects'&&edit.id===repairRequest.projectId)||(module==='employees'&&edit.id===rows.find(r=>r.id===repairRequest.id&&r.module===repairRequest.module)?.data?.employee_id))){
@@ -1473,22 +1473,24 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  const linkedEmployeeIds=new Set(queue.map(r=>r.data.employee_id));
  const onLeaveEmployees=rows.filter(r=>r.module==='employees'&&(!company||r.company===company)&&!r.data?._archived&&employeeOnLeave(r));
  const missing=onLeaveEmployees.filter(e=>!linkedEmployeeIds.has(e.id));
- const ordered=[...queue].sort((a,b)=>String(a.data.expected_return||leaveNextDate(a.data.end)||'').localeCompare(String(b.data.expected_return||leaveNextDate(b.data.end)||'')));
+ const registered=returnToWorkRegister(rows,company);
+ const completedReturns=registered.filter(entry=>entry.completed);
+ const ordered=[...registered].sort((a,b)=>String(a.leave.data.expected_return||leaveNextDate(a.leave.data.end)||'').localeCompare(String(b.leave.data.expected_return||leaveNextDate(b.leave.data.end)||'')));
  const legacy=queue.filter(l=>l.status==='finance'||l.status==='paid').length;
  const pendingLeaves=rows.filter(l=>l.module==='leave'&&(!company||l.company===company)&&!l.data?._deleted&&l.data?.start&&l.data.start<=today&&!isReturnEligibleLeave(l)&&!['rejected','cancelled'].includes(l.status)&&!l.data?.return_record_id);
  return <section className="panel" dir="rtl" style={{padding:14,marginBottom:14,border:'1px solid #d7bd82'}}>
- <div className="panel-head"><h2>الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة</h2><span>{queue.length} إجازة معتمدة · {missing.length} حالة موظف تحتاج ربط</span></div>
+ <div className="panel-head"><h2>الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة</h2><span>{queue.length} بانتظار المباشرة · {completedReturns.length} تمت المباشرة · {missing.length} تحتاج ربط</span></div>
  <small>تُعرض الإجازات المعتمدة والطلبات القديمة التي اجتازت شؤون الموظفين ووصلت لمرحلة المالية، إضافة إلى حالات الموظفين «في إجازة» التي تحتاج ربطاً بطلب معتمد. لا تُنشأ مباشرة دون طلب إجازة معتمد.</small>
  <div style={{display:'flex',gap:12,margin:'10px 0',flexWrap:'wrap',fontSize:12}}>
- <span>إجازات مؤهلة للمباشرة: <b>{queue.length}</b></span><span>إجازات بالنظام القديم: <b>{legacy}</b></span><span>موظفون بحالة «في إجازة»: <b>{onLeaveEmployees.length}</b></span>
+ <span>بانتظار تسجيل المباشرة: <b>{queue.length}</b></span><span>تمت المباشرة: <b>{completedReturns.length}</b></span><span>إجازات بالنظام القديم: <b>{legacy}</b></span><span>موظفون بحالة «في إجازة»: <b>{onLeaveEmployees.length}</b></span>
  <button type="button" disabled={loading} onClick={refresh}>تحديث بيانات الإجازات والموظفين</button>
  </div>
- {ordered.length?<div className="table-wrap" style={{marginTop:12}}><table><thead><tr><th>الشركة</th><th>الموظف</th><th>الرقم الوظيفي</th><th>المشروع</th><th>بداية الإجازة</th><th>نهاية الإجازة</th><th>المباشرة المتوقعة</th><th>الحالة</th><th>الإجراء</th></tr></thead>
- <tbody>{ordered.map(leave=>{const employee=rows.find(e=>e.module==='employees'&&e.id===leave.data.employee_id&&e.company===leave.company);
+ {ordered.length?<div className="table-wrap" style={{marginTop:12}}><table><thead><tr><th>الشركة</th><th>الموظف</th><th>الرقم الوظيفي</th><th>المشروع</th><th>بداية الإجازة</th><th>نهاية الإجازة</th><th>المباشرة المتوقعة</th><th>تاريخ المباشرة الفعلي</th><th>الحالة</th><th>الإجراء</th></tr></thead>
+ <tbody>{ordered.map(entry=>{const {leave,actualReturn,completed,returnRecord}=entry;const employee=rows.find(e=>e.module==='employees'&&e.id===leave.data.employee_id&&e.company===leave.company);
  const expected=leave.data.expected_return||leaveNextDate(leave.data.end)||'';
  const started=Boolean(leave.data.start&&leave.data.start<=today);
  const project=rows.find(p=>p.module==='projects'&&p.id===(employee?.data.project_id||leave.data.project_id));
- return <tr key={leave.id}><td>{companyDisplayName(leave.company)}</td><td>{employee?.data.name||leave.data.employee_snapshot?.name||'غير محدد'}</td><td>{employee?.data.code||leave.data.employee_snapshot?.code||'—'}</td><td>{project?.data.name||'—'}</td><td>{leave.data.start||'—'}</td><td>{leave.data.end||'—'}</td><td>{expected||'—'}</td><td>{!started?'الإجازة لم تبدأ':expected&&expected>today?'قيد الإجازة':'بانتظار تسجيل المباشرة'}{leave.status==='finance'&&<small style={{display:'block'}}>اعتماد قديم بعد شؤون الموظفين</small>}</td><td><button type="button" disabled={saving||!started||!employee||!permittedWrite(user||{},'returns')} onClick={()=>{setFormError('');setEdit({company:leave.company,data:{leave_id:leave.id,employee_id:leave.data.employee_id,leave_start:leave.data.start||'',leave_end:leave.data.end||'',expected_return:expected,actual_return:'',notes:''}})}}>تسجيل المباشرة</button></td></tr>})}</tbody></table></div>:<p style={{marginTop:12}}>لا توجد حالياً إجازات مكتملة الاعتماد لم تُسجل مباشرتها ضمن الشركة المختارة.</p>}
+ return <tr key={leave.id}><td>{companyDisplayName(leave.company)}</td><td>{employee?.data.name||leave.data.employee_snapshot?.name||'غير محدد'}</td><td>{employee?.data.code||leave.data.employee_snapshot?.code||'—'}</td><td>{project?.data.name||'—'}</td><td>{leave.data.start||'—'}</td><td>{leave.data.end||'—'}</td><td>{expected||'—'}</td><td><strong>{completed?actualReturn:'—'}</strong></td><td>{completed?<span className="badge approved">تمت المباشرة</span>:!started?'الإجازة لم تبدأ':expected&&expected>today?'قيد الإجازة':'بانتظار تسجيل المباشرة'}{!completed&&leave.status==='finance'&&<small style={{display:'block'}}>اعتماد قديم بعد شؤون الموظفين</small>}</td><td>{completed?returnRecord?<button type="button" onClick={()=>{setFormError('');setEdit({...returnRecord,data:{...returnRecord.data}})}}>عرض محضر المباشرة</button>:<span>تم تسجيل المباشرة</span>:<button type="button" disabled={saving||!started||!employee||!permittedWrite(user||{},'returns')} onClick={()=>{setFormError('');setEdit({company:leave.company,data:{leave_id:leave.id,employee_id:leave.data.employee_id,leave_start:leave.data.start||'',leave_end:leave.data.end||'',expected_return:expected,actual_return:'',notes:''}})}}>تسجيل المباشرة</button>}</td></tr>})}</tbody></table></div>:<p style={{marginTop:12}}>لا توجد حالياً إجازات معتمدة مسجلة ضمن الشركة المختارة.</p>}
  {pendingLeaves.length>0&&<div style={{marginTop:14}}><strong>إجازات بدأت ولم يكتمل اعتمادها بعد ({pendingLeaves.length})</strong><div className="table-wrap"><table><thead><tr><th>الشركة</th><th>الموظف</th><th>مرحلة اعتماد الإجازة</th><th>الإجراء</th></tr></thead><tbody>
  {pendingLeaves.map(l=>{const employee=rows.find(e=>e.module==='employees'&&e.id===l.data.employee_id&&e.company===l.company);return <tr key={l.id}><td>{companyDisplayName(l.company)}</td><td>{employee?.data.name||l.data?.employee_snapshot?.name||'غير محدد'}</td><td>{states[l.status]||l.status}</td><td><button type="button" onClick={()=>{setCompany(l.company);setModule('leave');setSearch(employee?.data?.code||employee?.data?.name||'')}}>فتح طلب الإجازة للاعتماد</button></td></tr>})}
  </tbody></table></div><small>لا يمكن اعتماد المباشرة اعتماداً على إجازة لا تزال بمرحلة الموافقات.</small></div>}

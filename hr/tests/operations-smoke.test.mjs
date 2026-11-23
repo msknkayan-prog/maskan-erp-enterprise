@@ -1596,9 +1596,32 @@ test('employee direct manager is a verified roster choice reflected in request s
  assert.match(ui,/setMembers\(d\.rows\)/);
  assert.match(ui,/f\.type!=='internal'/);
 });
+test('return-to-work register preserves completed records, actual dates and pending entries',async()=>{
+ const {returnToWorkRegister,availableReturnLeaves}=await import('../lib/return-to-work.mjs');
+ const approved=(id,employee_id)=>({id,module:'leave',status:'approved',company:'مسكن الكيان',data:{employee_id,start:'2026-10-01',end:'2026-10-31'}});
+ const a=approved('leave-a','employee-a'),b=approved('leave-b','employee-b'),c=approved('leave-c','employee-c');
+ c.data.return_status='completed';c.data.return_record_id='legacy-return';c.data.actual_return='2026-11-10';
+ const returned={id:'return-a',module:'returns',company:'مسكن الكيان',data:{leave_id:'leave-a',actual_return:'2026-11-05'}};
+ const records=[a,b,c,returned];
+ const list=returnToWorkRegister(records,'مسكن الكيان');
+ assert.equal(list.length,3);
+ assert.deepEqual(list.find(x=>x.leave.id==='leave-a')&&[list.find(x=>x.leave.id==='leave-a').completed,list.find(x=>x.leave.id==='leave-a').actualReturn,list.find(x=>x.leave.id==='leave-a').status],[true,'2026-11-05','تمت المباشرة']);
+ assert.equal(list.find(x=>x.leave.id==='leave-b').completed,false);
+ assert.equal(list.find(x=>x.leave.id==='leave-c').completed,true);
+ assert.deepEqual(availableReturnLeaves(records).map(x=>x.id),['leave-b']);
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/returnToWorkRegister\(rows,company\)/);
+ assert.match(ui,/<th>تاريخ المباشرة الفعلي<\/th>/);
+ assert.match(ui,/تمت المباشرة<\/span>/);
+ assert.match(ui,/عرض محضر المباشرة/);
+ assert.match(ui,/تم حفظ المباشرة بتاريخ/);
+ assert.match(api,/return_status:'completed',actual_return:data.actual_return/);
+});
+
 test('approved and HR-approved legacy leaves appear in return-to-work queue',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- for(const marker of ['الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة','إجازة معتمدة','تسجيل المباشرة','leave.data.employee_id','return_record_id','leave.data.expected_return','setEdit({company:leave.company','آخر مباشرة من إجازة مسجلة','availableReturnLeaves(rows,company)'])assert.ok(ui.includes(marker),marker);
+ for(const marker of ['الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة','بانتظار تسجيل المباشرة','تسجيل المباشرة','leave.data.employee_id','return_record_id','leave.data.expected_return','setEdit({company:leave.company','آخر مباشرة من إجازة مسجلة','availableReturnLeaves(rows,company)'])assert.ok(ui.includes(marker),marker);
  assert.match(ui,/employeeOnLeave\(r\)/);
  assert.match(ui,/actual_return:''/);
 });
