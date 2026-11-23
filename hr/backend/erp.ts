@@ -671,24 +671,12 @@ if(body.action==='record_opening_advance_repayment'){
   if(!result[0].meta.changes)throw Error('تغير الطلب؛ حدّث الصفحة قبل الحذف');
   return json({ok:true,deleted:true});
  }
- if(body.action==='approve_advance_finance'){
-  if(mod!=='advances'||!old||old.status!=='approved'||!isRequestFinanceActor(u)||!permission(u,'advances','approve'))throw Error('403');
-  const remarks=String(body.note||'').trim().slice(0,1000);
-  const details={...JSON.parse(old.data||'{}'),finance_approved_by:u.email,finance_approved_at:now,finance_approval_note:remarks};
-  const results=await db.batch([
-   db.prepare("UPDATE records SET status='finance_approved',data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='advances' AND status='approved' AND revision=?")
-    .bind(JSON.stringify(details),now,mutation,old.id,old.revision),
-   db.prepare("INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)")
-    .bind(crypto.randomUUID(),u.email,old.id,'advance_finance_approval',now,JSON.stringify({reference:old.code||old.id,financial_approver:u.email,note:remarks}),old.id,mutation)
-  ]);
-  if(!results[0]?.meta?.changes)throw Error('تغيرت حالة السلفة؛ حدّث الصفحة');
-  return json({ok:true,status:'finance_approved'});
- }
+ if(body.action==='approve_advance_finance')throw Error('تم إلغاء مرحلة المالية المنفصلة؛ يعتمد المدير العام السلفة ويقيدها مباشرة في سجل الموظف');
  if(body.action==='gm_approve_advance'||body.action==='disburse'){
  // The GM is the only final authorizer. Old finance-approved records can be finalized without replaying approvals.
  if(mod!=='advances'||!old||u.role!=='admin'||!permission(u,mod,'approve')||!['approved','finance_approved'].includes(old.status))throw Error('اعتماد وقيد السلفة النهائي من صلاحية المدير العام وبعد استكمال الاعتمادات الإدارية');
  const source=JSON.parse(old.data||'{}');
- const reference='ADV-'+String(old.code||old.id).replace(/[^\\p{L}\\p{N}-]/gu,'').slice(0,40);
+ const reference='ADV-'+String(old.code||old.id).replace(/[^\p{L}\p{N}-]/gu,'').slice(0,40);
  if(!(Number(source.amount)>0)||!Number.isFinite(Number(source.amount)))throw Error('مبلغ السلفة غير صالح للاعتماد');
  const employee=await db.prepare("SELECT id,data,revision FROM records WHERE id=? AND module='employees' AND company=?").bind(String(source.employee_id||''),old.company).first<any>();
  if(!employee)throw Error('سجل الموظف المستفيد غير موجود في الشركة');
