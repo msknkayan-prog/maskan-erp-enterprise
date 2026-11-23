@@ -2612,3 +2612,22 @@ test('release identifier is generated every build and approved advance guidance 
  assert.match(ui,/اعتماد مبلغ الصرف وتقييده/);
  assert.doesNotMatch(ui,/قيد العمل حتى اعتماد صرف المبلغ من المدير العام أو المالية؛ التعديل المباشر للطلب متاح للمسودات فقط/);
 });
+
+
+test('employee advance ledger distinguishes approved unpaid loans from disbursed loans and allows authorized payout',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/const issued=loans.filter\(advance=>advance.status==='paid'&&advance.data\?\.paid_at\)/);
+ assert.match(ui,/const pendingDisbursement=loans.filter\(advance=>\['approved','finance_approved'\]/);
+ assert.match(ui,/معتمد بانتظار الصرف/);
+ assert.match(ui,/السلف المقيدة والمصروفة/);
+ assert.match(ui,/pendingDisbursement.reduce/);
+ assert.match(ui,/رصيد المتبقي|الرصيد المتبقي/);
+ assert.match(ui,/اعتماد الصرف وربطه بالرواتب/);
+ assert.match(ui,/isRequestFinanceActor\(user\)&&<button type="button" className="primary" disabled=\{saving\} onClick=\{async\(\)=>\{await gmFinalizeAdvance\(loan\)/);
+ const schedule=readFileSync(new URL('../lib/payroll-advance-schedule.mjs',import.meta.url),'utf8');
+ assert.match(schedule,/loan\?\.status==='paid'&&loan.data\?\.paid_at/);
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(backend,/advance_disbursement_ledger/);
+ assert.match(backend,/const allocations=calculateScheduledAdvances\(context,data.employee_id,month,beforeLoan\)/);
+ assert.match(backend,/status='paid'/);
+});
