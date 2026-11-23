@@ -1658,7 +1658,7 @@ test('return-to-work records link leave and employee with duplicate and stale-wr
 
 test('scheduled loan installments are deterministic and recorded only after disbursement',async()=>{
  const {calculateScheduledAdvances}=await import('../lib/payroll-advance-schedule.mjs');
- const auto={id:'a1',data:{employee_id:'e1',amount:5000,installments:10,first_month:'2026-11',schedule_mode:'auto',date:'2026-11-23'}};
+ const auto={id:'a1',status:'paid',data:{employee_id:'e1',amount:5000,installments:10,first_month:'2026-11',schedule_mode:'auto',date:'2026-11-23',paid_at:'2026-11-23T11:00:00Z'}};
  const manual={id:'a2',data:{...auto.data,schedule_mode:'manual'}};
  const ctx={loans:[auto,manual],sums:new Map()};
  assert.deepEqual(calculateScheduledAdvances(ctx,'e1','2026-11',350000),[{advance_id:'a1',amount:500}]);
@@ -1775,7 +1775,7 @@ test('payroll newly generated and newly added employee rows derive absence from 
 });
 test('outstanding scheduled paid advances continue every month and never overdraw balance',async()=>{
  const {calculateScheduledAdvances,loanFirstMonth}=await import('../lib/payroll-advance-schedule.mjs');
- const loan={id:'advance-1',data:{employee_id:'employee-1',amount:5000,installments:10,first_month:'2026-11',schedule_mode:'auto'}};
+ const loan={id:'advance-1',status:'paid',data:{employee_id:'employee-1',amount:5000,installments:10,first_month:'2026-11',schedule_mode:'auto',paid_at:'2026-11-23T11:00:00Z'}};
  const ctx={loans:[loan],sums:new Map()};
  assert.equal(calculateScheduledAdvances(ctx,'employee-1','2026-11',900000)[0].amount,500);
  assert.equal(calculateScheduledAdvances(ctx,'employee-1','2026-12',900000)[0].amount,500);
@@ -1863,8 +1863,8 @@ test('advance requests display financial approval only after HR and retain their
  assert.equal(requestStageView({module:'leave',status:'approved',data:{}},'advance_finance').label,'غير مطبق');
  assert.equal(requestStageTimestamp({data:{finance_approved_at:'2026-11-23T13:00:00Z'}},'advance_finance'),'2026-11-23T13:00:00Z');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- assert.match(ui,/row.module==='advances'\?\[\.\.\.requestApprovalStages,advanceFinanceStage\]/);
- assert.match(ui,/module==='advances'\?\[\.\.\.requestApprovalStages,advanceFinanceStage\]/);
+ assert.match(ui,/row.module==='advances'\?\[\.\.\.requestApprovalStages,advanceFinanceStage,advanceDisbursementStage\]/);
+ assert.match(ui,/module==='advances'\?\[\.\.\.requestApprovalStages,advanceFinanceStage,advanceDisbursementStage\]/);
 });
 test('finance separately approves monthly payroll before recording payment',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
@@ -2403,4 +2403,27 @@ test('appointment and return views tolerate nested historical data without a ful
   {id:'return-legacy',module:'returns',company:'مسكن الكيان',status:'completed',data:{leave_id:'leave-legacy',actual_return:'2026-11-11'}}
  ];
  assert.deepEqual(returns.returnToWorkRegister(records).map(r=>[r.completed,r.actualReturn]),[[true,'2026-11-11']]);
+});
+
+test('advance approval, finance payout and installment activation are separate auditable stages',async()=>{
+ const {requestStageView,requestStageTimestamp,advanceDisbursementStage}=await import('../lib/request-approval.mjs');
+ const {calculateScheduledAdvances,loanFirstMonth}=await import('../lib/payroll-advance-schedule.mjs');
+ assert.equal(advanceDisbursementStage.id,'advance_disbursement');
+ const approved={module:'advances',status:'approved',data:{employee_id:'e1',amount:1000,installments:2,first_month:'2026-10'}};
+ assert.equal(requestStageView(approved,'advance_disbursement').kind,'future');
+ assert.equal(requestStageView({...approved,status:'finance_approved'},'advance_disbursement').kind,'waiting');
+ assert.equal(requestStageView({...approved,status:'paid'},'advance_disbursement').kind,'done');
+ assert.equal(requestStageTimestamp({...approved,data:{paid_at:'2026-11-23T13:00:00Z'}},'advance_disbursement'),'2026-11-23T13:00:00Z');
+ const pending={id:'advance-a',status:'finance_approved',data:{...approved.data}};
+ const paid={...pending,status:'paid',data:{...pending.data,paid_at:'2026-11-23T13:00:00Z'}};
+ assert.deepEqual(calculateScheduledAdvances({loans:[pending],sums:new Map()},'e1','2026-11',500000),[]);
+ assert.deepEqual(calculateScheduledAdvances({loans:[paid],sums:new Map()},'e1','2026-10',500000),[]);
+ assert.deepEqual(calculateScheduledAdvances({loans:[paid],sums:new Map()},'e1','2026-11',500000),[{advance_id:'advance-a',amount:500}]);
+ assert.equal(loanFirstMonth(paid),'2026-11');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/onFinanceApprove=\{\(\)=>financeApproveAdvance\(row\)\}/);
+ assert.match(ui,/onDisburse=\{\(\)=>disburse\(row\)\}/);
+ assert.match(api,/loans:\[\.\.\.paidLoans,\{\.\.\.old,status:'paid',data\}\]/);
+ assert.match(api,/status='paid'/);
 });
