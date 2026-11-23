@@ -2485,7 +2485,7 @@ test('GM unified employee request action approves stages with an audit trail and
 test('leave payment actions show pending/paid, remove obsolete finance-for-payout label and mirror payout in employee ledger',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- for(const label of ['حالة الصرف','قيد الصرف','تم الصرف','صرف المبلغ','المبلغ المستحق / المصروف','استكمال اعتماد الإجازة','سجل مستحقات الإجازة المصروفة للموظف'])assert.ok(ui.includes(label),label);
+ for(const label of ['حالة الطلب','قيد الصرف','تم الصرف','صرف المبلغ','المبلغ المستحق / المصروف','استكمال اعتماد الإجازة','سجل مستحقات الإجازة المصروفة للموظف'])assert.ok(ui.includes(label),label);
  assert.match(ui,/row.status==='finance'\?'اعتماد إداري مكتمل'/);
  assert.match(ui,/const canFinance=isRequestFinanceActor\(user\)/);
  assert.match(api,/const ledger=Array.isArray\(employeeData.leave_payment_ledger\)/);
