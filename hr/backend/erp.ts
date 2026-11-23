@@ -1053,6 +1053,10 @@ if(mod==='returns'){
  const employeeRecord=await db.prepare("SELECT id,data,revision FROM records WHERE id=? AND module='employees' AND company=?").bind(data.employee_id,body.company).first<any>();
  if(!employeeRecord)throw Error('تعذر الوصول إلى سجل الموظف المرتبط بالإجازة');
  const employeeData=JSON.parse(employeeRecord.data||'{}');
+ const currentPayrollMonth=String(data.actual_return||'').slice(0,7);
+ const returnAttendance=returnPeriodAttendance(leaveData,data.actual_return,currentPayrollMonth);
+ if(!returnAttendance.valid)throw Error('لا يمكن احتساب المباشرة؛ تحقق من بداية الإجازة ونهايتها وتاريخ العودة الفعلي');
+ const referenceSalary=Number(employeeData.salary||Number(employeeData.basic||0)+Number(employeeData.housing||0)+Number(employeeData.transport||0));
  const updatedLeave={...leaveData,return_record_id:id,return_status:'completed',actual_return:data.actual_return,return_recorded_at:now,return_recorded_by:u.email,return_last_updated_by:u.email,return_last_updated_at:now};
  returnSyncUpdates.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='leave' AND revision=? AND COALESCE(data::jsonb->>'return_record_id','') IN ('',?)")
  .bind(JSON.stringify(updatedLeave),now,mutation,returnLeaveRecord.id,returnLeaveRecord.revision,id));
