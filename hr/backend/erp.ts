@@ -504,7 +504,7 @@ if(old&&JSON.parse(old.data)?._deleted)throw Error('هذا الطلب محذوف
 
 if(body.action==='configure_advance_schedule'){
  if(mod!=='advances'||!old||!['admin','finance'].includes(u.role)||!permission(u,'advances','edit'))throw Error('ليس لديك صلاحية تعديل جدولة السلف');
- if(!['approved','paid'].includes(old.status))throw Error('تعديل الجدولة متاح للسلف المعتمدة أو المصروفة فقط');
+ if(!['approved','finance_approved','paid'].includes(old.status))throw Error('تعديل الجدولة متاح للسلف المعتمدة أو المصروفة فقط');
  const data=JSON.parse(old.data||'{}'),kind=String(body.kind||''),month=String(body.month||'');
  const todayMonth=saudiDate().slice(0,7);
  if(!['set_mode','defer_installment','defer_loan','resume'].includes(kind))throw Error('إجراء الجدولة غير صالح');
@@ -532,7 +532,7 @@ if(body.action==='configure_advance_schedule'){
   data.deferred_months=[...prior].sort();
  }
  const res=await db.batch([
-  db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='advances' AND revision=? AND status IN ('paid','approved')").bind(JSON.stringify(data),now,mutation,old.id,old.revision),
+  db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='advances' AND revision=? AND status IN ('paid','approved','finance_approved')").bind(JSON.stringify(data),now,mutation,old.id,old.revision),
   db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,old.id,'advance_schedule_change',now,JSON.stringify({kind,month:month||null,schedule_mode:data.schedule_mode,deferred_months:data.deferred_months||[]}))
  ]);
  if(!res[0].meta.changes)throw Error('تم تعديل السلفة من مستخدم آخر؛ حدث الصفحة');
@@ -671,11 +671,24 @@ if(body.action==='record_opening_advance_repayment'){
   if(!result[0].meta.changes)throw Error('تغير الطلب؛ حدّث الصفحة قبل الحذف');
   return json({ok:true,deleted:true});
  }
+ if(body.action==='approve_advance_finance'){
+  if(mod!=='advances'||!old||old.status!=='approved'||!isRequestFinanceActor(u)||!permission(u,'advances','approve'))throw Error('403');
+  const remarks=String(body.note||'').trim().slice(0,1000);
+  const details={...JSON.parse(old.data||'{}'),finance_approved_by:u.email,finance_approved_at:now,finance_approval_note:remarks};
+  const results=await db.batch([
+   db.prepare("UPDATE records SET status='finance_approved',data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='advances' AND status='approved' AND revision=?")
+    .bind(JSON.stringify(details),now,mutation,old.id,old.revision),
+   db.prepare("INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)")
+    .bind(crypto.randomUUID(),u.email,old.id,'advance_finance_approval',now,JSON.stringify({reference:old.code||old.id,financial_approver:u.email,note:remarks}),old.id,mutation)
+  ]);
+  if(!results[0]?.meta?.changes)throw Error('تغيرت حالة السلفة؛ حدّث الصفحة');
+  return json({ok:true,status:'finance_approved'});
+ }
  if(body.action==='disburse'){
- if(mod!=='advances'||!old||old.status!=='approved'||!isRequestFinanceActor(u)||!permission(u,mod,'approve'))throw Error('403');
+ if(mod!=='advances'||!old||old.status!=='finance_approved'||!isRequestFinanceActor(u)||!permission(u,mod,'approve'))throw Error('لا بد من اعتماد المالية أولاً وتوثيق الصرف بواسطة مصعب عبد القيوم أو مدير النظام');
  const reference=String(body.reference||'').trim();
  if(!reference||reference.length>200)throw Error('مرجع الصرف مطلوب');
- const data={...JSON.parse(old.data),payment_reference:reference,paid_at:now};
+ const data={...JSON.parse(old.data),payment_reference:reference,paid_at:now,paid_by:u.email,advance_receipt_no:'ADV-'+String(old.code||old.id).replace(/[^\p{L}\p{N}-]/gu,'').slice(0,40),advance_receipt_date:saudiDate(),advance_receipt_amount:Number(JSON.parse(old.data||'{}').amount||0)};
  const paidLoans=(await db.prepare("SELECT * FROM records WHERE module='advances' AND status='paid'").all()).results.map(parse).filter((r:any)=>!r.data?._deleted);
  const repayments=(await db.prepare("SELECT * FROM records WHERE module='repayments'").all()).results.map(parse).filter((r:any)=>!r.data?._deleted);
  const sums=new Map();
@@ -685,7 +698,7 @@ if(body.action==='record_opening_advance_repayment'){
  const drafts=new Set(batches.filter((b:any)=>['draft','manager_review'].includes(b.status)).map((b:any)=>b.id));
  const payrollRows=(await db.prepare("SELECT * FROM records WHERE module='payroll'").all()).results;
  const synced:any[]=[];
- const statements=[db.prepare("UPDATE records SET data=?,status='paid',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND status='approved'")
+ const statements=[db.prepare("UPDATE records SET data=?,status='paid',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND status='finance_approved'")
  .bind(JSON.stringify(data),now,mutation,old.id,old.revision)];
  for(const row of payrollRows){
   const current=JSON.parse(row.data||'{}');
