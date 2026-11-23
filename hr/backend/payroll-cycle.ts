@@ -166,6 +166,7 @@ export async function POST(req){
    const ids=body.batch_ids;
    if(!Array.isArray(ids)||!ids.length||ids.length>50||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'))throw Error('قائمة المسيرات غير صحيحة');
    const revisions=body.revisions||{},stmts=[];
+   const bulkLoanContext=await paidLoanContext();
    for(const id of ids){
      const b=await batchOf(id);
      if(!allowed(u,b.company)||b.status!=='draft'||b.data.month!==String(body.month||''))throw Error('مسير غير صالح للإرسال: '+b.company);
@@ -173,6 +174,14 @@ export async function POST(req){
      const details=(await db.prepare("SELECT * FROM records WHERE module='payroll' AND company=?").bind(b.company).all()).results.map(parse).filter(row=>row.data.batch_id===id);
      if(details.length!==Number(b.data.employee_count)||!details.some(row=>!row.data.excluded))throw Error('قائمة المسير غير مكتملة: '+b.company);
      for(const row of details.filter(row=>!row.data.excluded)){
+      const d=row.data;
+      const gross=Number(d.salary??Number(d.basic||0)+Number(d.housing||0)+Number(d.transport||0));
+      const cap=Math.max(0,cents(gross)+cents(d.bonus)+cents(d.extra_allowance)+cents(d.overtime)-cents(d.absence_deduction)-cents(d.deductions));
+      const auto=autoAdvanceAllocations(bulkLoanContext,d.employee_id,b.data.month,cap);
+      const current=Array.isArray(d.advance_allocations)?d.advance_allocations:[];
+      const keyed=a=>JSON.stringify(a.map(x=>[String(x.advance_id),cents(x.amount)]));
+      if(keyed(auto)!==keyed(current)||cents(d.advance_deduction)!==auto.reduce((n,x)=>n+cents(x.amount),0))
+       throw Error('تغيرت أقساط سلف الموظف '+(d.employee_name||'')+'؛ حدّث أقساط السلف والغياب داخل المسير قبل إرساله');
       if(!row.data.split_confirmed||!Number.isFinite(Number(row.data.net))||cents(row.data.cash_amount)+cents(row.data.bank_amount)!==cents(row.data.net)||row.data.needs_review&&!row.data.exception_note)throw Error('مراجعة الأجور غير مكتملة: '+b.company);
        await ensureAssignedPayrollManager(row.data.project_id,b.company,row.data.employee_id);
      }
