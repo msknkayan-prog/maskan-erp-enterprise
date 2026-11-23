@@ -22,7 +22,8 @@ export function calculateScheduledAdvances(context,employeeId,month,capCents=Inf
   const base=Math.max(1,configured>0?configured:Math.floor(advanceCents(loan.data.amount)/count));
   const elapsed=monthNumber(month)-monthNumber(loanFirstMonth(loan))-skipped.filter(m=>validMonth(m)&&m>=loanFirstMonth(loan)&&m<month).length;
   if(elapsed<0)continue;
-  const scheduled=elapsed>=count-1?Math.max(base,balance):base;
+  const plannedFinal=Math.max(0,advanceCents(loan.data.amount)-base*(count-1));
+  const scheduled=elapsed>=count-1?Math.max(base,plannedFinal):base;
   const amount=Math.min(balance,scheduled,available);
   if(amount>0){allocations.push({advance_id:loan.id,amount:amount/100});available-=amount;}
  }
