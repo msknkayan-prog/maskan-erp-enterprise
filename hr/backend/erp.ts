@@ -794,7 +794,7 @@ if(routedRequest&&details.employee_id&&(current==='draft'||current==='project_ma
   if(!Array.isArray(scope)||!scope.includes(projectId))throw Error('المدير المباشر لا يملك صلاحية مشروع الموظف');
  }
  const actorEmail=String(u.email||'').trim().toLowerCase();
- const isDirector=u.role==='admin'&&actorEmail===String(requestApprovalOwners.projects_director.email).toLowerCase();
+ const isDirector=u.role==='admin'&&u.is_active!==false;
  const isManager=actorEmail===managerEmail;
  if(current==='draft'){
   details.project_id=projectId;
