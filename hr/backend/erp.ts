@@ -2,6 +2,7 @@
 import {env} from './runtime.ts';
 import {currentUser} from './runtime.ts';
 import {modules,companies,normalize,workflow,canWrite,canRead,annualLeave,operationalModules,relationModules,visible,permission,saudiDate,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners} from './modules.mjs';
+import {calculateScheduledAdvances,advanceCents} from '../lib/payroll-advance-schedule.mjs';
 import {employeeDirectManagerOptions,normalizeManagerName,magdiGeneralManagerEmail,magdiProjectManagerName,isMagdiGeneralManagerAccount,isAuthorizedProjectManagerAccount,preferredManagerForName} from './project-manager-roster.mjs';
 export const dynamic='force-dynamic';
 async function calculateAnnualLeaveSplit(db:any,employeeId:string,company:string,total:number){
@@ -667,7 +668,50 @@ if(body.action==='record_opening_advance_repayment'){
   if(!result[0].meta.changes)throw Error('تغير الطلب؛ حدّث الصفحة قبل الحذف');
   return json({ok:true,deleted:true});
  }
- if(body.action==='disburse'){if(mod!=='advances'||!old||old.status!=='approved'||!isRequestFinanceActor(u)||!permission(u,mod,'approve'))throw Error('403');const reference=String(body.reference||'').trim();if(!reference||reference.length>200)throw Error('مرجع الصرف مطلوب');const data={...JSON.parse(old.data),payment_reference:reference,paid_at:now};const result=await db.batch([db.prepare("UPDATE records SET data=?,status='paid',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=?").bind(JSON.stringify(data),now,mutation,old.id,old.revision),db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,old.id,'record_disbursement',now,JSON.stringify({reference}),old.id,mutation)]);if(!result[0].meta.changes)throw Error('تغير السجل؛ حدّث الصفحة');return json({ok:true});}
+ if(body.action==='disburse'){
+ if(mod!=='advances'||!old||old.status!=='approved'||!isRequestFinanceActor(u)||!permission(u,mod,'approve'))throw Error('403');
+ const reference=String(body.reference||'').trim();
+ if(!reference||reference.length>200)throw Error('مرجع الصرف مطلوب');
+ const data={...JSON.parse(old.data),payment_reference:reference,paid_at:now};
+ const paidLoans=(await db.prepare("SELECT * FROM records WHERE module='advances' AND status='paid'").all()).results.map(parse).filter((r:any)=>!r.data?._deleted);
+ const repayments=(await db.prepare("SELECT * FROM records WHERE module='repayments'").all()).results.map(parse).filter((r:any)=>!r.data?._deleted);
+ const sums=new Map();
+ for(const payment of repayments)sums.set(payment.data.advance_id,(sums.get(payment.data.advance_id)||0)+advanceCents(payment.data.amount));
+ const context={loans:[...paidLoans,{...old,data}],sums};
+ const batches=(await db.prepare("SELECT id,status FROM records WHERE module='payroll_batches'").all()).results;
+ const drafts=new Set(batches.filter((b:any)=>b.status==='draft').map((b:any)=>b.id));
+ const payrollRows=(await db.prepare("SELECT * FROM records WHERE module='payroll' AND company IN (SELECT company FROM records WHERE id=? AND module='employees')").bind(String(data.employee_id)).all()).results;
+ const synced:any[]=[];
+ const statements=[db.prepare("UPDATE records SET data=?,status='paid',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND status='approved'")
+ .bind(JSON.stringify(data),now,mutation,old.id,old.revision)];
+ for(const row of payrollRows){
+  const current=JSON.parse(row.data||'{}');
+  if(current.employee_id!==data.employee_id||current.excluded||!drafts.has(current.batch_id))continue;
+  const month=String(current.month||'');
+  const gross=Number(current.salary||0)+Number(current.bonus||0)+Number(current.extra_allowance||0)+Number(current.overtime||0);
+  const beforeLoan=Math.max(0,Math.round((gross-Number(current.absence_deduction||0)-Number(current.deductions||0))*100));
+  const allocations=calculateScheduledAdvances(context,data.employee_id,month,beforeLoan);
+  const discount=allocations.reduce((sum:number,a:any)=>sum+advanceCents(a.amount),0);
+  const previousDiscount=advanceCents(current.advance_deduction);
+  if(discount===previousDiscount&&JSON.stringify(allocations)===JSON.stringify(current.advance_allocations||[]))continue;
+  const net=(beforeLoan-discount)/100;
+  const bank=Math.min(Number(current.bank_amount||0),net);
+  const updated={...current,advance_deduction:discount/100,advance_allocations:allocations,net,
+    bank_amount:bank,cash_amount:Math.round((net-bank)*100)/100,split_confirmed:false,
+    manager_reviewed:false,manager_reviewed_by:null,manager_reviewed_at:null,
+    reviewed_by:null,reviewed_at:null,needs_review:true,
+    review_reason:[current.review_reason,'تحديث تلقائي لقسط السلفة بعد توثيق صرفها؛ تجب مراجعة توزيع الراتب'].filter(Boolean).join('؛ '),
+    advance_schedule_synced_at:now};
+  statements.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='payroll' AND revision=?")
+  .bind(JSON.stringify(updated),now,mutation,row.id,row.revision));
+  synced.push({row_id:row.id,month,discount:discount/100});
+ }
+ statements.push(db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)')
+ .bind(crypto.randomUUID(),u.email,old.id,'record_disbursement',now,JSON.stringify({reference,payroll_synced:synced}),old.id,mutation));
+ const result=await db.batch(statements);
+ if(result.slice(0,-1).some((v:any)=>!v.meta?.changes))throw Error('تغير سجل السلفة أو مسير الرواتب أثناء الحفظ؛ حدّث الصفحة ثم أعد المحاولة');
+ return json({ok:true,payroll_synced:synced.length});
+}
 
 if(body.action==='leave_dues_workflow'){
  if(mod!=='leave_dues'||!old)throw Error('بيان مستحقات الإجازة غير موجود');
