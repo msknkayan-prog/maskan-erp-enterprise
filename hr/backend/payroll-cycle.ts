@@ -5,6 +5,7 @@ import {env} from './runtime.ts';
 import {identity} from './erp.ts';
 import {companies,canonicalCompany,permission} from './modules.mjs';
 import {isAuthorizedProjectManagerAccount,magdiProjectManagerName} from './project-manager-roster.mjs';
+import {calculateScheduledAdvances} from '../lib/payroll-advance-schedule.mjs';
 const response=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 const err=(message,status=400)=>response({error:message},status);
 const cents=x=>Math.round(Number(x||0)*100);
@@ -16,7 +17,7 @@ const parse=r=>({...r,data:JSON.parse(r.data)});
 const db=env.DB;
 async function batchOf(id){const b=await db.prepare("SELECT * FROM records WHERE id=? AND module='payroll_batches'").bind(id).first();if(!b)throw Error('المسير غير موجود');return parse(b);}
 const isPrep=u=>['admin','administrative_assistant'].includes(u.role);
-const isManager=u=>['admin','project_manager'].includes(u.role);
+const isManager=u=>['admin','project_manager'].includes(u.role)||u.role==='hr'&&String(u.email||'').trim().toLowerCase()==='magdiosman0@gmail.com';
 const canManageProject=async(u,project,company,employeeId='')=>{
  if(u.role==='admin')return true;
  if(employeeId){
@@ -27,7 +28,7 @@ const canManageProject=async(u,project,company,employeeId='')=>{
   const delegated=String(employee.delegated_manager_email||'').trim().toLowerCase();
   if(delegated)return delegated===String(u.email||'').trim().toLowerCase();
  }
- if(u.role!=='project_manager'||!project||!allowed(u,company))return false;
+ if(!isManager(u)||!project||!allowed(u,company))return false;
  if(u.projects!=='*'){
   try{if(!JSON.parse(u.projects||'[]').includes(project))return false}catch{return false}
  }
@@ -76,25 +77,7 @@ const paidLoanContext=async()=>{
  return {loans,payments,sums};
 };
 const loanBalanceCents=(loan,context)=>Math.max(0,cents(loan.data.amount)-(context.sums.get(loan.id)||0));
-const autoAdvanceAllocations=(context,employeeId,month,capCents=Infinity)=>{
- let available=capCents;
- const allocations=[];
- for(const loan of context.loans.filter(r=>r.data.employee_id===employeeId&&r.data.schedule_mode!=='manual'&&validMonth(r.data.first_month)&&r.data.first_month<=month).sort((a,b)=>String(a.data.first_month).localeCompare(String(b.data.first_month))||String(a.data.date||'').localeCompare(String(b.data.date||'')))){
-  if(available<=0)break;
-  const skipped=Array.isArray(loan.data.deferred_months)?loan.data.deferred_months:[];
-  if(skipped.includes(month))continue;
-  const balance=loanBalanceCents(loan,context);
-  if(balance<=0)continue;
-  const count=Math.max(1,Number(loan.data.installments||1));
-  const base=Math.max(1,Math.floor(cents(loan.data.amount)/count));
-  const eligibleElapsed=monthNumber(month)-monthNumber(loan.data.first_month)-skipped.filter(m=>validMonth(m)&&m>=loan.data.first_month&&m<month).length;
-  if(eligibleElapsed<0)continue;
-  const scheduled=eligibleElapsed>=count-1?Math.max(base,cents(loan.data.final_installment||0)):base;
-  const allotted=Math.min(balance,scheduled,available);
-  if(allotted>0){allocations.push({advance_id:loan.id,amount:allotted/100});available-=allotted}
- }
- return allocations;
-};
+const autoAdvanceAllocations=calculateScheduledAdvances;
 const allocateEditedAdvanceTotal=(context,employeeId,month,totalCents,existing=[])=>{
  if(totalCents<=0)return [];
  const pool=context.loans.filter(r=>r.data.employee_id===employeeId&&loanBalanceCents(r,context)>0).sort((a,b)=>String(a.data.first_month||a.data.date).localeCompare(String(b.data.first_month||b.data.date)));
