@@ -1914,7 +1914,8 @@ module==='employees'&&f.key==='manager'?<div className="employee-manager-picker"
  {employeeProjectSearch&&<button type="button" onClick={()=>setEmployeeProjectSearch('')}>مسح بحث المشاريع</button>}
  </>;
  })()}</div>:
-module==='leave'&&f.key==='ticket_due_date'&&edit.data.ticket!=='yes'?<input type="text" disabled value="غير مستحق — لا يوجد تاريخ" aria-label="تاريخ التذكرة غير مطلوب"/>:
+module==='appointments'&&f.key==='document_no'?<input type="text" readOnly value={edit.id?edit.data.document_no||'رقم قديم غير محدد':'يُولّد تلقائيًا عند الحفظ'} aria-label="رقم نموذج التعيين التلقائي"/>:
+ module==='leave'&&f.key==='ticket_due_date'&&edit.data.ticket!=='yes'?<input type="text" disabled value="غير مستحق — لا يوجد تاريخ" aria-label="تاريخ التذكرة غير مطلوب"/>:
  module==='leave'&&f.key==='holiday_dates'?<div className="leave-holidays-control">
   <div className="leave-holiday-add"><input aria-label="تاريخ يوم العطلة" type="date" min={edit.data.start||undefined} max={edit.data.end||undefined} value={leaveHolidayCandidate} onChange={e=>setLeaveHolidayCandidate(e.target.value)} disabled={fixedLeaveDays(edit.data.leave_type)!==null}/><button type="button" disabled={!leaveHolidayCandidate||fixedLeaveDays(edit.data.leave_type)!==null} onClick={addLeaveHolidayDate}>إضافة يوم عطلة</button></div>
   <div className="leave-holiday-tags">{String(edit.data.holiday_dates||'').split(',').filter(Boolean).map(date=><span key={date}>{date}<button type="button" aria-label={'إزالة عطلة '+date} onClick={()=>applyLeaveField('holiday_dates',String(edit.data.holiday_dates||'').split(',').filter(x=>x&&x!==date).join(','))}>×</button></span>)}</div>
