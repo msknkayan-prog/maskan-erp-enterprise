@@ -453,6 +453,15 @@ test('member directory shows active or inactive and provides a secure retry afte
 });
 
 
+
+test('payroll management searches available and enrolled employees by normalized Arabic name and staff number',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ for(const marker of ['payrollSearchNormalize','payrollEmployeeMatches','payrollEmployeeSearch','payrollListedSearch','payrollFilteredAvailableEmployees','payrollManagedFilteredRows','بحث موظفي المسير بالاسم أو الرقم الوظيفي','بحث الموظف المراد إضافته للمسير'])assert.ok(ui.includes(marker),marker);
+ assert.match(ui,/payrollManagedFilteredRows\.map\(row=>/);
+ assert.match(ui,/payrollFilteredAvailableEmployees\.map\(emp=>/);
+ assert.match(ui,/setPayrollEmployeeSearch\(e\.target\.value\);setPayrollAddEmployeeId\(''\)/);
+});
+
 test('monthly payroll offers a unified draft-only manager for add, edit, exclude, restore and submit',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
