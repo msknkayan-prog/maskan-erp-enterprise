@@ -1685,6 +1685,35 @@ test('return-to-work approval updates employee and open payroll atomically witho
  assert.match(erp,/returnSyncUpdates\.some/);
 });
 
+test('return-to-work attendance deducts unpaid days but protects approved paid leave',async()=>{
+ const {returnPeriodAttendance,salaryAbsenceDeduction}=await import('../lib/payroll-attendance.mjs');
+ const unpaid={start:'2026-11-01',end:'2026-11-30',leave_type:'unpaid'};
+ const whole=returnPeriodAttendance(unpaid,'2026-11-23','2026-11');
+ assert.equal(whole.absence_days,22);assert.equal(whole.payable_days,8);
+ assert.equal(salaryAbsenceDeduction(9000,whole.absence_days),6600);
+ assert.equal(9000-salaryAbsenceDeduction(9000,whole.absence_days),2400);
+ const paid={...unpaid,leave_type:'annual',leave_payment:'paid',unpaid_days:0};
+ assert.equal(returnPeriodAttendance(paid,'2026-11-23','2026-11').absence_days,0);
+ const late={...paid,end:'2026-11-20'};
+ assert.equal(returnPeriodAttendance(late,'2026-11-23','2026-11').absence_days,2);
+ const mixed={...paid,unpaid_days:10};
+ assert.equal(returnPeriodAttendance(mixed,'2026-11-25','2026-11').absence_days,4);
+ assert.equal(returnPeriodAttendance(unpaid,'bad-date','2026-11').valid,false);
+});
+test('project cost center displays staff project and payroll absence amount updates automatically',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/aria-label="مركز تكلفة المشروع في المسير" type="text" readOnly/);
+ assert.match(ui,/cost_project_id:linked\?\.data\?\.project_id/);
+ assert.match(ui,/salaryAbsenceDeduction\(cycleSalarySummary\(cycleEdit.data\)\.gross/);
+ assert.match(backend,/const cost_project_id=assignedProjectId/);
+ assert.match(backend,/const absence_deduction=salaryAbsenceDeduction\(salary,absence_days\)/);
+ assert.match(erp,/const returnAttendance=returnPeriodAttendance\(leaveData,data.actual_return,currentPayrollMonth\)/);
+ assert.match(erp,/last_return_absence_days:returnAttendance.absence_days/);
+ assert.match(erp,/absence_days:attendance.absence_days,absence_deduction:salaryAbsenceDeduction/);
+ assert.match(erp,/net:newNet,bank_amount:bank/);
+});
 test('employee requests end at HR; finance is a separate disbursement operation',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
