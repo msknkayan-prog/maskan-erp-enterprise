@@ -110,7 +110,7 @@ test('Magdi onboarding and project approval preserve the general manager role in
  assert.match(backend,/const adminMagdi=isMagdiGeneralManagerAccount\(existing,name\)/);
  assert.match(backend,/\}else if\(!adminMagdi\)\{/);
  assert.match(backend,/isAuthorizedProjectManagerAccount\(manager,data\.manager_name/);
- assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:directEmail\}/);
+ assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:managerEmail\}/);
  assert.match(backend,/if\(!adminMagdi&&manager\.projects!=='\*'/);
 });
 
@@ -836,12 +836,12 @@ test('project managers only see the project assigned to their own login, even wi
 test('request workflow requires an assigned active manager before routing and checks ownership at review',()=>{
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- assert.match(backend,/current==='draft'&&decision==='approve'&&next==='project_manager'/);
- assert.match(backend,/يجب تحديد المدير المباشر المخوّل في سجل الموظف/);
- assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:directEmail\}/);
- assert.match(backend,/current==='project_manager'&&u\.role!=='admin'/);
- assert.match(backend,/هذا الطلب بانتظار اعتماد المدير المباشر المخوّل/);
- assert.match(backend,/availableEmployeeDirectManagers\(db,old\.company\)/);
+ assert.match(backend,/current==='draft'\|\|current==='project_manager'/);
+ assert.match(backend,/يجب تعيين مدير المشروع في ملف المشروع قبل إرسال الطلب/);
+ assert.match(backend,/isAuthorizedProjectManagerAccount\(\{\.\.\.manager,email:managerEmail\}/);
+ assert.match(backend,/current==='project_manager'/);
+ assert.match(backend,/هذا الطلب بانتظار اعتماد مدير المشروع المعين/);
+ assert.match(backend,/const managerEmail=String\(projectData\.manager_email/);
  assert.match(ui,/module==='projects'&&f\.key==='manager_email'/);
  assert.match(ui,/directManagerChoices\(rows,members,edit\.company\)/);
 });
@@ -861,7 +861,7 @@ test('the deployed shared visibility rule restricts managers to their assigned p
  assert.equal(visible(u,p1,rows),true);
  assert.equal(visible(u,p2,rows),false);
  assert.equal(visible({...u,email:'unknown@example.test'},r1,rows),false);
- assert.equal(visible({...u,projects:'[]'},r1,rows),true,'direct supervisor request access is independent of project scope');
+ assert.equal(visible({...u,projects:'[]'},r1,rows),false,'project scope applies to request access');
  assert.equal(visible({...u,companies:'["شركة البلد المتحدة"]'},r1,rows),false);
 });
 test('named employee delegation overrides project owner for both visibility rules, including technical office and payroll',async()=>{
@@ -1052,7 +1052,7 @@ test('project assignment and employee request details use project manager direct
  assert.match(ui,/managerDirectoryForRequest\(edit,edit\.company\)/);
  assert.match(erp,/سجّل بيانات مدير المشروع أولًا في دليل مدراء المشاريع للشركة/);
  assert.match(erp,/data\.project_manager=\{name:manager\?\.name/);
- assert.match(erp,/details\.project_manager=\{name:direct\.name,email:directEmail/);
+ assert.match(erp,/details\.project_manager=\{name:projectData\.manager_name/);
  assert.match(erp,/UPDATE records SET status=\?,data=\?,revision=revision\+1/);
 });
 
@@ -1951,38 +1951,32 @@ test('payroll installment posting remains tied to confirmed finance payment and 
  assert.match(payroll,/NOT EXISTS\(SELECT 1 FROM records WHERE module='repayments' AND code=\?\)/);
 });
 
-test('employee requests route to a registered active direct supervisor rather than the project owner',async()=>{
+test('employee requests are assigned to project owner, and director cannot approve finance',async()=>{
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const {requestApprovalStages}=await import('../lib/request-approval.mjs');
- assert.equal(requestApprovalStages[0].title,'اعتماد المدير المباشر');
- assert.match(backend,/const directEmail=String\(employeeData\.manager_email\|\|employeeData\.supervisor_account/);
- assert.match(backend,/direct_manager=\{name:direct\.name,email:directEmail/);
- assert.match(backend,/originalDirectEmail&&approvedEmail!==directEmail/);
- assert.match(backend,/migrated_from_project_manager:true/);
- assert.doesNotMatch(backend,/يجب تعيين مدير المشروع في ملف المشروع قبل إرسال الطلب/);
- assert.match(backend,/\['leave','advances','resignations'\]\.includes\(mod\)/);
- assert.match(ui,/المدير المباشر المخوّل لاعتماد هذا الطلب/);
- assert.match(ui,/EmployeeDirectManagerCell/);
+ assert.equal(requestApprovalStages[0].title,'اعتماد مدير المشروع');
+ assert.match(backend,/const managerEmail=String\(projectData\.manager_email/);
+ assert.match(backend,/details\.project_manager=\{name:projectData\.manager_name/);
+ assert.match(backend,/هذا الطلب بانتظار اعتماد مدير المشروع المعين/);
+ assert.match(backend,/current==='finance'&&!isRequestFinanceActor\(u\)/);
+ assert.match(ui,/اعتماد مدير المشروع/);
 });
-test('separate project owner and direct supervisor have different employee-request access',async()=>{
+test('project manager can see own employee requests but a separate supervisor cannot',async()=>{
  const {visible}=await import('../backend/modules.mjs');
  const employee={id:'e',module:'employees',company:'مسكن الكيان',data:{project_id:'p',manager_email:'supervisor@example.test'}};
  const project={id:'p',module:'projects',company:'مسكن الكيان',data:{manager_email:'projectowner@example.test'}};
- const leave={id:'l',module:'leave',company:'مسكن الكيان',data:{employee_id:'e'}};
- const loan={id:'a',module:'advances',company:'مسكن الكيان',data:{employee_id:'e'}};
- const resignation={id:'r',module:'resignations',company:'مسكن الكيان',data:{employee_id:'e'}};
- const rows=[employee,project,leave,loan,resignation];
+ const requests=['leave','advances','resignations'].map((module,i)=>({id:String(i),module,company:'مسكن الكيان',data:{employee_id:'e'}}));
+ const rows=[employee,project,...requests];
  const supervisor={role:'project_manager',email:'supervisor@example.test',projects:'[]',companies:'*'};
- const projectOwner={...supervisor,email:'projectowner@example.test',projects:'["p"]'};
- for(const request of [leave,loan,resignation]){
-  assert.equal(visible(supervisor,request,rows),true);
-  assert.equal(visible(projectOwner,request,rows),false);
+ const owner={...supervisor,email:'projectowner@example.test',projects:'["p"]'};
+ for(const request of requests){
+  assert.equal(visible(supervisor,request,rows),false);
+  assert.equal(visible(owner,request,rows),true);
  }
- assert.equal(visible(projectOwner,project,rows),true);
- assert.equal(visible({...supervisor,companies:'["رياح الاعمار"]'},leave,rows),false);
+ assert.equal(visible(owner,project,rows),true);
+ assert.equal(visible({...owner,companies:'["رياح الاعمار"]'},requests[0],rows),false);
 });
-
 test('project manager picker offers onboarding for an inactive roster member rather than disabled choices',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/value\.startsWith\('pending:'\)/);
