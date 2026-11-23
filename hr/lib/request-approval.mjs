@@ -6,9 +6,18 @@ export const requestApprovalStages=[
  {id:'hr',title:'اعتماد شؤون الموظفين',name:'م. محمد يوسف'}
 ];
 
-export const advanceFinanceStage={id:'advance_finance',title:'اعتماد المالية للصرف',name:'مصعب عبد القيوم / الإدارة المالية'};
+export const advanceFinanceStage={id:'advance_finance',title:'اعتماد المالية للصرف',name:'مصعب عبد القيوم / مدير النظام'};
+export const advanceDisbursementStage={id:'advance_disbursement',title:'توثيق صرف السلفة',name:'الإدارة المالية / مدير النظام'};
 
 export function requestStageView(row,stage){
+ if(stage==='advance_disbursement'){
+  if(row?.module!=='advances')return {kind:'future',label:'غير مطبق'};
+  const status=String(row?.status||'draft');
+  if(status==='rejected'||status==='cancelled')return {kind:'stopped',label:'مرفوض'};
+  if(status==='paid')return {kind:'done',label:'تم الصرف وربط الأقساط'};
+  if(status==='finance_approved')return {kind:'waiting',label:'بانتظار توثيق الصرف'};
+  return {kind:'future',label:'لم يصل بعد'};
+ }
  if(stage==='advance_finance'){
   if(row?.module!=='advances')return {kind:'future',label:'غير مطبق'};
   const status=String(row?.status||'draft');
@@ -31,6 +40,7 @@ export function requestStageView(row,stage){
 }
 
 export function requestStageTimestamp(row,stage){
+ if(stage==='advance_disbursement')return String(row?.data?.paid_at||'');
  if(stage==='advance_finance')return String(row?.data?.finance_approved_at||'');
  const tracking=row?.data?.approval_tracking;
  const event=tracking&&typeof tracking==='object'&&!Array.isArray(tracking)?tracking[stage]:null;
