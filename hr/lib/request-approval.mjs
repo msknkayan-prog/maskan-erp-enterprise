@@ -1,7 +1,7 @@
 // One status vocabulary shared by the leave and advance approval grids.
 // Drafts are not an extra approver; the project manager prepares the request.
 export const requestApprovalStages=[
- {id:'project_manager',title:'اعتماد المدير المباشر',name:'المدير المباشر'},
+ {id:'project_manager',title:'اعتماد مدير المشروع',name:'مدير المشروع'},
  {id:'projects_director',title:'اعتماد إدارة المشاريع',name:'مجدي محجوب — المدير العام'},
  {id:'hr',title:'مراجعة شؤون الموظفين',name:'م. محمد يوسف'},
  {id:'finance',title:'اعتماد المالية والصرف',name:'مصعب عبد القيوم'}
