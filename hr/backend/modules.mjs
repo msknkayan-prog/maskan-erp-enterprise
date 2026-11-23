@@ -41,7 +41,7 @@ export function isRequestStageActor(user,stage){
  if(stage==='finance')return isRequestFinanceActor(user);
  return false;
 }
-export const states={draft:'مسودة',project_manager:'مدير المشروع',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',finance_approved:'معتمد للصرف من المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
+export const states={draft:'مسودة',project_manager:'المدير المباشر',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',finance_approved:'معتمد للصرف من المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
 export const saudiDate=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,10);
 export function annualLeave(hire,at=saudiDate()){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(hire||''))return null;
