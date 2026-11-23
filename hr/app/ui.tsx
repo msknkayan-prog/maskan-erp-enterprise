@@ -447,7 +447,7 @@ async function gmConfirmReturn(leave,employee,expected){
  const input=window.prompt('المدير العام: أدخل تاريخ مباشرة الموظف الفعلي بصيغة YYYY-MM-DD. سيتم ربط السجلات وتحديث حالة الإجازة والمسير المفتوح.',expected&&expected<=today?expected:today);
  if(input===null)return;
  const actual=String(input||'').trim();
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(actual)||actual<leave.data.start||actual>today)return notify('تاريخ المباشرة يجب أن يكون صحيحاً وبين بداية الإجازة واليوم');
+ if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(actual)||actual<leave.data.start||actual>today)return notify('تاريخ المباشرة يجب أن يكون صحيحاً وبين بداية الإجازة واليوم');
  if(!window.confirm('تأكيد تسجيل مباشرة '+(employee.data?.name||'الموظف')+' بتاريخ '+actual+' بصلاحية المدير العام؟'))return;
  setSaving(true);
  try{
