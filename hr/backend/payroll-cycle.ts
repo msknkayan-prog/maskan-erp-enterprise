@@ -3,7 +3,7 @@
 // No bank transfer or actual cash payment is performed by this service.
 import {env} from './runtime.ts';
 import {identity} from './erp.ts';
-import {companies,canonicalCompany,permission} from './modules.mjs';
+import {companies,canonicalCompany,permission,isRequestFinanceActor} from './modules.mjs';
 import {isAuthorizedProjectManagerAccount,magdiProjectManagerName} from './project-manager-roster.mjs';
 import {calculateScheduledAdvances} from '../lib/payroll-advance-schedule.mjs';
 import {salaryAbsenceDeduction} from '../lib/payroll-attendance.mjs';
@@ -39,7 +39,7 @@ const canManageProject=async(u,project,company,employeeId='')=>{
  const data=JSON.parse(row.data);
  return (row.company===company||Array.isArray(data._shared_companies)&&data._shared_companies.includes(company))&&String(data.manager_email||'').trim().toLowerCase()===String(u.email||'').trim().toLowerCase();
 };
-const isFinance=u=>['admin','finance'].includes(u.role);
+const isFinance=u=>['admin','finance'].includes(u.role)||isRequestFinanceActor(u);
 const isProjectsDirector=u=>['admin','projects_director'].includes(u.role);
 const nowIso=()=>new Date().toISOString();
 const ensureAssignedPayrollManager=async(projectId,company,employeeId='')=>{
@@ -369,7 +369,7 @@ export async function POST(req){
   const financeAllocations=[];
   // A loan that becomes payable after the monthly payroll was reviewed cannot
   // silently disappear from payroll. Require a fresh sync and renewed approvals.
-  if(['submit','finance_pay'].includes(action)){
+  if(['submit','finance_approve','finance_pay'].includes(action)){
    const context=await paidLoanContext();
    for(const row of monthly.filter(r=>!r.data.excluded)){
     const d=row.data;
@@ -411,8 +411,15 @@ export async function POST(req){
    }
   }else if(!modern&&action==='admin_approve'){
    if(!['admin','administrative_manager'].includes(u.role)||batch.status!=='admin_review')return err('الاعتماد الإداري ليس ضمن صلاحيتك أو المرحلة',403);
-  }else if(!modern&&action==='finance_approve'){
-   if(!isFinance(u)||batch.status!=='finance_review')return err('المراجعة المالية ليست ضمن صلاحيتك أو المرحلة',403);
+  }else if(action==='finance_approve'){
+   if(!isFinance(u)||batch.status!=='finance_review')return err('اعتماد المالية يتطلب حساب المالية المخول والمسير في مرحلة المراجعة المالية',403);
+   if(modern){
+    if(monthly.length!==Number(batch.data.employee_count)||monthly.every(r=>r.data.excluded))throw Error('مسير الرواتب غير مكتمل');
+    for(const row of monthly.filter(r=>!r.data.excluded)){
+     if(!row.data.manager_reviewed||!row.data.split_confirmed||cents(row.data.cash_amount)+cents(row.data.bank_amount)!==cents(row.data.net))throw Error('يجب استكمال مراجعة وتوزيع رواتب جميع الموظفين قبل اعتماد المالية');
+     if(row.data.needs_review&&!row.data.exception_note)throw Error('يجب توضيح استثناءات المسير قبل اعتماد المالية');
+    }
+   }
   }else if(action==='managers_approve'){
    if(!modern||!['admin','projects_director'].includes(u.role)||batch.status!=='manager_review')return err('يكتمل تسليم المسير لإدارة المشاريع من المدير العام أو إدارة المشاريع بعد مراجعة مدراء المشاريع',403);
    const included=monthly.filter(r=>!r.data.excluded);
@@ -432,7 +439,7 @@ export async function POST(req){
   }else if(action==='projects_approve'){
    if(!isProjectsDirector(u)||batch.status!=='projects_review')return err('اعتماد إدارة المشاريع ليس ضمن صلاحياتك أو المرحلة الحالية',403);
   }else if(action==='finance_pay'){
-   if(!isFinance(u)||batch.status!==(modern?'finance_review':'finance'))return err('مرحلة المراجعة والصرف للإدارة المالية فقط',403);
+   if(!isFinance(u)||batch.status!==(modern?'finance_approved':'finance'))return err('لا يمكن توثيق صرف المسير قبل اعتماد المالية المستقل وبصلاحية المالية',403);
    if(!String(body.reference||'').trim()||String(body.reference).length>200)throw Error('مرجع الصرف مطلوب');
    if(!body.confirm_payment)throw Error('يجب تأكيد الصرف الفعلي قبل إصدار السندات');
    if(monthly.length!==Number(batch.data.employee_count)||monthly.every(r=>r.data.excluded))throw Error('قائمة المسير غير مكتملة');
@@ -460,10 +467,11 @@ export async function POST(req){
    }
   }else if(action==='return'){
    if(!String(body.note||'').trim())throw Error('سبب الإعادة مطلوب');
-   if(!((modern&&isManager(u)&&batch.status==='manager_review')||(isProjectsDirector(u)&&batch.status==='projects_review')||(isFinance(u)&&batch.status===(modern?'finance_review':'finance'))||(!modern&&(['admin','administrative_manager'].includes(u.role)&&batch.status==='admin_review'))))return err('لا تملك صلاحية إعادة هذا المسير',403);
+   if(!((modern&&isManager(u)&&batch.status==='manager_review')||(isProjectsDirector(u)&&batch.status==='projects_review')||(isFinance(u)&&['finance_review','finance_approved'].includes(batch.status))||(!modern&&(['admin','administrative_manager'].includes(u.role)&&batch.status==='admin_review'))))return err('لا تملك صلاحية إعادة هذا المسير',403);
   }else throw Error('عملية غير معروفة');
-  const next=(modern?{submit:'manager_review',managers_approve:'projects_review',projects_approve:'finance_review',finance_pay:'paid',return:'draft'}:{submit:'admin_review',admin_approve:'finance_review',finance_approve:'projects_review',projects_approve:'finance',finance_pay:'paid',return:'draft'})[action];
+  const next=(modern?{submit:'manager_review',managers_approve:'projects_review',projects_approve:'finance_review',finance_approve:'finance_approved',finance_pay:'paid',return:'draft'}:{submit:'admin_review',admin_approve:'finance_review',finance_approve:'projects_review',projects_approve:'finance',finance_pay:'paid',return:'draft'})[action];
   const newData={...batch.data,
+   ...(action==='finance_approve'&&modern?{finance_approved_at:now,finance_approved_by:u.email,finance_approval_note:String(body.note||'').trim().slice(0,1000)}:{}),
    ...(action==='finance_pay'?{paid_at:now,paid_by:u.email,payment_reference:String(body.reference).trim()}:{}),
    ...(action==='return'?{returned_at:now,return_note:String(body.note).trim().slice(0,1000)}:{})};
   const ledgerStatements=[];
