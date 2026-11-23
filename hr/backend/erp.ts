@@ -46,7 +46,7 @@ async function resolveEmployeeDirectManager(db:any,company:string,emailValue:str
 }
 async function availableEmployeeDirectManagers(db:any,company:string){
  const records=(await db.prepare("SELECT id,module,company,data FROM records WHERE module IN ('projects','employees','project_managers')").all()).results.map(parse);
- const members=(await db.prepare("SELECT email,username,role,is_active,companies FROM members WHERE role IN ('project_manager','admin') AND is_active=true").all()).results;
+ const members=(await db.prepare("SELECT email,username,role,is_active,companies FROM members WHERE role IN ('project_manager','admin','hr') AND is_active=true").all()).results;
  return employeeDirectManagerOptions(records,members,company);
 }
 function setEmployeeDirectManager(data:any,manager:any,manual:boolean){
@@ -535,12 +535,23 @@ if(body.action==='hire_from_appointment'){
  employee.employment_status='active';employee.working_company=company;
  employee.probation=duration;employee.probation_start=start;employee.probation_end=probationEnd;employee.appointment_record_id=appointmentId;
  if(projectId)employee.project_id=projectId;
- const managerLabel=String(rawForm.direct_manager||rawHire.manager||'').trim();
+ const managerLabel=String(rawHire.manager||rawForm.direct_manager||'').trim();
  if(managerLabel){
   const choices=await availableEmployeeDirectManagers(db,company);
-  const manager=choices.find((m:any)=>m.hasLogin&&m.email&&normalizeManagerName(m.name)===normalizeManagerName(managerLabel));
-  if(!manager)throw Error('اختر المدير المباشر من القائمة المسجلة وله صلاحية اعتماد نشطة');
-  setEmployeeDirectManager(employee,{name:manager.name,email:manager.email,phone:manager.phone||'',directory_id:manager.directory_id||''},true);
+  const manager=choices.find((m:any)=>normalizeManagerName(m.name)===normalizeManagerName(managerLabel));
+  if(!manager)throw Error('المدير المباشر غير موجود في القائمة المسجلة؛ اختره من نتائج البحث');
+  if(manager.hasLogin&&manager.email){
+   const verified=await resolveEmployeeDirectManager(db,company,manager.email,manager.name,true);
+   setEmployeeDirectManager(employee,verified,true);
+  }else{
+   employee.manager=manager.name;
+   employee.manager_email='';
+   employee.manager_phone='';
+   employee.direct_manager_id=manager.directory_id||'';
+   employee.supervisor_account='';
+   employee._direct_manager_manual=true;
+   employee.direct_manager_pending_approval_link=true;
+  }
  }
 
  const empSerial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
