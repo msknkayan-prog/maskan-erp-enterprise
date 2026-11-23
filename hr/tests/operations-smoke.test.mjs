@@ -2501,11 +2501,11 @@ test('Musab finance controller may approve advance amount with single ledger pos
 test('leave dues and post-leave return are nested under their parent HR navigation while preserving permissions',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const modules=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
- assert.match(ui,/!\\['project_managers','repayments','leave_dues','returns'\\]\\.includes\\(k\\)/);
- assert.match(ui,/aria-label=\\{\\['leave','leave_dues'\\]\\.includes\\(module\\)\\?'تبويبات الإجازات':'تبويبات التعيين والمباشرة'\\}/);
- assert.match(ui,/\\['leave','leave_dues'\\]\\.includes\\(module\\)\\?\\[\\['leave','طلبات الإجازات'\\],\\['leave_dues','مستحقات الإجازة'\\]\\]/);
- assert.match(ui,/\\['appointments','التعيين والمباشرة'\\],\\['returns','المباشرة بعد الإجازة'\\]/);
- assert.match(ui,/\\.filter\\(\\(\\[key\\]\\)=>allowed\\.includes\\(key\\)\\)/);
- assert.match(modules,/returns:\\{label:'المباشرة بعد الإجازة'/);
- assert.match(modules,/leave_dues:\\{label:'مستحقات الإجازة'/);
+ assert.match(ui,/!\['project_managers','repayments','leave_dues','returns'\]\.includes\(k\)/);
+ assert.match(ui,/aria-label=\{\['leave','leave_dues'\]\.includes\(module\)\?'تبويبات الإجازات':'تبويبات التعيين والمباشرة'\}/);
+ assert.match(ui,/\['leave','leave_dues'\]\.includes\(module\)\?\[\['leave','طلبات الإجازات'\],\['leave_dues','مستحقات الإجازة'\]\]/);
+ assert.match(ui,/\['appointments','التعيين والمباشرة'\],\['returns','المباشرة بعد الإجازة'\]/);
+ assert.match(ui,/\.filter\(\(\[key\]\)=>allowed\.includes\(key\)\)/);
+ assert.match(modules,/returns:\{label:'المباشرة بعد الإجازة'/);
+ assert.match(modules,/leave_dues:\{label:'مستحقات الإجازة'/);
 });
