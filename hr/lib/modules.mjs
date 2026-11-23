@@ -35,13 +35,13 @@ export const isRequestFinanceActor=user=>Boolean(user?.is_active!==false&&user?.
 export function isRequestStageActor(user,stage){
  if(!user||user.is_active===false)return false;
  const email=String(user.email||'').trim().toLowerCase();
- if(stage==='project_manager')return user.role==='project_manager'||user.role==='admin'&&email===requestApprovalOwners.projects_director.email; // The backend additionally matches the request's specific direct supervisor.
+ if(stage==='project_manager')return user.role==='project_manager'||user.role==='admin'&&email===requestApprovalOwners.projects_director.email; // Backend additionally verifies the assigned project and manager email.
  if(stage==='projects_director')return user.role==='admin'&&email===requestApprovalOwners.projects_director.email;
- if(stage==='hr')return user.role==='hr'&&email===requestApprovalOwners.hr.email;
+ if(stage==='hr')return user.role==='hr'&&email===requestApprovalOwners.hr.email||user.role==='admin'&&email===requestApprovalOwners.projects_director.email;
  if(stage==='finance')return isRequestFinanceActor(user);
  return false;
 }
-export const states={draft:'مسودة',project_manager:'المدير المباشر',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
+export const states={draft:'مسودة',project_manager:'مدير المشروع',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
 export const saudiDate=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,10);
 export function leaveAccrualAsOf(data,at=saudiDate()){
  const manual=data?.contract_expiry_mode==='manual'&&/^\d{4}-\d{2}-\d{2}$/.test(String(data?.contract_expiry||''));
