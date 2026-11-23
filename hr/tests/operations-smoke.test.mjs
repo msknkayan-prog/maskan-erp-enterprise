@@ -2654,7 +2654,7 @@ test('historical unnumbered appointment forms can be safely backfilled and new f
  assert.match(erp,/document_no_backfilled_at:now/);
  assert.match(erp,/appointment_number_backfill/);
  assert.match(erp,/COALESCE\(NULLIF\(TRIM\(data::jsonb->>'document_no'\),''\),''\)=''/);
- assert.match(erp,/if\(mod==='appointments'&&!originalNo\)/);
+ assert.match(erp,/\['appointments','employees'\]\.includes\(mod\)&&!originalNo/);
  assert.match(erp,/data.document_no='APT-'/);
  assert.match(ui,/action:'backfill_appointment_numbers'/);
  assert.match(ui,/استكمال الترقيم التلقائي/);
