@@ -543,7 +543,7 @@ if(body.action==='hire_from_appointment'){
  const employeeInsertSql=[
   "INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation)",
   "SELECT ?, 'employees', ?, next_code.code,",
-  "replace(?::text, '\\\"code\\\":\\\"AUTO\\\"', '\\\"code\\\":\\\"' || next_code.code || '\\\"')::jsonb::text,",
+ "replace(?::text, '\"code\":\"AUTO\"', '\"code\":\"' || next_code.code || '\"')::jsonb::text,",
   "'draft',1,?,?,?,? FROM (SELECT (COALESCE(MAX(CASE WHEN code ~ '^[0-9]{1,12}$' THEN code::bigint END),70000)+1)::text AS code FROM records WHERE module='employees') next_code RETURNING code"
  ].join(' ');
  const result=await db.batch([
