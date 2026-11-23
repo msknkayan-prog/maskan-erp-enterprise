@@ -35,7 +35,7 @@ export const isRequestFinanceActor=user=>Boolean(user?.is_active!==false&&user?.
 export function isRequestStageActor(user,stage){
  if(!user||user.is_active===false)return false;
  const email=String(user.email||'').trim().toLowerCase();
- if(stage==='project_manager')return user.role==='project_manager'||user.role==='admin'&&email===requestApprovalOwners.projects_director.email; // Backend additionally verifies the assigned project and manager email.
+ if(stage==='project_manager')return user.role==='project_manager'||user.role==='admin'&&email===requestApprovalOwners.projects_director.email||user.role==='hr'&&email===requestApprovalOwners.hr.email; // Backend additionally verifies the assigned project and manager email.
  if(stage==='projects_director')return user.role==='admin'&&email===requestApprovalOwners.projects_director.email;
  if(stage==='hr')return user.role==='hr'&&email===requestApprovalOwners.hr.email||user.role==='admin'&&email===requestApprovalOwners.projects_director.email;
  if(stage==='finance')return isRequestFinanceActor(user);
