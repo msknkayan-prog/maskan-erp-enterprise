@@ -519,8 +519,8 @@ test('monthly payroll approvals use green completion and orange active states wi
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
  const modules=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
- assert.match(ui,/payrollStageLabels=\['مساعد الإدارة','مدراء المشاريع','إدارة المشاريع','المالية \/ الصرف'\]/);
- assert.match(ui,/payrollStages=\['draft','manager_review','projects_review','finance_review','paid'\]/);
+ assert.match(ui,/payrollStageLabels=\['مساعد الإدارة','مدراء المشاريع','إدارة المشاريع','المالية · اعتماد','المالية · صرف'\]/);
+ assert.match(ui,/payrollStages=\['draft','manager_review','projects_review','finance_review','finance_approved','paid'\]/);
  assert.match(ui,/payroll-compact-stage/);
  assert.match(ui,/state==='done'\?'✓ '/);
  assert.match(ui,/payroll-month-pill/);
@@ -979,7 +979,7 @@ test('pending requests center lists active request types with filters and exclud
  assert.match(ui,/module==='pending_requests'/);
  assert.match(ui,/الطلبات قيد الإجراء/);
  assert.match(ui,/pendingRequestTypes=\['leave','advances','payroll_batches','resignations','returns','terminations','leave_dues','settlements','warnings','appointments'\]/);
- assert.match(ui,/pendingStages=\['draft','returned','project_manager','projects_director','hr','finance','manager_review','projects_review','finance_review'\]/);
+ assert.match(ui,/pendingStages=\['draft','returned','project_manager','projects_director','hr','finance','manager_review','projects_review','finance_review','finance_approved'\]/);
  assert.match(ui,/accessiblePendingTypes=pendingRequestTypes\.filter\(k=>user&&permittedRead\(user,k\)\)/);
  assert.match(ui,/\(!company\|\|r\.company===company\)/);
  assert.match(ui,/pendingType,setPendingType/);
@@ -1845,6 +1845,30 @@ test('employee opening leave starts zero and previously confirmed manual balance
  assert.match(ui,/تُحفظ جميع الأرصدة السابقة المعتمدة والمدخلة يدوياً/);
 });
 
+test('overview hides all request approval tables while specialized pending requests retains workflow',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.doesNotMatch(ui,/موافقات مسؤول النظام حسب المدير المخوّل/);
+ assert.doesNotMatch(ui,/adminStageGroups\.filter\(stage=>stage.records.length>0\)/);
+ assert.match(ui,/module==='pending_requests'&&<section className="panel"/);
+ assert.match(ui,/فتح الطلب ومراجعته/);
+ assert.match(ui,/module==='overview'&&permittedRead\(user\|\|\{\},'employees'\)&&<EmployeeReportsDashboard/);
+});
+test('finance separately approves monthly payroll before recording payment',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ assert.match(ui,/cycleTransition\(b,'finance_approve'\)/);
+ assert.match(ui,/اعتماد المالية للمسير/);
+ assert.match(ui,/b.status==='finance_approved'/);
+ assert.match(ui,/توثيق الصرف الفعلي/);
+ assert.match(ui,/المالية · اعتماد','المالية · صرف/);
+ assert.match(backend,/action==='finance_approve'/);
+ assert.match(backend,/finance_approve:'finance_approved',finance_pay:'paid'/);
+ assert.match(backend,/modern\?'finance_approved':'finance'/);
+ assert.match(backend,/finance_approved_at:now,finance_approved_by:u.email/);
+ assert.match(backend,/المالية المخول والمسير في مرحلة المراجعة المالية/);
+ assert.match(backend,/لا يمكن توثيق صرف المسير قبل اعتماد المالية المستقل/);
+ assert.match(backend,/action==='finance_pay'\)\{/);
+});
 test('company employee dashboard offers live KPIs and filtered staff report export',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const board=readFileSync(new URL('../app/employee-dashboard.tsx',import.meta.url),'utf8');
