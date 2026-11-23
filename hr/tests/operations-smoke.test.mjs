@@ -2694,3 +2694,15 @@ test('new appointment can create the full employee master and probation in one a
  assert.match(modules,/f\('probation_end','نهاية فترة التجربة','date'\)/);
  assert.match(modules,/f\('employee_id','الموظف','employee'\)/);
 });
+
+
+test('every HR register and printed form exposes the persistent form number and linked employee or leave references',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const paper=readFileSync(new URL('../app/operations.tsx',import.meta.url),'utf8');
+ assert.match(ui,/!tableFields\.some\(f=>f\.key==='document_no'\)&&<th>رقم النموذج<\/th>/);
+ assert.match(ui,/!tableFields\.some\(f=>f\.key==='document_no'\)&&<td><code dir="ltr">\{row\.data\?\.document_no\|\|'—'\}<\/code><\/td>/);
+ assert.match(paper,/const docNo=row\.data\?\.document_no\|\|row\.data\?\.reference/);
+ assert.match(paper,/مرجع ملف الموظف \/ Employee File/);
+ assert.match(paper,/مرجع طلب الإجازة \/ Leave Reference/);
+ assert.match(paper,/const parentLeave=row\.data\?\.leave_id/);
+});
