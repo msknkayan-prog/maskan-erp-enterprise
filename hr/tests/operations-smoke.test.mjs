@@ -1596,6 +1596,23 @@ test('employee direct manager is a verified roster choice reflected in request s
  assert.match(ui,/setMembers\(d\.rows\)/);
  assert.match(ui,/f\.type!=='internal'/);
 });
+test('general manager can approve and correct return completion with linked employee and payroll sync',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/async function gmConfirmReturn/);
+ assert.match(ui,/user\?\.role!=='admin'\|\|!permittedWrite\(user\|\|\{\},'returns'\)/);
+ assert.match(ui,/المدير العام: اعتماد المباشرة وتحديث الحالة/);
+ assert.match(ui,/تصحيح تاريخ المباشرة \(المدير العام\)/);
+ assert.match(ui,/await post\(\{action:'save',module:'returns',company:leave.company/);
+ assert.match(ui,/\^\[0-9\]\{4\}-\[0-9\]\{2\}-\[0-9\]\{2\}\$/);
+ assert.match(backend,/mod==='returns'&&u.role==='admin'&&old.status==='completed'/);
+ assert.match(backend,/status='completed'/);
+ assert.match(backend,/mod==='returns'\?'completed':'draft'/);
+ assert.match(backend,/return_last_updated_by:u.email,return_last_updated_at:now/);
+ assert.match(backend,/سبب تصحيح تاريخ المباشرة مطلوب/);
+ assert.match(backend,/returnSyncUpdates\.push/);
+ assert.match(backend,/return_payroll_sync:mod==='returns'\?returnPayrollSync/);
+});
 test('return-to-work register preserves completed records, actual dates and pending entries',async()=>{
  const {returnToWorkRegister,availableReturnLeaves}=await import('../lib/return-to-work.mjs');
  const approved=(id,employee_id)=>({id,module:'leave',status:'approved',company:'مسكن الكيان',data:{employee_id,start:'2026-10-01',end:'2026-10-31'}});
