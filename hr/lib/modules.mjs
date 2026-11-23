@@ -239,15 +239,13 @@ export function visible(user,row,all=[]){
   const accountEmail=String(user.email||'').trim().toLowerCase();
   const employee=row.module==='employees'?row:all.find(e=>e.module==='employees'&&e.id===row.data?.employee_id);
   const delegated=String(employee?.data?.delegated_manager_email||'').trim().toLowerCase();
-  if(row.module==='employees'&&user.role==='project_manager'){
-   const direct=String(row.data?.manager_email||row.data?.supervisor_account||'').trim().toLowerCase();
-   if(direct&&direct===accountEmail)return true;
-  }
-  if(['leave','advances','resignations','returns','terminations','warnings','appointments'].includes(row.module)&&row.data?.employee_id){
-   const direct=String(employee?.data?.manager_email||employee?.data?.supervisor_account||'').trim().toLowerCase();
-   if(direct&&user.role==='project_manager')return direct===accountEmail;
-  }
-  if(delegated&&(row.module==='employees'||!!row.data?.employee_id))return delegated===accountEmail;
+  if(user.role==='project_manager'&&(row.module==='employees'||['leave','advances','resignations','returns','terminations','warnings','appointments'].includes(row.module))){
+    if(!project)return false;
+    if(projectScope&&!projectScope.includes(project))return false;
+    const assignment=all.find(p=>p.module==='projects'&&p.id===project);
+    return Boolean(assignment&&String(assignment.data?.manager_email||'').trim().toLowerCase()===accountEmail&&(assignment.company===row.company||Array.isArray(assignment.data?._shared_companies)&&assignment.data._shared_companies.includes(row.company)));
+   }
+   if(delegated&&(row.module==='employees'||!!row.data?.employee_id))return delegated===accountEmail;
   if(row.module==='projects'&&all.some(e=>e.module==='employees'&&e.company===row.company&&e.data?.project_id===row.id&&String(e.data?.delegated_manager_email||'').trim().toLowerCase()===accountEmail))return true;
  if(user.role==='project_manager'){
   if(row.module==='payroll_batches'){
