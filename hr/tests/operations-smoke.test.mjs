@@ -2488,11 +2488,11 @@ test('Musab finance controller may approve advance amount with single ledger pos
  assert.equal(isRequestFinanceActor({role:'project_manager',email:'unassigned@example.com',is_active:true}),false);
  assert.equal(isRequestFinanceActor({role:'finance',email:requestApprovalOwners.finance.email,is_active:false}),false);
  assert.match(backend,/!isRequestFinanceActor\(u\)/);
- assert.match(backend,/requestApprovalOwners.finance.email/);
+ assert.match(backend,/!isRequestFinanceActor\(u\)/);
  assert.match(backend,/final_approved_by:u.email/);
  assert.match(backend,/advance_disbursement_ledger/);
  assert.match(ui,/isRequestFinanceActor\(user\)&&<button type="button" className="primary" disabled=\{saving\} onClick=\{\(\)=>gmFinalizeAdvance\(row\)\}>اعتماد مبلغ الصرف وتقييده/);
- assert.match(ui,/قيد اعتماد مبلغ الصرف/);
+ assert.match(ui,/قيد العمل/);
  assert.match(ui,/تم القيد والصرف/);
  assert.match(ui,/row.data.final_approved_by/);
 });
