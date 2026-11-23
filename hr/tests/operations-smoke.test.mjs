@@ -1806,27 +1806,19 @@ test('open payroll can re-sync loan installments and return attendance without r
  assert.match(ui,/readOnly=\{key==='absence_deduction'\|\|key==='advance_deduction'\}/);
 });
 
-test('finance approval of advances requires named finance controller or active system admin before payout',async()=>{
- const {isRequestFinanceActor,requestApprovalOwners}=await import('../backend/modules.mjs');
- assert.equal(isRequestFinanceActor({role:'admin',email:'other@example.com',is_active:true}),true);
- assert.equal(isRequestFinanceActor({role:'project_manager',email:requestApprovalOwners.finance.email,is_active:true}),true);
- assert.equal(isRequestFinanceActor({role:'finance',email:requestApprovalOwners.finance.email,is_active:true}),true);
- assert.equal(isRequestFinanceActor({role:'hr',email:'other@example.com',is_active:true}),false);
- assert.equal(isRequestFinanceActor({role:'admin',email:'x@example.com',is_active:false}),false);
- const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- assert.match(backend,/body.action==='approve_advance_finance'/);
- assert.match(backend,/status='finance_approved'/);
- assert.match(backend,/old.status!=='finance_approved'/);
- assert.match(backend,/advance_finance_approval/);
- assert.match(backend,/advance_receipt_no:'ADV-'/);
- assert.match(backend,/advance_receipt_amount:Number/);
+test('GM approves advance directly, records employee ledger and issues printable receipt',()=>{
+ const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- assert.match(ui,/async function financeApproveAdvance/);
- assert.match(ui,/اعتماد صرف المبلغ/);
- assert.match(ui,/async function disburse/);
+ assert.match(api,/body.action==='gm_approve_advance'/);
+ assert.match(api,/u.role!=='admin'/);
+ assert.match(api,/advance_disbursement_ledger/);
+ assert.match(api,/existingLedger.some/);
+ assert.match(api,/status='paid'/);
+ assert.match(api,/receipt_no:reference/);
+ assert.match(ui,/async function gmFinalizeAdvance/);
+ assert.match(ui,/طباعة سند الصرف/);
  assert.match(ui,/function advanceReceipt/);
  assert.match(ui,/سند تسليم عهدة \/ سلفة موظف/);
- assert.match(ui,/onClick=\{\(\)=>advanceReceipt\(row\)\}>إيصال صرف السلفة/);
 });
 test('payroll cost center follows employee project on synchronizing existing payroll',()=>{
  const api=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
@@ -1853,18 +1845,13 @@ test('overview hides all request approval tables while specialized pending reque
  assert.match(ui,/فتح الطلب ومراجعته/);
  assert.match(ui,/module==='overview'&&permittedRead\(user\|\|\{\},'employees'\)&&<EmployeeReportsDashboard/);
 });
-test('advance requests display financial approval only after HR and retain their administrative stages',async()=>{
- const {requestApprovalStages,advanceFinanceStage,requestStageView,requestStageTimestamp}=await import('../lib/request-approval.mjs');
- assert.equal(requestApprovalStages.length,3);
- assert.equal(advanceFinanceStage.id,'advance_finance');
- for(const [status,kind] of [['draft','future'],['hr','future'],['approved','waiting'],['finance_approved','done'],['paid','done']]){
-  assert.equal(requestStageView({module:'advances',status,data:{}},'advance_finance').kind,kind);
- }
- assert.equal(requestStageView({module:'leave',status:'approved',data:{}},'advance_finance').label,'غير مطبق');
- assert.equal(requestStageTimestamp({data:{finance_approved_at:'2026-11-23T13:00:00Z'}},'advance_finance'),'2026-11-23T13:00:00Z');
+test('advances display administrative approvals only, without finance or payout approval column',async()=>{
+ const {requestApprovalStages}=await import('../lib/request-approval.mjs');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- assert.match(ui,/row.module==='advances'\?\[\.\.\.requestApprovalStages,advanceFinanceStage,advanceDisbursementStage\]/);
- assert.match(ui,/module==='advances'\?\[\.\.\.requestApprovalStages,advanceFinanceStage,advanceDisbursementStage\]/);
+ assert.equal(requestApprovalStages.length,3);
+ assert.match(ui,/requestApprovalStages\.map\(stage/);
+ assert.doesNotMatch(ui,/row.module==='advances'\?\[\.\.\.requestApprovalStages,advanceFinanceStage/);
+ assert.match(ui,/اعتماد السلفة وتقييدها/);
 });
 test('finance separately approves monthly payroll before recording payment',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
@@ -2405,43 +2392,30 @@ test('appointment and return views tolerate nested historical data without a ful
  assert.deepEqual(returns.returnToWorkRegister(records).map(r=>[r.completed,r.actualReturn]),[[true,'2026-11-11']]);
 });
 
-test('advance approval, finance payout and installment activation are separate auditable stages',async()=>{
- const {requestStageView,requestStageTimestamp,advanceDisbursementStage}=await import('../lib/request-approval.mjs');
+test('GM ledger posting activates installments only once, after final approval',async()=>{
  const {calculateScheduledAdvances,loanFirstMonth}=await import('../lib/payroll-advance-schedule.mjs');
- assert.equal(advanceDisbursementStage.id,'advance_disbursement');
- const approved={module:'advances',status:'approved',data:{employee_id:'e1',amount:1000,installments:2,first_month:'2026-10'}};
- assert.equal(requestStageView(approved,'advance_disbursement').kind,'future');
- assert.equal(requestStageView({...approved,status:'finance_approved'},'advance_disbursement').kind,'waiting');
- assert.equal(requestStageView({...approved,status:'paid'},'advance_disbursement').kind,'done');
- assert.equal(requestStageTimestamp({...approved,data:{paid_at:'2026-11-23T13:00:00Z'}},'advance_disbursement'),'2026-11-23T13:00:00Z');
- const pending={id:'advance-a',status:'finance_approved',data:{...approved.data}};
- const paid={...pending,status:'paid',data:{...pending.data,paid_at:'2026-11-23T13:00:00Z'}};
- assert.deepEqual(calculateScheduledAdvances({loans:[pending],sums:new Map()},'e1','2026-11',500000),[]);
+ const approved={id:'advance-a',module:'advances',status:'approved',data:{employee_id:'e1',amount:1000,installments:2,first_month:'2026-10'}};
+ const paid={...approved,status:'paid',data:{...approved.data,paid_at:'2026-11-23T13:00:00Z'}};
+ assert.deepEqual(calculateScheduledAdvances({loans:[approved],sums:new Map()},'e1','2026-11',500000),[]);
  assert.deepEqual(calculateScheduledAdvances({loans:[paid],sums:new Map()},'e1','2026-10',500000),[]);
  assert.deepEqual(calculateScheduledAdvances({loans:[paid],sums:new Map()},'e1','2026-11',500000),[{advance_id:'advance-a',amount:500}]);
  assert.equal(loanFirstMonth(paid),'2026-11');
- const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- assert.match(ui,/onFinanceApprove=\{\(\)=>financeApproveAdvance\(row\)\}/);
- assert.match(ui,/onDisburse=\{\(\)=>disburse\(row\)\}/);
  assert.match(api,/loans:\[\.\.\.paidLoans,\{\.\.\.old,status:'paid',data\}\]/);
- assert.match(api,/status='paid'/);
+ assert.match(api,/advance_total_received/);
 });
-
-test('advance workflow routes first approval to direct manager and shows horizontal finance receipt actions',()=>{
+test('advance actions are horizontal, director approves and employee prints linked receipt',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- for(const label of ['إرسال','اعتماد','تعديل','رفض','حذف','اعتماد صرف المبلغ','صرف المبلغ وتوثيقه','إيصال صرف السلفة'])assert.ok(ui.includes(label),label);
+ for(const label of ['إرسال','اعتماد','تعديل','رفض','حذف','اعتماد السلفة وتقييدها','طباعة سند الصرف'])assert.ok(ui.includes(label),label);
  assert.match(ui,/className="advance-row-actions"/);
  assert.match(ui,/flexDirection:'row',alignItems:'center',flexWrap:'nowrap'/);
  assert.match(ui,/onClick=\{\(\)=>advanceReceipt\(row\)\}/);
  assert.match(backend,/const managerEmail=String\(employeeData\.manager_email/);
  assert.match(backend,/details\.direct_manager=\{name:managerName/);
- assert.match(backend,/action==='approve_advance_finance'/);
- assert.match(backend,/action==='disburse'/);
+ assert.match(backend,/body.action==='gm_approve_advance'/);
  assert.match(backend,/payment_reference:reference/);
 });
-
 test('admin approval bypasses missing supervisor login without changing employee/project records',()=>{
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
@@ -2466,22 +2440,18 @@ test('return save computes payroll attendance in its own transaction and suggest
  assert.match(ui,/يمكن تصحيحه يدويًا/);
 });
 
-test('GM unified employee request action approves stages with an audit trail and does not mark loan as paid',()=>{
+test('GM unified approval posts final advance ledger immediately, leaving the receipt printable',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  assert.match(ui,/async function gmApproveAllStages\(row\)/);
  assert.match(ui,/await post\(\{action:'transition',module:row.module,id:row.id,revision,decision:'approve'/);
- assert.match(ui,/await post\(\{action:'approve_advance_finance',module:'advances',id:row.id,revision/);
- assert.match(ui,/اعتماد موحد حتى المالية/);
+ assert.match(ui,/await post\(\{action:'gm_approve_advance',module:'advances',id:row.id,revision\}/);
+ assert.match(ui,/اعتماد السلفة وقيدها/);
  assert.match(ui,/اعتماد الإجازة بالكامل/);
- assert.match(ui,/module==='advances'\?\[\.\.\.approvalStages,\{id:'advance_finance'/);
- assert.match(ui,/توثيق الصرف وإصدار الإيصال/);
  assert.match(api,/const isDirector=u.role==='admin'&&u.is_active!==false/);
- assert.match(api,/advance_finance_approval/);
- assert.match(api,/if\(body.action==='disburse'\)/);
- assert.doesNotMatch(ui.slice(ui.indexOf('async function gmApproveAllStages'),ui.indexOf('const normalizeSearch=')),/action:'disburse'/);
+ assert.match(api,/advance_disbursement_ledger/);
+ assert.match(api,/advance_recorded_in_employee_ledger:true/);
 });
-
 test('leave payment actions show pending/paid, remove obsolete finance-for-payout label and mirror payout in employee ledger',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
@@ -2494,4 +2464,16 @@ test('leave payment actions show pending/paid, remove obsolete finance-for-payou
  assert.match(api,/employeeLedgerStatement=db.prepare\("UPDATE records SET data=/);
  assert.match(api,/\.{3}\(employeeLedgerStatement\?\[employeeLedgerStatement\]:\[\]\)/);
  assert.match(api,/employee_ledger_updated:decision==='pay'/);
+});
+
+test('direct GM advance action idempotently posts monetary ledger and prevents duplication',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(api,/if\(existingLedger.some\(\(entry:any\)=>String\(entry.advance_id\)===String\(old.id\)\)\)/);
+ assert.match(api,/UPDATE records SET data=\?,status='paid'/);
+ assert.match(api,/module='employees' AND company=\? AND revision=\?/);
+ assert.match(api,/gm_approved_by:u.email/);
+ assert.match(api,/receipt_no:reference/);
+ assert.match(ui,/gmFinalizeAdvance\(row\)/);
+ assert.doesNotMatch(ui,/onClick=\{\(\)=>financeApproveAdvance\(row\)\}/);
 });
