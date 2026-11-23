@@ -1208,6 +1208,20 @@ if(mod==='projects'&&!old){
  if(!serial?.code||!/^\\d{4,8}$/.test(String(serial.code)))throw Error('تعذر توليد رمز تسلسلي للمشروع');
  data.code=String(serial.code);
 }
+// Allocate one database-backed serial for every newly saved HR form. The sequence is
+// shared across modules so concurrent writes cannot reuse a document number.
+// Existing records retain their original references; business keys (leave id, payroll
+// period, employee number) continue to serve their existing lookup semantics.
+if(old){
+ const originalNo=String(previous?.document_no||'').trim();
+ if(originalNo)data.document_no=originalNo;
+ if(mod==='appointments'&&originalNo)data.document_no=originalNo;
+}else{
+ const serial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
+ if(!serial||!/^\\d{4,12}$/.test(String(serial)))throw Error('تعذر توليد رقم النموذج؛ أعد المحاولة');
+ const prefix=({appointments:'APT',leave:'LEV',advances:'ADV',warnings:'WRN',resignations:'RES',returns:'RTW',leave_dues:'LDU',settlements:'SET',terminations:'TER',repayments:'RPA',payroll:'PAY',payroll_batches:'PBA',employees:'EMP',projects:'PRJ',project_managers:'MGR',company_profiles:'CMP'} as Record<string,string>)[mod]||'HR';
+ data.document_no=prefix+'-'+saudiDate().slice(0,4)+'-'+String(serial).padStart(6,'0');
+}
 const code=mod==='warnings'&&data.warning_type!=='notice'?data.employee_id+':'+data.sequence:['returns','leave_dues'].includes(mod)?data.leave_id:mod==='company_profiles'?body.company:mod==='payroll'?`${data.employee_id}:${data.month}`:data.code||null;
 const employeeInsertSql=[
  "INSERT INTO records(id,module,company,code,data,status,revision,created_by,created_at,updated_at,mutation)",
