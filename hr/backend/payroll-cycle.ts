@@ -145,7 +145,7 @@ export async function POST(req){
      const advanceAllocations=autoAdvanceAllocations(advanceContext,e.id,month,Math.max(0,cents(salary)-cents(attendance.absence_deduction)));
      const row={batch_id:id,employee_id:e.id,source_company:e.company,working_company:co,month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||e.code||'',employment_status:status,project_id:d.project_id||'',cost_company:co,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
        basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,
-       absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,return_payable_days:attendance.payable_days,return_to_work_at:attendance.return_to_work_at,return_parts:attendance.return_parts,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
+       absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,return_absence_days:attendance.absence_days,return_payable_days:attendance.payable_days,return_to_work_at:attendance.return_to_work_at,return_parts:attendance.return_parts,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
        net:rounded(salary-attendance.absence_deduction-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,
        exception_note:'',needs_review:isSuspended||salaryMismatch,review_reason:[isSuspended?'حالة الموظف غير نشطة':'',salaryMismatch?'اختلاف إجمالي الراتب عن مكوناته':''].filter(Boolean).join('؛ '),notes:'',method:'bank'};
      employeeInserts.push([crypto.randomUUID(),'payroll',co,e.id+':'+month+':'+id,JSON.stringify(row),u.email,now,now,mutation]);
@@ -207,23 +207,27 @@ export async function POST(req){
     const d=row.data;
     const wage=rounded(Number(d.basic||0)+Number(d.housing||0)+Number(d.transport||0));
     const attendance=payrollAttendanceForSalary(attendanceRecords,d.employee_id,batch.data.month,wage);
-    const scheduled=autoAdvanceAllocations(loans,d.employee_id,batch.data.month,Math.max(0,cents(wage)+cents(d.overtime)+cents(d.bonus)+cents(d.extra_allowance)-cents(attendance.absence_deduction)-cents(d.deductions)));
+    const oldReturnDays=Number.isFinite(Number(d.return_absence_days))?Number(d.return_absence_days):d.return_to_work_at?Number(d.absence_days||0):0;
+    const manualAbsence=Math.max(0,Number(d.absence_days||0)-oldReturnDays);
+    const absence_days=Math.min(30,manualAbsence+attendance.absence_days);
+    const absence_deduction=salaryAbsenceDeduction(wage,absence_days);
+    const scheduled=autoAdvanceAllocations(loans,d.employee_id,batch.data.month,Math.max(0,cents(wage)+cents(d.overtime)+cents(d.bonus)+cents(d.extra_allowance)-cents(absence_deduction)-cents(d.deductions)));
     const advance_deduction=rounded(scheduled.reduce((n,x)=>n+Number(x.amount),0));
     const overtime=Number(d.overtime||0),bonus=Number(d.bonus||0),allowance=Number(d.extra_allowance||0),other=Number(d.deductions||0);
-    const net=rounded(wage+overtime+bonus+allowance-attendance.absence_deduction-advance_deduction-other);
+    const net=rounded(wage+overtime+bonus+allowance-absence_deduction-advance_deduction-other);
     if(net<0)throw Error('خصومات الموظف '+(d.employee_name||d.employee_number||'')+' تتجاوز المستحق؛ راجع البيانات قبل المزامنة');
     const current=JSON.stringify((Array.isArray(d.advance_allocations)?d.advance_allocations:[]).map(x=>({advance_id:x.advance_id,amount:Number(x.amount)})));
     const upcoming=JSON.stringify(scheduled);
-    if(cents(d.advance_deduction)===cents(advance_deduction)&&cents(d.absence_deduction)===cents(attendance.absence_deduction)&&Number(d.absence_days||0)===attendance.absence_days&&current===upcoming)continue;
+    if(cents(d.advance_deduction)===cents(advance_deduction)&&cents(d.absence_deduction)===cents(absence_deduction)&&Number(d.absence_days||0)===absence_days&&current===upcoming)continue;
     const bank=Math.min(Number(d.bank_amount||0),net);
-    const updated={...d,advance_deduction,advance_allocations:scheduled,absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,
-      return_payable_days:attendance.payable_days,return_parts:attendance.return_parts,return_to_work_at:attendance.return_to_work_at||d.return_to_work_at||null,
+    const updated={...d,advance_deduction,advance_allocations:scheduled,absence_days,absence_deduction,return_absence_days:attendance.absence_days,
+      return_payable_days:30-absence_days,return_parts:attendance.return_parts,return_to_work_at:attendance.return_to_work_at||d.return_to_work_at||null,
       net,bank_amount:bank,cash_amount:rounded(net-bank),split_confirmed:false,manager_reviewed:false,manager_reviewed_by:null,manager_reviewed_at:null,
       reviewed_by:null,reviewed_at:null,review_reason:[d.review_reason,'مزامنة آلية لخصم السلف والغياب بعد المباشرة؛ يلزم إعادة مراجعة توزيع الراتب'].filter(Boolean).join('؛ '),
       payroll_deductions_synced_at:now};
     statements.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND module='payroll' AND EXISTS(SELECT 1 FROM records WHERE id=? AND status IN ('draft','manager_review'))")
       .bind(JSON.stringify(updated),now,mutation,row.id,row.revision,batch.id));
-    updates.push({id:row.id,employee_id:d.employee_id,loan:advance_deduction,absence:attendance.absence_deduction,net});
+    updates.push({id:row.id,employee_id:d.employee_id,loan:advance_deduction,absence:absence_deduction,net});
    }
    if(!statements.length)return response({ok:true,updated:0});
    statements.push(db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)")
@@ -262,7 +266,7 @@ export async function POST(req){
    const advanceAllocations=autoAdvanceAllocations(advanceContext,employeeId,batch.data.month,Math.max(0,cents(salary)-cents(attendance.absence_deduction)));
    const rowId=crypto.randomUUID();
    const data={batch_id:batch.id,employee_id:employeeId,source_company:original.company,working_company:batch.company,month:batch.data.month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||original.code||'',employment_status:status,project_id:d.project_id||'',cost_company:batch.company,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
-    basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,return_payable_days:attendance.payable_days,return_to_work_at:attendance.return_to_work_at,return_parts:attendance.return_parts,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
+    basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,return_absence_days:attendance.absence_days,return_payable_days:attendance.payable_days,return_to_work_at:attendance.return_to_work_at,return_parts:attendance.return_parts,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
     net:rounded(salary-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,excluded:false,
     exception_note:'',needs_review:mismatch,review_reason:mismatch?'اختلاف إجمالي الراتب عن مكوناته':'',
     notes:'',method:'bank',added_to_batch_at:now,added_to_batch_by:u.email};
