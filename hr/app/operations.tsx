@@ -45,7 +45,7 @@ export function RecordPaper({row,spec,rows,display}){
     {projectManager&&row.module!=='employees'&&<tr><th colSpan={2}>مدير المشروع المعتمد / Project Manager</th><td colSpan={2}>{projectManager.name||'—'}</td><td>{projectManager.email||'—'}</td></tr>}
   </tbody></table>
   <table className="paper-data-table"><thead><tr><th>البيان / Description</th><th>التفاصيل / Details</th></tr></thead><tbody>
-   {spec.fields.map(f=><tr key={f.key}><th>{f.label}</th><td>{display(row,f)}</td></tr>)}
+   {spec.fields.map(f=><tr key={f.key}><th>{f.label}</th><td>{row.module==='advances'&&f.key==='monthly_deduction'?(amount(row.data.monthly_deduction||row.data.installment_amount||(Number(row.data.installments)>0?Math.floor(Math.round(Number(row.data.amount||0)*100)/Number(row.data.installments))/100:0))):display(row,f)}</td></tr>)}
    {row.module==='employees'&&Object.entries(row.data.extra_fields||{}).filter(([k])=>!/^([A-Z]{1,3}|source_.*)$/.test(k)).map(([k,v])=><tr key={k}><th>{k}</th><td>{String(v??'')}</td></tr>)}
    {row.module==='payroll'&&[['basic','الراتب الأساسي'],['housing','بدل السكن'],['transport','بدل النقل'],['overtime_hours','عدد الساعات الإضافية'],['overtime','قيمة الساعات الإضافية'],['net','صافي الاستحقاق']].map(([k,label])=><tr key={k}><th>{label}</th><td>{k==='overtime_hours'?Number(row.data[k]||0).toLocaleString('ar-SA')+' ساعة':amount(row.data[k])}</td></tr>)}
    {['settlements','leave_dues'].includes(row.module)&&<tr className="paper-total"><th>صافي المستحقات / Net Amount</th><td>{amount(row.data.net)}</td></tr>}
