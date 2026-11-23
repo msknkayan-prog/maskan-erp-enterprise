@@ -2481,3 +2481,17 @@ test('GM unified employee request action approves stages with an audit trail and
  assert.match(api,/if\(body.action==='disburse'\)/);
  assert.doesNotMatch(ui.slice(ui.indexOf('async function gmApproveAllStages'),ui.indexOf('const normalizeSearch=')),/action:'disburse'/);
 });
+
+test('leave payment actions show pending/paid, remove obsolete finance-for-payout label and mirror payout in employee ledger',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ for(const label of ['حالة الصرف','قيد الصرف','تم الصرف','صرف المبلغ','المبلغ المستحق / المصروف','استكمال اعتماد الإجازة','سجل مستحقات الإجازة المصروفة للموظف'])assert.ok(ui.includes(label),label);
+ assert.match(ui,/row.status==='finance'\?'اعتماد إداري مكتمل'/);
+ assert.match(ui,/const canFinance=isRequestFinanceActor\(user\)/);
+ assert.match(api,/const ledger=Array.isArray\(employeeData.leave_payment_ledger\)/);
+ assert.match(api,/ledger.some\(\(entry:any\)=>String\(entry.dues_id\)===String\(old.id\)\)/);
+ assert.match(api,/leave_dues_paid_total:Math.round/);
+ assert.match(api,/employeeLedgerStatement=db.prepare\("UPDATE records SET data=/);
+ assert.match(api,/\.{3}\(employeeLedgerStatement\?\[employeeLedgerStatement\]:\[\]\)/);
+ assert.match(api,/employee_ledger_updated:decision==='pay'/);
+});
