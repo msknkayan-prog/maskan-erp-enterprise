@@ -13,10 +13,10 @@ test('leave and advance approval follows the four named accounts without changin
  assert.equal(isRequestStageActor(musab,'finance'),true);
  assert.equal(isRequestStageActor(musab,'project_manager'),true);
  assert.equal(isRequestFinanceActor(musab),true);
- assert.equal(isRequestStageActor(magdi,'finance'),false);
+ assert.equal(isRequestStageActor(magdi,'finance'),true); // System administrator may approve advance finance disbursement.
  assert.equal(isRequestStageActor(mohamed,'projects_director'),false);
  assert.equal(isRequestStageActor({...musab,email:'other@example.com'},'finance'),false);
- assert.equal(isRequestStageActor({...musab,role:'finance'},'finance'),false);
+ assert.equal(isRequestStageActor({...musab,role:'finance'},'finance'),true);
  assert.equal(isRequestStageActor({...mohamed,is_active:false},'hr'),false);
 });
 
@@ -610,7 +610,7 @@ test('monthly payroll stores salary-charged company and project cost center inde
  assert.match(ui,/aria-label="شركة تحميل الراتب في المسير"/);
  assert.match(ui,/aria-label="مركز تكلفة المشروع في المسير"/);
  assert.match(ui,/cycleEdit\.data\.cost_company/);
- assert.match(ui,/cycleCostProjectName\(rows\.find\(e=>e\.module==='employees'/);
+ assert.match(ui,/const cycleCostProjectName=\(id,fallback=''/);
  assert.match(ui,/aria-label="مركز تكلفة المشروع في المسير" type="text" readOnly/);
  assert.match(ui,/<th>أيام الاستحقاق<\/th>/);
  assert.match(ui,/<th>خصم الغياب<\/th>/);
@@ -1787,6 +1787,45 @@ test('open payroll can re-sync loan installments and return attendance without r
  assert.match(backend,/return_absence_days:attendance.absence_days/);
  assert.match(backend,/أقساط السلف تغيرت لدى الموظف/);
  assert.match(ui,/readOnly=\{key==='absence_deduction'\|\|key==='advance_deduction'\}/);
+});
+
+test('finance approval of advances requires named finance controller or active system admin before payout',async()=>{
+ const {isRequestFinanceActor,requestApprovalOwners}=await import('../backend/modules.mjs');
+ assert.equal(isRequestFinanceActor({role:'admin',email:'other@example.com',is_active:true}),true);
+ assert.equal(isRequestFinanceActor({role:'project_manager',email:requestApprovalOwners.finance.email,is_active:true}),true);
+ assert.equal(isRequestFinanceActor({role:'finance',email:requestApprovalOwners.finance.email,is_active:true}),true);
+ assert.equal(isRequestFinanceActor({role:'hr',email:'other@example.com',is_active:true}),false);
+ assert.equal(isRequestFinanceActor({role:'admin',email:'x@example.com',is_active:false}),false);
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(backend,/body.action==='approve_advance_finance'/);
+ assert.match(backend,/status='finance_approved'/);
+ assert.match(backend,/old.status!=='finance_approved'/);
+ assert.match(backend,/advance_finance_approval/);
+ assert.match(backend,/advance_receipt_no:'ADV-'/);
+ assert.match(backend,/advance_receipt_amount:Number/);
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/async function financeApproveAdvance/);
+ assert.match(ui,/اعتماد المالية — مصعب عبد القيوم \/ مدير النظام/);
+ assert.match(ui,/async function disburse/);
+ assert.match(ui,/function advanceReceipt/);
+ assert.match(ui,/سند تسليم عهدة \/ سلفة موظف/);
+ assert.match(ui,/row.status==='paid'&&<button type="button" onClick=\{\(\)=>advanceReceipt\(row\)\}/);
+});
+test('payroll cost center follows employee project on synchronizing existing payroll',()=>{
+ const api=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(api,/employeeProjectById=new Map/);
+ assert.match(api,/cost_project_id:costProjectId,project_id:costProjectId/);
+ assert.match(ui,/const cycleCostProjectName=\(id,fallback=''/);
+ assert.match(ui,/e\?\.data\?\.project_id\|\|row.data.cost_project_id/);
+});
+test('employee opening leave starts zero and previously confirmed manual balances are retained',()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(backend,/if\(mod==='employees'&&!old\)\{data.opening_leave='0';data.opening_leave_confirmed='no';\}/);
+ assert.match(backend,/previous\?\.opening_leave_confirmed==='yes'/);
+ assert.match(ui,/defaultData.opening_leave='0';defaultData.opening_leave_confirmed='no'/);
+ assert.match(ui,/تُحفظ جميع الأرصدة السابقة المعتمدة والمدخلة يدوياً/);
 });
 
 test('employee requests end at HR; finance is a separate disbursement operation',()=>{

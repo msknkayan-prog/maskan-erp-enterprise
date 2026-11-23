@@ -201,10 +201,14 @@ export async function POST(req){
    if(Number(body.batch_revision)!==batch.revision)throw Error('تغير المسير أثناء المزامنة؛ حدّث الصفحة');
    const attendanceRecords=(await db.prepare("SELECT * FROM records WHERE module IN ('leave','returns')").all()).results.map(parse);
    const loans=await paidLoanContext();
+   const employeeRecords=(await db.prepare("SELECT id,data FROM records WHERE module='employees'").all()).results;
+   const employeeProjectById=new Map(employeeRecords.map(row=>[String(row.id),String(JSON.parse(row.data||'{}').project_id||'')]));
    const statements=[],updates=[];
    for(const row of monthly){
     if(row.data.excluded)continue;
     const d=row.data;
+    const employeeProject=employeeProjectById.get(String(d.employee_id));
+    const costProjectId=employeeProject!==undefined?employeeProject:String(d.project_id||'');
     const wage=rounded(Number(d.basic||0)+Number(d.housing||0)+Number(d.transport||0));
     const attendance=payrollAttendanceForSalary(attendanceRecords,d.employee_id,batch.data.month,wage);
     const oldReturnDays=Number.isFinite(Number(d.return_absence_days))?Number(d.return_absence_days):d.return_to_work_at?Number(d.absence_days||0):0;
@@ -218,16 +222,16 @@ export async function POST(req){
     if(net<0)throw Error('خصومات الموظف '+(d.employee_name||d.employee_number||'')+' تتجاوز المستحق؛ راجع البيانات قبل المزامنة');
     const current=JSON.stringify((Array.isArray(d.advance_allocations)?d.advance_allocations:[]).map(x=>({advance_id:x.advance_id,amount:Number(x.amount)})));
     const upcoming=JSON.stringify(scheduled);
-    if(cents(d.advance_deduction)===cents(advance_deduction)&&cents(d.absence_deduction)===cents(absence_deduction)&&Number(d.absence_days||0)===absence_days&&current===upcoming)continue;
+    if(cents(d.advance_deduction)===cents(advance_deduction)&&cents(d.absence_deduction)===cents(absence_deduction)&&Number(d.absence_days||0)===absence_days&&current===upcoming&&String(d.cost_project_id||'')===costProjectId)continue;
     const bank=Math.min(Number(d.bank_amount||0),net);
-    const updated={...d,advance_deduction,advance_allocations:scheduled,absence_days,absence_deduction,return_absence_days:attendance.absence_days,
+    const updated={...d,cost_project_id:costProjectId,project_id:costProjectId,advance_deduction,advance_allocations:scheduled,absence_days,absence_deduction,return_absence_days:attendance.absence_days,
       return_payable_days:30-absence_days,return_parts:attendance.return_parts,return_to_work_at:attendance.return_to_work_at||d.return_to_work_at||null,
       net,bank_amount:bank,cash_amount:rounded(net-bank),split_confirmed:false,manager_reviewed:false,manager_reviewed_by:null,manager_reviewed_at:null,
       reviewed_by:null,reviewed_at:null,review_reason:[d.review_reason,'مزامنة آلية لخصم السلف والغياب بعد المباشرة؛ يلزم إعادة مراجعة توزيع الراتب'].filter(Boolean).join('؛ '),
       payroll_deductions_synced_at:now};
     statements.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND module='payroll' AND EXISTS(SELECT 1 FROM records WHERE id=? AND status IN ('draft','manager_review'))")
       .bind(JSON.stringify(updated),now,mutation,row.id,row.revision,batch.id));
-    updates.push({id:row.id,employee_id:d.employee_id,loan:advance_deduction,absence:absence_deduction,net});
+    updates.push({id:row.id,employee_id:d.employee_id,project_id:costProjectId,loan:advance_deduction,absence:absence_deduction,net});
    }
    if(!statements.length)return response({ok:true,updated:0});
    statements.push(db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)")

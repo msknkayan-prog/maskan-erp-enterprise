@@ -31,7 +31,7 @@ export const requestApprovalOwners={
  hr:{email:'magdiosman0@gmail.com',name:'م. محمد يوسف — شؤون الموظفين'},
  finance:{email:'altoom1900@gmail.com',name:'مصعب عبد القيوم — المالية والصرف'}
 };
-export const isRequestFinanceActor=user=>Boolean(user?.is_active!==false&&user?.role==='project_manager'&&String(user?.email||'').trim().toLowerCase()===requestApprovalOwners.finance.email);
+export const isRequestFinanceActor=user=>Boolean(user?.is_active!==false&&(user?.role==='admin'||String(user?.email||'').trim().toLowerCase()===requestApprovalOwners.finance.email&&['project_manager','finance'].includes(user?.role)));
 export function isRequestStageActor(user,stage){
  if(!user||user.is_active===false)return false;
  const email=String(user.email||'').trim().toLowerCase();
@@ -41,7 +41,7 @@ export function isRequestStageActor(user,stage){
  if(stage==='finance')return isRequestFinanceActor(user);
  return false;
 }
-export const states={draft:'مسودة',project_manager:'مدير المشروع',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
+export const states={draft:'مسودة',project_manager:'مدير المشروع',projects_director:'إدارة المشاريع',hr:'شؤون الموظفين',finance:'الإدارة المالية',finance_approved:'معتمد للصرف من المالية',approved:'معتمد',paid:'تم الصرف',returned:'معاد للمراجعة',rejected:'مرفوض',active:'نشط',inactive:'غير نشط',cancelled:'ملغي'};
 export const saudiDate=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,10);
 export function leaveAccrualAsOf(data,at=saudiDate()){
  const manual=data?.contract_expiry_mode==='manual'&&/^\d{4}-\d{2}-\d{2}$/.test(String(data?.contract_expiry||''));
@@ -229,8 +229,8 @@ export function visible(user,row,all=[]){
  if(user.role==='employee')return (row.module==='employees'&&row.id===user.employee_id)||row.data?.employee_id===user.employee_id;
  const companyScope=safeScope(user.companies);
  if(companyScope&&!companyScope.includes(row.company))return false;
- if(isRequestFinanceActor(user)&&['leave','advances'].includes(row.module)&&['finance','approved','paid'].includes(row.status))return true;
- if(isRequestFinanceActor(user)&&row.module==='employees'&&all.some(r=>['leave','advances'].includes(r.module)&&['finance','approved','paid'].includes(r.status)&&r.company===row.company&&r.data?.employee_id===row.id))return true;
+ if(isRequestFinanceActor(user)&&['leave','advances'].includes(row.module)&&['finance','approved','finance_approved','paid'].includes(row.status))return true;
+ if(isRequestFinanceActor(user)&&row.module==='employees'&&all.some(r=>['leave','advances'].includes(r.module)&&['finance','approved','finance_approved','paid'].includes(r.status)&&r.company===row.company&&r.data?.employee_id===row.id))return true;
  if(user.role==='project_manager'&&user.employee_id&&(row.module==='employees'&&row.id===user.employee_id||['leave','advances','resignations','returns'].includes(row.module)&&row.data?.employee_id===user.employee_id))return true;
  if(row.module==='project_managers'&&user.role==='project_manager')return String(row.data?.email||'').trim().toLowerCase()===String(user.email||'').trim().toLowerCase();
  const projectScope=safeScope(user.projects);
