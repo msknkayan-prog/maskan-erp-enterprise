@@ -1777,7 +1777,24 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  <button type="button" className={newHire?'primary':''} disabled={saving} onClick={()=>{setNewHire({name:'',identity:'',job:'',department:'',project_id:'',nationality:'',phone:'',email:'',salary:'',bank_amount:'0',sponsorship:'unknown',bank:'',iban:'',manager:'',notes:''});setEdit({...edit,data:{...edit.data,employee_id:'',probation:edit.data.probation||'90 يومًا'}})}}>تعيين موظف جديد وإضافته للسجل تلقائيًا</button>
  </div>
  {newHire&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(205px,1fr))',gap:10,marginTop:14}}>
- {[['name','الاسم الرباعي','text',true],['identity','رقم الهوية / الإقامة','text',true],['job','المسمى الوظيفي','text',true],['department','القسم','text',false],['nationality','الجنسية','text',false],['phone','رقم الجوال','tel',false],['email','البريد الإلكتروني','email',false],['salary','الراتب الشهري الإجمالي (ر.س)','number',true],['bank_amount','التحويل البنكي (ر.س)','number',false],['bank','البنك','text',false],['iban','الآيبان','text',false],['manager','المدير المباشر','text',false]].map(([key,label,type,required])=><label key={key}>{label}{required?' *':''}<input type={type} required={required} min={type==='number'?'0':undefined} step={type==='number'?'0.01':undefined} value={newHire[key]??''} onChange={e=>setNewHire(prev=>({...prev,[key]:e.target.value}))}/></label>)}
+ {[['name','الاسم الرباعي','text',true],['identity','رقم الهوية / الإقامة','text',true],['phone','رقم الجوال','tel',false],['email','البريد الإلكتروني','email',false],['salary','الراتب الشهري الإجمالي (ر.س)','number',true],['bank_amount','التحويل البنكي (ر.س)','number',false],['bank','البنك','text',false],['iban','الآيبان','text',false]].map(([key,label,type,required])=><label key={key}>{label}{required?' *':''}<input type={type} required={required} min={type==='number'?'0':undefined} step={type==='number'?'0.01':undefined} value={newHire[key]??''} onChange={e=>setNewHire(prev=>({...prev,[key]:e.target.value}))}/></label>)}
+ {(['job','department','nationality'].map(key=>{
+  const title={job:'المسمى الوظيفي',department:'القسم',nationality:'الجنسية'}[key];
+  const dataRows=rows.filter(r=>r.module==='employees'&&!r.data?._deleted&&!r.data?._archived&&(r.company===edit.company||!edit.company));
+  const suggestions=[...new Set(dataRows.map(r=>String(r.data?.[key]||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
+  return <label key={key}>{title}{key==='job'?' *':''}
+   <input list={'hire-filter-'+key} type="text" required={key==='job'} autoComplete="off" value={newHire[key]||''} placeholder={'ابحث أو اختر '+title} onChange={e=>setNewHire(prev=>({...prev,[key]:e.target.value}))}/>
+   <datalist id={'hire-filter-'+key}>{suggestions.map(value=><option key={value} value={value}/>)}</datalist>
+   <small style={{display:'block',marginTop:3,color:'#81745c'}}>{suggestions.length} اختيار من بيانات الموظفين المسجلة</small>
+  </label>;
+ }))}
+ {(()=>{const available=(employeeManagerOptions[edit.company]||[]).filter(m=>m.hasLogin&&m.email);
+  return <label>المدير المباشر
+   <input type="text" list="hire-direct-manager-options" autoComplete="off" value={newHire.manager||''} placeholder="ابحث باسم المدير المباشر المعتمد" onChange={e=>setNewHire(prev=>({...prev,manager:e.target.value}))}/>
+   <datalist id="hire-direct-manager-options">{available.map(m=><option key={m.key} value={m.name}/>)}</datalist>
+   <small style={{display:'block',marginTop:3,color:'#81745c'}}>{available.length} مدير بحساب دخول نشط مخوّل لاعتماد الطلبات {newHire.manager&&!available.some(m=>m.name===newHire.manager)&&'· الاسم غير مرتبط بمدير مخوّل'}</small>
+  </label>;
+ })()}
  <label>المشروع<select value={newHire.project_id||''} onChange={e=>setNewHire(prev=>({...prev,project_id:e.target.value}))}><option value="">بدون تكليف مشروع حاليًا</option>{rows.filter(r=>r.module==='projects'&&(r.company===edit.company||(r.data?._shared_companies||[]).includes(edit.company))).map(r=><option key={r.id} value={r.id}>{r.data?.name||r.code}</option>)}</select></label>
  <label>حالة الكفالة<select value={newHire.sponsorship||'unknown'} onChange={e=>setNewHire(prev=>({...prev,sponsorship:e.target.value}))}><option value="unknown">غير محدد</option><option value="yes">على كفالة الشركة</option><option value="no">خارج الكفالة</option></select></label>
  <small style={{gridColumn:'1 / -1'}}>سيُنشئ الحفظ سجل الموظف ورقمه الوظيفي ورقم نموذج التعيين، وتُحسب فترة التجربة من تاريخ المباشرة. لن يُنشأ سجل مكرر إذا سبق تسجيل رقم الهوية لدى الشركة.</small>
