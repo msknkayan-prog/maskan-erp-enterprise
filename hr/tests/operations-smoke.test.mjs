@@ -2715,9 +2715,26 @@ test('new hire searchable registered master data and authorized manager linking'
  assert.match(ui,/r\.module==='employees'&&!r\.data\?\._deleted/);
  assert.match(ui,/<datalist id=\{'hire-filter-'\+key\}>/);
  assert.match(ui,/placeholder=\{'ابحث أو اختر '\+title\}/);
- assert.match(ui,/employeeManagerOptions\[edit\.company\]\|\|\[\]\)\.filter\(m=>m\.hasLogin&&m\.email\)/);
- assert.match(ui,/datalist id="hire-direct-manager-options"/);
- assert.match(api,/const manager=choices\.find\(\(m:any\)=>m\.hasLogin&&m\.email/);
- assert.match(api,/اختر المدير المباشر من القائمة المسجلة وله صلاحية اعتماد نشطة/);
+ assert.match(ui,/const available=employeeManagerOptions\[edit\.company\]\|\|\[\]/);
+ assert.match(ui,/id="new-hire-manager-list" role="listbox"/);
+ assert.match(api,/const manager=choices\.find\(\(m:any\)=>normalizeManagerName/);
+ assert.match(api,/المدير المباشر غير موجود في القائمة المسجلة/);
  assert.match(api,/setEmployeeDirectManager\(employee,/);
+});
+
+
+test('appointment direct manager search is populated and supports registered pending-login supervisors',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/\['members','audit','projects','project_managers','employees','appointments'\]\.includes\(module\)/);
+ assert.match(ui,/id="new-hire-manager-search" type="text" role="combobox"/);
+ assert.match(ui,/id="new-hire-manager-list" role="listbox"/);
+ assert.match(ui,/setNewHireManagerOpen\(true\)/);
+ assert.match(ui,/filtered\.map\(m=><button type="button" role="option"/);
+ assert.match(ui,/setEdit\(prev=>\(\{\.\.\.prev,data:\{\.\.\.prev\.data,direct_manager:m\.name\}\}\)\)/);
+ assert.match(ui,/مسجل في الدليل — يلزم ربط حساب للاعتماد/);
+ assert.match(api,/role IN \('project_manager','admin','hr'\)/);
+ assert.match(api,/direct_manager_pending_approval_link=true/);
+ assert.match(api,/resolveEmployeeDirectManager\(db,company,manager\.email,manager\.name,true\)/);
+ assert.match(api,/project_manager_choices/);
 });
