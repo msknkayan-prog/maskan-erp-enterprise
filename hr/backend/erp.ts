@@ -985,7 +985,19 @@ if(mod==='employees'){
   projectOwnerName=String(details.manager_name||'').trim();
  }
  let resolved:any=null;
- if(data._direct_manager_manual){
+ // Imported employee assignments may reference legacy managers no longer present in
+ // the active directory. Keep the already saved assignment on unrelated edits.
+ const managerAssignmentUnchanged=Boolean(old&&old.company===body.company
+  &&String(previous?.project_id||'')===String(data.project_id||'')
+  &&String(previous?.manager||'')===String(data.manager||'')
+  &&String(previous?.manager_email||'').trim().toLowerCase()===String(data.manager_email||'').trim().toLowerCase()
+  &&String(previous?.direct_manager_id||'')===String(data.direct_manager_id||'')
+  &&Boolean(previous?._direct_manager_manual)===Boolean(data._direct_manager_manual));
+ if(managerAssignmentUnchanged){
+  for(const key of ['manager','manager_email','direct_manager_id','_direct_manager_manual','delegated_manager_email']){
+   if(Object.prototype.hasOwnProperty.call(previous,key))data[key]=previous[key];
+  }
+ }else if(data._direct_manager_manual){
   const choices=await availableEmployeeDirectManagers(db,body.company);
   resolved=choices.find(m=>normalizeManagerName(m.name)===normalizeManagerName(data.manager));
   if(!resolved)throw Error('المدير المباشر المحدد غير مسجل ضمن قائمة المدراء؛ أعد اختياره');
@@ -1235,10 +1247,10 @@ if(mod==='projects'&&!old){
 if(old){
  const originalNo=String(previous?.document_no||'').trim();
  if(originalNo)data.document_no=originalNo;
- if(mod==='appointments'&&!originalNo){
+ if(['appointments','employees'].includes(mod)&&!originalNo){
   const serial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
   if(!serial||!/^\\d{4,12}$/.test(String(serial)))throw Error('تعذر توليد رقم النموذج');
-  data.document_no='APT-'+saudiDate().slice(0,4)+'-'+String(serial).padStart(6,'0');
+  data.document_no=(mod==='employees'?'EMP':'APT')+'-'+saudiDate().slice(0,4)+'-'+String(serial).padStart(6,'0');
  }
 }else{
  const serial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
