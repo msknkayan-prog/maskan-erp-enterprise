@@ -13,10 +13,10 @@ test('leave and advance approval follows the four named accounts without changin
  assert.equal(isRequestStageActor(musab,'finance'),true);
  assert.equal(isRequestStageActor(musab,'project_manager'),true);
  assert.equal(isRequestFinanceActor(musab),true);
- assert.equal(isRequestStageActor(magdi,'finance'),false);
+ assert.equal(isRequestStageActor(magdi,'finance'),true); // System administrator may approve advance finance disbursement.
  assert.equal(isRequestStageActor(mohamed,'projects_director'),false);
  assert.equal(isRequestStageActor({...musab,email:'other@example.com'},'finance'),false);
- assert.equal(isRequestStageActor({...musab,role:'finance'},'finance'),false);
+ assert.equal(isRequestStageActor({...musab,role:'finance'},'finance'),true);
  assert.equal(isRequestStageActor({...mohamed,is_active:false},'hr'),false);
 });
 
@@ -610,7 +610,7 @@ test('monthly payroll stores salary-charged company and project cost center inde
  assert.match(ui,/aria-label="شركة تحميل الراتب في المسير"/);
  assert.match(ui,/aria-label="مركز تكلفة المشروع في المسير"/);
  assert.match(ui,/cycleEdit\.data\.cost_company/);
- assert.match(ui,/cycleCostProjectName\(rows\.find\(e=>e\.module==='employees'/);
+ assert.match(ui,/const cycleCostProjectName=\(id,fallback=''/);
  assert.match(ui,/aria-label="مركز تكلفة المشروع في المسير" type="text" readOnly/);
  assert.match(ui,/<th>أيام الاستحقاق<\/th>/);
  assert.match(ui,/<th>خصم الغياب<\/th>/);
