@@ -1593,11 +1593,10 @@ test('employee direct manager is a verified roster choice reflected in request s
  assert.match(ui,/setMembers\(d\.rows\)/);
  assert.match(ui,/f\.type!=='internal'/);
 });
-test('approved leaves automatically appear in return-to-work queue and load employee details',()=>{
+test('approved and HR-approved legacy leaves appear in return-to-work queue',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- for(const text of ['الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة','إجازة بانتظار المباشرة','تسجيل المباشرة','leave.data.employee_id','return_record_id','leave.data.expected_return','setEdit({company:leave.company','آخر مباشرة من إجازة مسجلة'])assert.ok(ui.includes(text),text);
- assert.match(ui,/r\.module==='leave'&&r\.status==='approved'/);
- assert.match(ui,/r\.module==='returns'&&r\.company===leave.company&&r\.data\?\.leave_id===leave\.id/);
+ for(const marker of ['الموظفون المطلوب تسجيل مباشرتهم من الإجازات المعتمدة','إجازة معتمدة','تسجيل المباشرة','leave.data.employee_id','return_record_id','leave.data.expected_return','setEdit({company:leave.company','آخر مباشرة من إجازة مسجلة','availableReturnLeaves(rows,company)'])assert.ok(ui.includes(marker),marker);
+ assert.match(ui,/employeeOnLeave\(r\)/);
  assert.match(ui,/actual_return:''/);
 });
 test('return-to-work records link leave and employee with duplicate and stale-write protection',()=>{
