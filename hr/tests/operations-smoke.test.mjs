@@ -1654,6 +1654,38 @@ test('loan disbursement automatically recalculates draft payroll, preserves appr
  assert.match(ui,/لم يُوثّق صرفها بعد/);
 });
 
+test('return-to-work list includes approved, paid and legacy finance-stage leaves plus on-leave staff',async()=>{
+ const {isReturnEligibleLeave,availableReturnLeaves,employeeOnLeave}=await import('../lib/return-to-work.mjs');
+ const make=(id,status,employee='e')=>({id,module:'leave',status,company:'مسكن الكيان',data:{employee_id:employee,start:'2026-11-01',end:'2026-11-20'}});
+ const all=[make('a','approved'),make('b','paid'),make('c','finance'),make('d','hr'),make('e','rejected')];
+ assert.deepEqual(availableReturnLeaves(all).map(x=>x.id),['a','b','c']);
+ assert.equal(isReturnEligibleLeave(make('d','hr')),false);
+ assert.equal(employeeOnLeave({data:{employment_status:'on_leave'}}),true);
+ assert.equal(employeeOnLeave({data:{employment_status:'في إجازة'}}),true);
+ assert.equal(employeeOnLeave({data:{employment_status:'active'}}),false);
+ assert.deepEqual(availableReturnLeaves([...all,{id:'x',module:'returns',company:'مسكن الكيان',data:{leave_id:'c'}}]).map(x=>x.id),['a','b']);
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/availableReturnLeaves\(rows,company\)/);
+ assert.match(ui,/const pendingLeaves=rows\.filter/);
+ assert.match(ui,/employeeOnLeave\(r\)/);
+ assert.match(ui,/حالة الموظف وحدها لا تثبت اعتماد الإجازة/);
+ assert.match(ui,/تحديث بيانات الإجازات والموظفين/);
+});
+test('return-to-work approval updates employee and open payroll atomically without touching paid batches',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(erp,/isReturnEligibleLeave\(\{\.\.\.linked,data:leave\}\)/);
+ assert.match(erp,/employeeOnLeave\(\{data:employeeData\}\)\?'active'/);
+ assert.match(erp,/module='payroll_batches' AND company=\?/);
+ assert.match(erp,/monthlyBatch&&\['draft','manager_review'\]\.includes\(monthlyBatch.status\)&&current/);
+ assert.match(erp,/return_to_work_at:data\.actual_return/);
+ assert.match(erp,/split_confirmed:false,manager_reviewed:false/);
+ assert.match(erp,/monthlyBatch\.status==='draft'&&!matched\.some/);
+ assert.match(erp,/added_reason:'approved_return_to_work'/);
+ assert.match(erp,/advance_allocations:allocations/);
+ assert.match(erp,/return_payroll_sync:mod==='returns'\?returnPayrollSync/);
+ assert.match(erp,/returnSyncUpdates\.some/);
+});
+
 test('employee requests end at HR; finance is a separate disbursement operation',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
