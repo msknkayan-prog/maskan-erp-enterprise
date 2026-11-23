@@ -2660,3 +2660,19 @@ test('historical unnumbered appointment forms can be safely backfilled and new f
  assert.match(ui,/استكمال الترقيم التلقائي/);
  assert.match(ui,/module==='appointments'&&f.key==='document_no'\?<input type="text" readOnly/);
 });
+
+
+test('employee forms show immutable automatically generated numbers and preserve unchanged legacy manager link',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const modules=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
+ const backendModules=readFileSync(new URL('../backend/modules.mjs',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ assert.match(ui,/رقم النموذج: <b>\{edit.data\?\.document_no/);
+ assert.match(ui,/f.key==='document_no'\?<input type="text" readOnly/);
+ assert.match(ui,/لم يتم حفظ التعديل:/);
+ for(const x of [modules,backendModules])assert.match(x,/f\('document_no','رقم نموذج بيانات الموظف'\)/);
+ assert.match(api,/const managerAssignmentUnchanged=Boolean/);
+ assert.match(api,/if\(managerAssignmentUnchanged\)\{/);
+ assert.match(api,/\['appointments','employees'\]\.includes\(mod\)&&!originalNo/);
+ assert.match(api,/mod==='employees'\?'EMP':'APT'/);
+});
