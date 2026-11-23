@@ -2644,3 +2644,19 @@ test('advance payout reports actual open payroll linkage and retains immutable a
  assert.match(ui,/result.note/);
  assert.match(ui,/الرصيد المتبقي = السلف المقيدة والمصروفة/);
 });
+
+
+test('historical unnumbered appointment forms can be safely backfilled and new forms get sequence numbers',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(erp,/body.action==='backfill_appointment_numbers'/);
+ assert.match(erp,/if\(u.role!=='admin'\)throw Error\('403'\)/);
+ assert.match(erp,/document_no_backfilled_at:now/);
+ assert.match(erp,/appointment_number_backfill/);
+ assert.match(erp,/COALESCE\(NULLIF\(TRIM\(data::jsonb->>'document_no'\),''\),''\)=''/);
+ assert.match(erp,/if\(mod==='appointments'&&!originalNo\)/);
+ assert.match(erp,/data.document_no='APT-'/);
+ assert.match(ui,/action:'backfill_appointment_numbers'/);
+ assert.match(ui,/استكمال الترقيم التلقائي/);
+ assert.match(ui,/module==='appointments'&&f.key==='document_no'\?<input type="text" readOnly/);
+});
