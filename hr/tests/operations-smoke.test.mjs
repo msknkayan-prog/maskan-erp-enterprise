@@ -1853,6 +1853,19 @@ test('overview hides all request approval tables while specialized pending reque
  assert.match(ui,/فتح الطلب ومراجعته/);
  assert.match(ui,/module==='overview'&&permittedRead\(user\|\|\{\},'employees'\)&&<EmployeeReportsDashboard/);
 });
+test('advance requests display financial approval only after HR and retain their administrative stages',async()=>{
+ const {requestApprovalStages,advanceFinanceStage,requestStageView,requestStageTimestamp}=await import('../lib/request-approval.mjs');
+ assert.equal(requestApprovalStages.length,3);
+ assert.equal(advanceFinanceStage.id,'advance_finance');
+ for(const [status,kind] of [['draft','future'],['hr','future'],['approved','waiting'],['finance_approved','done'],['paid','done']]){
+  assert.equal(requestStageView({module:'advances',status,data:{}},'advance_finance').kind,kind);
+ }
+ assert.equal(requestStageView({module:'leave',status:'approved',data:{}},'advance_finance').label,'غير مطبق');
+ assert.equal(requestStageTimestamp({data:{finance_approved_at:'2026-11-23T13:00:00Z'}},'advance_finance'),'2026-11-23T13:00:00Z');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/row.module==='advances'\?\[\.\.\.requestApprovalStages,advanceFinanceStage\]/);
+ assert.match(ui,/module==='advances'\?\[\.\.\.requestApprovalStages,advanceFinanceStage\]/);
+});
 test('finance separately approves monthly payroll before recording payment',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
