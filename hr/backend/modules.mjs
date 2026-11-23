@@ -206,8 +206,8 @@ export function visible(user,row,all=[]){
  if(row.module==='project_managers'&&user.role==='project_manager')return String(row.data?.email||'').trim().toLowerCase()===String(user.email||'').trim().toLowerCase();
  if(user.role==='employee')return row.module==='employees'&&row.id===user.employee_id||row.data?.employee_id===user.employee_id;
  if(user.companies&&user.companies!=='*'&&!JSON.parse(user.companies).includes(row.company))return false;
- if(isRequestFinanceActor(user)&&['leave','advances'].includes(row.module)&&['finance','approved','paid'].includes(row.status))return true;
- if(isRequestFinanceActor(user)&&row.module==='employees'&&all.some(r=>['leave','advances'].includes(r.module)&&['finance','approved','paid'].includes(r.status)&&r.company===row.company&&r.data?.employee_id===row.id))return true;
+ if(isRequestFinanceActor(user)&&['leave','advances'].includes(row.module)&&['finance','approved','finance_approved','paid'].includes(row.status))return true;
+ if(isRequestFinanceActor(user)&&row.module==='employees'&&all.some(r=>['leave','advances'].includes(r.module)&&['finance','approved','finance_approved','paid'].includes(r.status)&&r.company===row.company&&r.data?.employee_id===row.id))return true;
  if(user.role==='project_manager'&&user.employee_id&&(row.module==='employees'&&row.id===user.employee_id||['leave','advances','resignations','returns'].includes(row.module)&&row.data?.employee_id===user.employee_id))return true;
  const isPayroll=['payroll','payroll_batches'].includes(row.module);
  const project=isPayroll?null:row.module==='projects'?row.id:row.data?.project_id||all.find(r=>r.id===row.data?.employee_id)?.data?.project_id;
