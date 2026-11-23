@@ -1606,7 +1606,7 @@ test('general manager can approve and correct return completion with linked empl
  assert.match(ui,/await post\(\{action:'save',module:'returns',company:leave.company/);
  assert.match(ui,/\^\[0-9\]\{4\}-\[0-9\]\{2\}-\[0-9\]\{2\}\$/);
  assert.match(backend,/mod==='returns'&&u.role==='admin'&&old.status==='completed'/);
- assert.match(backend,/status='completed'/);
+ assert.ok(backend.includes(String.raw`status=\'completed\'`));
  assert.match(backend,/mod==='returns'\?'completed':'draft'/);
  assert.match(backend,/return_last_updated_by:u.email,return_last_updated_at:now/);
  assert.match(backend,/سبب تصحيح تاريخ المباشرة مطلوب/);
