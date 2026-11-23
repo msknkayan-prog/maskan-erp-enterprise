@@ -693,7 +693,7 @@ if(body.action==='record_opening_advance_repayment'){
  const repayments=(await db.prepare("SELECT * FROM records WHERE module='repayments'").all()).results.map(parse).filter((r:any)=>!r.data?._deleted);
  const sums=new Map();
  for(const payment of repayments)sums.set(payment.data.advance_id,(sums.get(payment.data.advance_id)||0)+advanceCents(payment.data.amount));
- const context={loans:[...paidLoans,{...old,data}],sums};
+ const context={loans:[...paidLoans,{...old,status:'paid',data}],sums};
  const batches=(await db.prepare("SELECT id,status FROM records WHERE module='payroll_batches'").all()).results;
  const drafts=new Set(batches.filter((b:any)=>['draft','manager_review'].includes(b.status)).map((b:any)=>b.id));
  const payrollRows=(await db.prepare("SELECT * FROM records WHERE module='payroll'").all()).results;
