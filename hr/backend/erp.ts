@@ -682,8 +682,8 @@ if(body.action==='record_opening_advance_repayment'){
  }
  if(body.action==='approve_advance_finance')throw Error('تم إلغاء مرحلة المالية المنفصلة؛ يعتمد المدير العام السلفة ويقيدها مباشرة في سجل الموظف');
  if(body.action==='gm_approve_advance'||body.action==='disburse'){
- // The GM is the only final authorizer. Old finance-approved records can be finalized without replaying approvals.
- if(mod!=='advances'||!old||!isRequestFinanceActor(u)||!(permission(u,mod,'approve')||String(u.email||'').trim().toLowerCase()===requestApprovalOwners.finance.email)||!['approved','finance_approved'].includes(old.status))throw Error('اعتماد مبلغ السلفة من صلاحية المدير العام أو مصعب عبد القيوم (المالية) بعد الاعتمادات الإدارية');
+ // The GM and named finance officer can finalize administratively approved advances; historical finance-approved rows remain supported.
+ if(mod!=='advances'||!old||!isRequestFinanceActor(u)||!['approved','finance_approved'].includes(old.status))throw Error('السلفة قيد العمل حتى اكتمال اعتمادها الإداري، ويعتمد صرفها المدير العام أو مسؤول المالية المخول فقط');
  const source=JSON.parse(old.data||'{}');
  const reference='ADV-'+String(old.code||old.id).replace(/[^\p{L}\p{N}-]/gu,'').slice(0,40);
  if(!(Number(source.amount)>0)||!Number.isFinite(Number(source.amount)))throw Error('مبلغ السلفة غير صالح للاعتماد');
