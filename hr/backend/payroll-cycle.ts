@@ -3,7 +3,7 @@
 // No bank transfer or actual cash payment is performed by this service.
 import {env} from './runtime.ts';
 import {identity} from './erp.ts';
-import {companies,canonicalCompany,permission} from './modules.mjs';
+import {companies,canonicalCompany,permission,isRequestFinanceActor} from './modules.mjs';
 import {isAuthorizedProjectManagerAccount,magdiProjectManagerName} from './project-manager-roster.mjs';
 import {calculateScheduledAdvances} from '../lib/payroll-advance-schedule.mjs';
 import {salaryAbsenceDeduction} from '../lib/payroll-attendance.mjs';
@@ -39,7 +39,7 @@ const canManageProject=async(u,project,company,employeeId='')=>{
  const data=JSON.parse(row.data);
  return (row.company===company||Array.isArray(data._shared_companies)&&data._shared_companies.includes(company))&&String(data.manager_email||'').trim().toLowerCase()===String(u.email||'').trim().toLowerCase();
 };
-const isFinance=u=>['admin','finance'].includes(u.role);
+const isFinance=u=>['admin','finance'].includes(u.role)||isRequestFinanceActor(u);
 const isProjectsDirector=u=>['admin','projects_director'].includes(u.role);
 const nowIso=()=>new Date().toISOString();
 const ensureAssignedPayrollManager=async(projectId,company,employeeId='')=>{
