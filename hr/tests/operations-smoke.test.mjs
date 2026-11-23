@@ -2441,3 +2441,27 @@ test('advance workflow routes first approval to direct manager and shows horizon
  assert.match(backend,/action==='disburse'/);
  assert.match(backend,/payment_reference:reference/);
 });
+
+test('admin approval bypasses missing supervisor login without changing employee/project records',()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(backend,/const adminOverride=u.role==='admin'/);
+ assert.match(backend,/!managerEmail&&!adminOverride/);
+ assert.match(backend,/!adminOverride&&\(!manager\|\|manager.is_active===false/);
+ assert.match(backend,/admin_override:true/);
+ assert.match(ui,/user\?\.role==='admin'\|\|String\(user\?\.email/);
+});
+test('return save computes payroll attendance in its own transaction and suggests date only after leave end',()=>{
+ const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const start=backend.indexOf("if(mod==='returns'){\n if(!returnLeaveRecord)");
+ const end=backend.indexOf('const centsOf=',start);
+ assert.ok(start>0&&end>start);
+ const block=backend.slice(start,end);
+ assert.match(block,/const currentPayrollMonth=String\(data.actual_return/);
+ assert.match(block,/const returnAttendance=returnPeriodAttendance\(leaveData,data.actual_return,currentPayrollMonth\)/);
+ assert.match(block,/const referenceSalary=Number\(employeeData.salary/);
+ assert.match(block,/returnSyncUpdates.push\(db.prepare/);
+ assert.match(ui,/actual_return:expected&&expected<=today\?expected:''/);
+ assert.match(ui,/يمكن تصحيحه يدويًا/);
+});
