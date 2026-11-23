@@ -1982,7 +1982,7 @@ test('employee requests are assigned to project owner, and director cannot appro
  assert.match(backend,/const managerEmail=String\(projectData\.manager_email/);
  assert.match(backend,/details\.project_manager=\{name:projectData\.manager_name/);
  assert.match(backend,/هذا الطلب بانتظار اعتماد مدير المشروع المعين/);
- assert.match(backend,/current==='finance'&&!isRequestFinanceActor\(u\)/);
+ assert.match(backend,/current==='finance'&&routedRequest&&!\['admin','hr'\].includes\(u.role\)/);
  assert.match(ui,/اعتماد مدير المشروع/);
 });
 test('project manager can see own employee requests but a separate supervisor cannot',async()=>{
