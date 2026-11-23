@@ -7,6 +7,7 @@ import {companies,canonicalCompany,permission} from './modules.mjs';
 import {isAuthorizedProjectManagerAccount,magdiProjectManagerName} from './project-manager-roster.mjs';
 import {calculateScheduledAdvances} from '../lib/payroll-advance-schedule.mjs';
 import {salaryAbsenceDeduction} from '../lib/payroll-attendance.mjs';
+import {payrollAttendanceForSalary} from '../lib/payroll-month-bridges.mjs';
 const response=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 const err=(message,status=400)=>response({error:message},status);
 const cents=x=>Math.round(Number(x||0)*100);
@@ -115,6 +116,7 @@ export async function POST(req){
    const all=(await db.prepare("SELECT * FROM records WHERE module='employees'").all()).results.map(parse);
    const existing=(await db.prepare("SELECT company,data FROM records WHERE module='payroll_batches'").all()).results.map(r=>({...r,data:JSON.parse(r.data)}));
    const advanceContext=await paidLoanContext();
+   const attendanceRecords=(await db.prepare("SELECT * FROM records WHERE module IN ('leave','returns')").all()).results.map(parse);
    if(requested.some(co=>existing.some(b=>b.company===co&&b.data.month===month)))throw Error('تم توليد مسير لهذا الشهر مسبقًا لإحدى الشركات المختارة. افتح المسير الموجود للمراجعة.');
    // For employee transfers, old company payroll may be retained as excluded.
    // Creating another active payroll for the same employment/month remains forbidden.
@@ -139,11 +141,12 @@ export async function POST(req){
      const status=d.employment_status||d.employee_status||'';
      const isSuspended=!['active','نشط','على رأس العمل','علي راس العمل'].includes(String(status).trim());
      const salaryMismatch=Math.abs(cents(salary)-cents(basic+housing+transport))>1;
-     const advanceAllocations=autoAdvanceAllocations(advanceContext,e.id,month,cents(salary));
+     const attendance=payrollAttendanceForSalary(attendanceRecords,e.id,month,salary);
+     const advanceAllocations=autoAdvanceAllocations(advanceContext,e.id,month,Math.max(0,cents(salary)-cents(attendance.absence_deduction)));
      const row={batch_id:id,employee_id:e.id,source_company:e.company,working_company:co,month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||e.code||'',employment_status:status,project_id:d.project_id||'',cost_company:co,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
        basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,
-       absence_days:0,absence_deduction:0,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
-       net:rounded(salary-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,
+       absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,return_payable_days:attendance.payable_days,return_to_work_at:attendance.return_to_work_at,return_parts:attendance.return_parts,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
+       net:rounded(salary-attendance.absence_deduction-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,
        exception_note:'',needs_review:isSuspended||salaryMismatch,review_reason:[isSuspended?'حالة الموظف غير نشطة':'',salaryMismatch?'اختلاف إجمالي الراتب عن مكوناته':''].filter(Boolean).join('؛ '),notes:'',method:'bank'};
      employeeInserts.push([crypto.randomUUID(),'payroll',co,e.id+':'+month+':'+id,JSON.stringify(row),u.email,now,now,mutation]);
     }
@@ -208,10 +211,12 @@ export async function POST(req){
    const declared=rounded(d.salary??d.total_monthly_salary??salary);
    const mismatch=Math.abs(cents(declared)-cents(salary))>1;
    const advanceContext=await paidLoanContext();
-   const advanceAllocations=autoAdvanceAllocations(advanceContext,employeeId,batch.data.month,cents(salary));
+   const attendanceRecords=(await db.prepare("SELECT * FROM records WHERE module IN ('leave','returns')").all()).results.map(parse);
+   const attendance=payrollAttendanceForSalary(attendanceRecords,employeeId,batch.data.month,salary);
+   const advanceAllocations=autoAdvanceAllocations(advanceContext,employeeId,batch.data.month,Math.max(0,cents(salary)-cents(attendance.absence_deduction)));
    const rowId=crypto.randomUUID();
    const data={batch_id:batch.id,employee_id:employeeId,source_company:original.company,working_company:batch.company,month:batch.data.month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||original.code||'',employment_status:status,project_id:d.project_id||'',cost_company:batch.company,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
-    basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:0,absence_deduction:0,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
+    basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,return_payable_days:attendance.payable_days,return_to_work_at:attendance.return_to_work_at,return_parts:attendance.return_parts,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
     net:rounded(salary-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,excluded:false,
     exception_note:'',needs_review:mismatch,review_reason:mismatch?'اختلاف إجمالي الراتب عن مكوناته':'',
     notes:'',method:'bank',added_to_batch_at:now,added_to_batch_by:u.email};
@@ -286,9 +291,10 @@ export async function POST(req){
    if(!Number.isFinite(overtime_hours)||overtime_hours<0||overtime_hours>300||!Number.isFinite(absence_days)||absence_days<0||absence_days>31)throw Error('ساعات إضافية أو أيام غياب غير صالحة');
    const overtime=rounded(overtime_hours*(salary/30/8+0.5*basic/30/8));
    const absence_deduction=salaryAbsenceDeduction(salary,absence_days);
-   const advance_deduction=amount(input.advance_deduction??0,'خصم السلف');
    const advanceContext=await paidLoanContext();
-   const advance_allocations=allocateEditedAdvanceTotal(advanceContext,old.employee_id,batch.data.month,cents(advance_deduction),old.advance_allocations);
+   const scheduledCap=Math.max(0,cents(salary)-cents(absence_deduction));
+   const advance_allocations=autoAdvanceAllocations(advanceContext,old.employee_id,batch.data.month,scheduledCap);
+   const advance_deduction=rounded(advance_allocations.reduce((total,a)=>total+Number(a.amount),0));
    const deductions=amount(input.deductions??0,'خصومات أخرى');
    const net=rounded(salary+bonus+extra_allowance+overtime-absence_deduction-advance_deduction-deductions);
    if(net<0)throw Error('الصافي سالب');
