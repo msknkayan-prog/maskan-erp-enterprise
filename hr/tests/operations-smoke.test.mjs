@@ -2486,7 +2486,7 @@ test('leave payment actions show pending/paid, remove obsolete finance-for-payou
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  for(const label of ['حالة الطلب','قيد الصرف','تم الصرف','صرف المبلغ','المبلغ المستحق / المصروف','استكمال اعتماد الإجازة','سجل مستحقات الإجازة المصروفة للموظف'])assert.ok(ui.includes(label),label);
- assert.match(ui,/row.status==='finance'\?'اعتماد إداري مكتمل'/);
+ assert.match(ui,/module==='leave'\?\(\(\)=>\{if\(row.status==='rejected'\)/);
  assert.match(ui,/const canFinance=isRequestFinanceActor\(user\)/);
  assert.match(api,/const ledger=Array.isArray\(employeeData.leave_payment_ledger\)/);
  assert.match(api,/ledger.some\(\(entry:any\)=>String\(entry.dues_id\)===String\(old.id\)\)/);
