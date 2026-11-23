@@ -871,6 +871,8 @@ if(!permittedWrite(u,mod)||!permission(u,mod,'edit'))throw Error('403');if(old&&
 if(mod==='employees'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 if(mod==='projects'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 const data={...(previous||{}),...normalize(mod,body)};
+if(mod==='employees'&&!old){data.opening_leave='0';data.opening_leave_confirmed='no';}
+if(mod==='employees'&&old&&previous?.opening_leave_confirmed==='yes'&&!Object.prototype.hasOwnProperty.call(body.data||{},'opening_leave')){data.opening_leave=previous.opening_leave;data.opening_leave_confirmed='yes';}
 if(mod==='employees'&&typeof body.data?._direct_manager_manual==='boolean'){
  data._direct_manager_manual=body.data._direct_manager_manual;
  if(data._direct_manager_manual)data.manager_email=String(body.data.manager_email||'').trim().toLowerCase();
