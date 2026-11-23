@@ -1875,7 +1875,7 @@ test('company employee dashboard offers live KPIs and filtered staff report expo
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const board=readFileSync(new URL('../app/employee-dashboard.tsx',import.meta.url),'utf8');
  assert.match(ui,/import EmployeeReportsDashboard from '.\/employee-dashboard'/);
- assert.match(ui,/module==='overview'&&permittedRead\(user\|\|\{\},'employees'\)/);
+ assert.match(ui,/permittedRead\(user\|\|\{\},'employees'\)&&<details/);
  assert.match(ui,/onOpenEmployees=\{\(\)=>setModule\('employees'\)\}/);
  for(const label of ['لوحة كشوف موظفي الشركات','فلترة كشف الموظفين حسب الشركة','فلترة كشف الموظفين حسب المشروع','فلترة كشف الموظفين حسب الحالة','فلترة كشف الموظفين حسب القسم','فلترة كشف الموظفين حسب الكفالة','كشف مختصر','كشف وظيفي ومشاريع','كشف التواصل','كشف مفصل (للمخولين)','تصدير كشف Excel','طباعة / حفظ PDF'])assert.ok(board.includes(label),label);
  assert.match(board,/employees=useMemo\(\(\)=>rows.filter\(r=>r.module==='employees'/);
@@ -2554,4 +2554,17 @@ test('approved advance remains in progress until finance or general manager post
  assert.match(api,/if\(mod!=='advances'\|\|!old\|\|!isRequestFinanceActor\(u\)\|\|!\['approved','finance_approved'\].includes\(old.status\)\)/);
  assert.match(api,/existingLedger.some/);
  assert.match(api,/status='paid'/);
+});
+
+
+test('executive HR dashboard replaces bulky landing cards and uses deployed commit revision',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA/);
+ assert.match(ui,/MASKAN HR · \{buildVersion\} · CLOUD/);
+ assert.match(ui,/الملخص التنفيذي/);
+ assert.match(ui,/ملخص الشركات/);
+ assert.match(ui,/صافي مسير الشهر/);
+ assert.match(ui,/كشوف الموظفين والفلاتر التفصيلية/);
+ assert.doesNotMatch(ui,/من أين تبدأ؟/);
+ assert.doesNotMatch(ui,/MASKAN HR · V87 · CLOUD/);
 });
