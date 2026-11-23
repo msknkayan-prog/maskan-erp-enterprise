@@ -3,13 +3,13 @@
 export const advanceCents=value=>Math.round(Number(value||0)*100);
 const validMonth=month=>/^\d{4}-(0[1-9]|1[0-2])$/.test(String(month||''));
 const monthNumber=month=>{const [year,n]=month.split('-').map(Number);return year*12+n;};
-export const loanFirstMonth=loan=>{const value=String(loan?.data?.first_month||'');if(validMonth(value))return value;const paid=String(loan?.data?.paid_at||loan?.data?.date||'').slice(0,7);return validMonth(paid)?paid:'';};
+export const loanFirstMonth=loan=>{const requested=String(loan?.data?.first_month||'');const paid=String(loan?.data?.paid_at||'').slice(0,7);if(!validMonth(paid))return '';return validMonth(requested)&&requested>paid?requested:paid;};
 export const advanceOutstanding=(loan,context)=>Math.max(0,advanceCents(loan.data.amount)-(context.sums.get(loan.id)||0));
 export function calculateScheduledAdvances(context,employeeId,month,capCents=Infinity){
  if(!validMonth(month))return [];
  let available=capCents;
  const allocations=[];
- const loans=context.loans.filter(loan=>loan.data.employee_id===employeeId&&loan.data.schedule_mode!=='manual'&&validMonth(loanFirstMonth(loan))&&loanFirstMonth(loan)<=month)
+ const loans=context.loans.filter(loan=>loan?.status==='paid'&&loan.data?.paid_at&&loan.data.employee_id===employeeId&&loan.data.schedule_mode!=='manual'&&validMonth(loanFirstMonth(loan))&&loanFirstMonth(loan)<=month)
   .sort((a,b)=>loanFirstMonth(a).localeCompare(loanFirstMonth(b))||String(a.data.date||'').localeCompare(String(b.data.date||'')));
  for(const loan of loans){
   if(available<=0)break;
