@@ -4,6 +4,7 @@ import {currentUser} from './runtime.ts';
 import {modules,companies,normalize,workflow,canWrite,canRead,annualLeave,operationalModules,relationModules,visible,permission,saudiDate,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners} from './modules.mjs';
 import {isReturnEligibleLeave,employeeOnLeave} from '../lib/return-to-work.mjs';
 import {calculateScheduledAdvances,advanceCents} from '../lib/payroll-advance-schedule.mjs';
+import {returnPeriodAttendance,salaryAbsenceDeduction} from '../lib/payroll-attendance.mjs';
 import {calculateScheduledAdvances,advanceCents} from '../lib/payroll-advance-schedule.mjs';
 import {employeeDirectManagerOptions,normalizeManagerName,magdiGeneralManagerEmail,magdiProjectManagerName,isMagdiGeneralManagerAccount,isAuthorizedProjectManagerAccount,preferredManagerForName} from './project-manager-roster.mjs';
 export const dynamic='force-dynamic';
@@ -758,6 +759,10 @@ if(routedRequest&&details.employee_id&&(current==='draft'||current==='project_ma
  const employeeRecord=await db.prepare("SELECT id,company,data FROM records WHERE id=? AND module='employees' AND company=?").bind(String(details.employee_id),old.company).first<any>();
  if(!employeeRecord)throw Error('لم يتم العثور على الموظف أو أن شركته لا تطابق شركة الطلب');
  const employeeData=JSON.parse(employeeRecord.data||'{}');
+ const currentPayrollMonth=saudiDate().slice(0,7);
+ const returnAttendance=returnPeriodAttendance(leaveData,data.actual_return,currentPayrollMonth);
+ if(!returnAttendance.valid)throw Error('فترة الإجازة وتاريخ المباشرة غير صالحين للحساب');
+ const referenceSalary=Number(employeeData.salary||Number(employeeData.basic||0)+Number(employeeData.housing||0)+Number(employeeData.transport||0));
  if(employeeData._archived||employeeData._deleted)throw Error('الموظف غير نشط في سجل الموظفين');
  const projectId=String(employeeData.project_id||details.project_id||'');
  if(!projectId)throw Error('يجب تعيين مشروع الموظف ومدير المشروع قبل إرسال الطلب للاعتماد');
@@ -1040,13 +1045,18 @@ if(mod==='returns'){
  .bind(JSON.stringify(updatedLeave),now,mutation,returnLeaveRecord.id,returnLeaveRecord.revision,id));
  // Older returns must not overwrite a later actual return on the employee profile.
  if(!employeeData.last_return_date||String(employeeData.last_return_leave_id||'')===String(data.leave_id)||data.actual_return>=employeeData.last_return_date){
-  const updatedEmployee={...employeeData,last_return_date:data.actual_return,last_return_leave_id:data.leave_id,employment_status:employeeOnLeave({data:employeeData})?'active':employeeData.employment_status,employee_status:employeeOnLeave({data:employeeData})&&employeeData.employee_status?'active':employeeData.employee_status,return_recorded_at:now};
+  const updatedEmployee={...employeeData,last_return_date:data.actual_return,last_return_leave_id:data.leave_id,last_return_absence_days:returnAttendance.absence_days,last_return_payable_days:returnAttendance.payable_days,last_return_absence_amount:salaryAbsenceDeduction(referenceSalary,returnAttendance.absence_days),last_return_payroll_month:currentPayrollMonth,employment_status:employeeOnLeave({data:employeeData})?'active':employeeData.employment_status,employee_status:employeeOnLeave({data:employeeData})&&employeeData.employee_status?'active':employeeData.employee_status,return_recorded_at:now};
   returnSyncUpdates.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='employees' AND revision=?")
    .bind(JSON.stringify(updatedEmployee),now,mutation,employeeRecord.id,employeeRecord.revision));
  }
  // The return-to-work event updates the current open payroll in the same transaction.
  // Approved, paid, and prior-month batches remain untouched.
  const month=saudiDate().slice(0,7);
+ const attendance=returnAttendance;
+ data.absence_days=attendance.absence_days;
+ data.payable_days=attendance.payable_days;
+ data.unpaid_leave_days=attendance.unpaid_leave_days;
+ data.late_days=attendance.late_days;
  const workCompany=String(employeeData.working_company||body.company);
  const openBatches=(await db.prepare("SELECT * FROM records WHERE module='payroll_batches' AND company=?").bind(workCompany).all()).results;
  const monthlyBatch=openBatches.find((b:any)=>{const d=JSON.parse(b.data||'{}');return d.month===month});
@@ -1059,7 +1069,16 @@ if(mod==='returns'){
   if(prior.excluded){
    data.payroll_sync_status='excluded_needs_restore';returnPayrollSync.status='excluded_needs_restore';
   }else{
+   const monthlySalary=Number(prior.basic||0)+Number(prior.housing||0)+Number(prior.transport||0);
+   const newAbsenceDeduction=salaryAbsenceDeduction(monthlySalary,attendance.absence_days);
+   const newNet=Math.round((monthlySalary+Number(prior.bonus||0)+Number(prior.extra_allowance||0)+Number(prior.overtime||0)-newAbsenceDeduction-Number(prior.advance_deduction||0)-Number(prior.deductions||0))*100)/100;
+   if(newNet<0)throw Error('الخصومات تتجاوز المستحق بعد المباشرة؛ يلزم تصحيح المسير');
+   const bank=Math.min(Number(prior.bank_amount||0),newNet);
    const updated={...prior,employment_status:'active',return_to_work_at:data.actual_return,return_record_id:id,
+    cost_project_id:employeeData.project_id||prior.project_id||'',
+    absence_days:attendance.absence_days,absence_deduction:newAbsenceDeduction,
+    return_payable_days:attendance.payable_days,return_unpaid_leave_days:attendance.unpaid_leave_days,
+    return_late_days:attendance.late_days,net:newNet,bank_amount:bank,cash_amount:Math.round((newNet-bank)*100)/100,
     split_confirmed:false,manager_reviewed:false,manager_reviewed_by:null,manager_reviewed_at:null,
     reviewed_by:null,reviewed_at:null,
     review_reason:[prior.review_reason,'اعتماد مباشرة الموظف؛ يلزم مراجعة حضور الشهر وتوزيع الراتب'].filter(Boolean).join('؛ ')};
@@ -1084,8 +1103,8 @@ if(mod==='returns'){
    employee_name:employeeData.name||'',employee_number:employeeData.code||employeeRecord.id,
    employment_status:'active',project_id:employeeData.project_id||'',cost_company:workCompany,cost_project_id:employeeData.project_id||'',
    manager_reviewed:false,manager_notes:'',basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,
-   absence_days:0,absence_deduction:0,advance_deduction:loanDeduction,advance_allocations:allocations,deductions:0,
-   net:Math.round((salary-loanDeduction)*100)/100,cash_amount:0,bank_amount:0,split_confirmed:false,excluded:false,
+   absence_days:attendance.absence_days,absence_deduction:salaryAbsenceDeduction(salary,attendance.absence_days),return_payable_days:attendance.payable_days,return_unpaid_leave_days:attendance.unpaid_leave_days,return_late_days:attendance.late_days,advance_deduction:loanDeduction,advance_allocations:allocations,deductions:0,
+   net:Math.round((salary-salaryAbsenceDeduction(salary,attendance.absence_days)-loanDeduction)*100)/100,cash_amount:0,bank_amount:0,split_confirmed:false,excluded:false,
    exception_note:'',needs_review:false,review_reason:'أضيف إلى المسير بعد تسجيل المباشرة؛ راجع استحقاق الشهر والغياب والسلف والتوزيع',
    notes:'',method:'bank',return_to_work_at:data.actual_return,return_record_id:id,
    added_to_batch_at:now,added_to_batch_by:u.email,added_reason:'approved_return_to_work'};
