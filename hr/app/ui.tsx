@@ -498,6 +498,34 @@ async function decideLeaveDues(row,decision){
  setSaving(true);try{await post({action:'leave_dues_workflow',module:'leave_dues',id:row.id,revision:row.revision,decision,note,reference,method});await refresh();notify('تم تحديث حالة مستحقات الإجازة');}catch(e){notify(e.message||'تعذر اعتماد المستحقات')}finally{setSaving(false)}
 }
 async function transition(row,decision='approve',note=''){setSaving(true);try{await post({action:'transition',module:row.module,id:row.id,revision:row.revision,decision,note,medical_verified:row.module==='leave'&&row.data.leave_type==='sick'?window.confirm('هل راجعت المرفق الطبي وتحققت من صحته؟'):false});notify('تم تحديث مرحلة الاعتماد');await refresh()}catch(e){notify(e.message)}finally{setSaving(false)}}
+async function gmApproveAllStages(row){
+ if(user?.role!=='admin'||!['leave','advances'].includes(row.module))return notify('اعتماد جميع المراحل متاح للمدير العام فقط');
+ if(!['draft','project_manager','projects_director','hr','finance'].includes(row.status))return notify('هذا الطلب ليس في مرحلة تسمح بالاعتماد الموحد');
+ const employee=rows.find(r=>r.module==='employees'&&r.id===row.data?.employee_id&&r.company===row.company);
+ if(!employee)return notify('لا يوجد سجل موظف مطابق لهذا الطلب؛ يجب إصلاح الربط قبل الاعتماد');
+ const stages=row.status==='draft'?['draft','projects_director','hr']:row.status==='project_manager'?['project_manager','projects_director','hr']:row.status==='projects_director'?['projects_director','hr']:row.status==='hr'?['hr']:['finance'];
+ const sick=row.module==='leave'&&row.data?.leave_type==='sick'&&stages.includes('hr');
+ if(sick&&!window.confirm('الإجازة المرضية: هل راجعت المرفق الطبي وتحققت من صحته؟'))return;
+ if(!window.confirm('اعتماد المراحل المتبقية لطلب '+(employee.data?.name||row.code||'الموظف')+' بصلاحية المدير العام؟ ستُسجّل كل مرحلة واعتمادها بالتاريخ والحساب نفسه. لا يعني ذلك صرف أموال فعليًا.'))return;
+ let completed=0;
+ setSaving(true);
+ try{
+  let revision=row.revision;
+  for(const stage of stages){
+   await post({action:'transition',module:row.module,id:row.id,revision,decision:'approve',note:'اعتماد موحد من المدير العام مع حفظ تتبع كل مرحلة',medical_verified:sick&&stage==='hr'});
+   revision++;completed++;
+  }
+  // The financial authorization is a separate auditable decision, never an actual payout.
+  if(row.module==='advances'){
+   await post({action:'approve_advance_finance',module:'advances',id:row.id,revision,note:'اعتماد مالي من المدير العام بعد استكمال الموافقات الإدارية'});
+   completed++;
+  }
+  notify('تم اعتماد '+completed+' مرحلة للموظف. '+(row.module==='advances'?'السلفة معتمدة للصرف؛ توثيق الصرف الفعلي لا يزال إجراء مستقلاً.':'تم اعتماد طلب الإجازة.'));
+ }catch(error){
+  notify('لم تكتمل كل الاعتمادات: '+(error?.message||'خطأ غير معروف')+'. تم حفظ '+completed+' مرحلة صحيحة فقط، ولم يُوثق صرف تلقائي.');
+ }finally{await refresh();setSaving(false)}
+}
+
 const normalizeSearch=value=>String(value??'').normalize('NFKC').toLocaleLowerCase('ar').replace(/[\u064B-\u065F\u0670]/g,'').replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/ـ/g,'').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/\s+/g,' ').trim();
 let scoped=rows.filter(r=>!company||r.company===company),spec=modules[module];
 const searchWords=normalizeSearch(search).split(' ').filter(Boolean);
@@ -988,8 +1016,8 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  </nav>}
 {['leave','advances','resignations'].includes(module)&&<section className="panel request-approval-guide" aria-label="مسار اعتماد طلبات الموظفين" dir="rtl">
  <div className="request-approval-top"><strong>دورة الاعتماد والصلاحيات</strong><small>المدير المباشر ← مجدي محجوب، المدير العام / إدارة المشاريع ← م. محمد يوسف، شؤون الموظفين</small></div>
- <div className="request-approval-flow">{approvalStages.map((step,i)=><div className="request-approval-step" key={step.id}><span>{i+1}</span><b>{step.label}</b></div>)}</div>
- <small>تُوجَّه طلبات الإجازات والسلف والاستقالات إلى المدير المباشر ثم إدارة المشاريع وشؤون الموظفين. بعد الاعتمادات الإدارية تُعتمد السلفة من المالية، ثم يُوثَّق صرفها الفعلي بمرجع مالي مستقل، وبعد الصرف فقط تُفعَّل جدولة الأقساط والسند.</small>
+ <div className="request-approval-flow">{(module==='advances'?[...approvalStages,{id:'advance_finance',label:'اعتماد المالية / المدير العام'},{id:'advance_disbursement',label:'توثيق الصرف وإصدار الإيصال'}]:approvalStages).map((step,i)=><div className="request-approval-step" key={step.id}><span>{i+1}</span><b>{step.label}</b></div>)}</div>
+ <small>تُوجَّه طلبات الإجازات والسلف والاستقالات إلى المدير المباشر ثم إدارة المشاريع وشؤون الموظفين. يمكن للمدير العام اعتماد المراحل المتبقية بما فيها المالية في إجراء واحد موثق لكل مرحلة. ولا تُعد السلفة مصروفة إلا بعد توثيق الصرف الفعلي بمرجع مالي، ومنه يبدأ الاستقطاع ويصدر الإيصال.</small>
  </section>}
  {module==='project_managers'&&user?.role==='admin'&&<section className="panel" dir="rtl" style={{padding:16,marginBottom:12}}>
  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
@@ -1579,11 +1607,13 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  {['project_manager','projects_director','hr'].includes(row.status)&&approvable&&<button type="button" disabled={saving} onClick={()=>{const reason=window.prompt('سبب إعادة الطلب للمراجعة');if(reason?.trim())transition(row,'return',reason)}}>إعادة</button>}
  {['project_manager','projects_director','hr'].includes(row.status)&&approvable&&<button type="button" className="danger-action" disabled={saving} onClick={()=>{const reason=window.prompt('سبب رفض السلفة');if(reason?.trim())transition(row,'reject',reason)}}>رفض</button>}
  {row.status==='draft'&&['admin','hr'].includes(user?.role)&&permittedWrite(user||{},'advances')&&permission(user||{},'advances','edit')&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteDraftRequest(row)}>حذف</button>}
+ {user?.role==='admin'&&['draft','project_manager','projects_director','hr','finance'].includes(row.status)&&<button type="button" className="primary" disabled={saving} onClick={()=>gmApproveAllStages(row)}>اعتماد موحد حتى المالية</button>}
  {row.status==='approved'&&isRequestFinanceActor(user)&&permission(user||{},'advances','approve')&&<button type="button" className="primary" disabled={saving} onClick={()=>financeApproveAdvance(row)}>اعتماد صرف المبلغ</button>}
  {row.status==='finance_approved'&&isRequestFinanceActor(user)&&permission(user||{},'advances','approve')&&<button type="button" className="primary" disabled={saving} onClick={()=>disburse(row)}>صرف المبلغ وتوثيقه</button>}
  {row.status==='paid'&&<button type="button" onClick={()=>advanceReceipt(row)}>إيصال صرف السلفة</button>}
  {row.status==='paid'&&<button type="button" onClick={()=>{setLinkedFinance({kind:'repayments',parentId:row.id,amount:'',date:saudiDate(),reference:'',method:'cash',travel_amount:'0',other_amount:'0',deductions:'0',notes:''})}}>السداد والأقساط</button>}
  </div>}
+ {module==='leave'&&user?.role==='admin'&&['draft','project_manager','projects_director','hr','finance'].includes(row.status)&&<button type="button" className="primary" disabled={saving} onClick={()=>gmApproveAllStages(row)}>اعتماد الإجازة بالكامل</button>}
  {module!=='advances'&&<button onClick={()=>setEdit({...row,data:{...row.data}})}>{row.status==='draft'&&(permittedWrite(user||{},module))?'فتح / تعديل':'عرض'}</button>}{module==='projects'&&user?.role==='admin'&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteProject(row)}>حذف المشروع</button>}{module==='project_managers'&&user?.role==='admin'&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteProjectManager(row)}>حذف المدير</button>}{row.status==='draft'&&['leave','resignations','warnings'].includes(module)&&['admin','hr'].includes(user?.role)&&permittedWrite(user||{},module)&&permission(user||{},module,'edit')&&<button type="button" className="danger-action" disabled={saving} onClick={()=>deleteDraftRequest(row)}>حذف الطلب</button>}{['leave','resignations'].includes(module)&&<button type="button" style={{fontSize:11,padding:'5px 8px'}} onClick={()=>{
  const linkedDue=module==='leave'?rows.find(record=>record.module==='leave_dues'&&record.company===row.company&&record.data?.leave_id===row.id&&!record.data?._deleted):null;
  setLinkedFinance({kind:module==='leave'?'leave_dues':'repayments',parentId:row.id,amount:'',date:saudiDate(),reference:'',method:'cash',travel_amount:String(linkedDue?.data?.travel_amount??0),other_amount:String(linkedDue?.data?.other_amount??0),deductions:String(linkedDue?.data?.deductions??0),notes:linkedDue?.data?.notes||'',ticket_description:linkedDue?.data?.ticket_description||'',other_description:linkedDue?.data?.other_description||'',deduction_reason:linkedDue?.data?.deduction_reason||'',payment_note:linkedDue?.data?.payment_note||''});
