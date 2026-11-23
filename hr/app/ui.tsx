@@ -1184,6 +1184,10 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  </div>
  <div role="status" style={{padding:'10px 12px',border:'1px solid #dbc492',borderRadius:9,background:'#fff9eb',margin:'10px 0'}}>
  <strong>أقساط السلف المرتبطة بهذا المسير</strong>
+ {(()=>{const scheduled=rows.filter(r=>r.module==='advances'&&r.data?.employee_id===cycleEdit.data.employee_id&&r.data?.schedule_mode!=='manual'&&r.data?.first_month&&r.data.first_month<=cycleEdit.data.month&&!r.data?._deleted);
+ const outstanding=scheduled.filter(r=>r.status!=='paid');
+ return outstanding.length?<div role="alert" style={{fontSize:12,marginTop:8,padding:8,background:'#fff1db',border:'1px solid #dfb875',borderRadius:7}}>يوجد {outstanding.length} طلب سلفة مجدولة لم يُوثّق صرفها بعد. لا يمكن خصم الأقساط من الراتب قبل صرف السلفة فعليًا. بعد توثيق الصرف، تُعاد مزامنة أقساط السلف تلقائيًا في مسير الشهر ما دام في مرحلة التجهيز، وتلزم إعادة مراجعة الراتب.</div>:null;
+ })()}
  <div style={{fontSize:12,marginTop:5}}>خصم السلف في الشهر الحالي: <b>{money(cycleEdit.data.advance_deduction||0)} ر.س</b> · يمكن تعديل المبلغ أو جعله صفرًا لتأجيل خصم هذا الشهر قبل اعتماد المسير.</div>
  {Array.isArray(cycleEdit.data.advance_allocations)&&cycleEdit.data.advance_allocations.length>0&&<div style={{fontSize:12,marginTop:5}}>تفاصيل الخصم المقترح: {cycleEdit.data.advance_allocations.map(a=>money(a.amount)+' ر.س · السلفة '+String(a.advance_id).slice(0,8)).join(' | ')}</div>}
  <small>لا يُثبت السداد في رصيد السلفة عند توليد المسير؛ يُثبت فقط بعد تأكيد صرف المسير ماليًا. إذا غيّرت قيمة الخصم، يوزّعها النظام على السلف المصروفة القائمة وفق المتبقي.</small>
