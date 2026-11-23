@@ -1040,7 +1040,7 @@ if(mod==='returns'){
  const employeeRecord=await db.prepare("SELECT id,data,revision FROM records WHERE id=? AND module='employees' AND company=?").bind(data.employee_id,body.company).first<any>();
  if(!employeeRecord)throw Error('تعذر الوصول إلى سجل الموظف المرتبط بالإجازة');
  const employeeData=JSON.parse(employeeRecord.data||'{}');
- const updatedLeave={...leaveData,return_record_id:id,actual_return:data.actual_return,return_recorded_at:now,return_recorded_by:u.email};
+ const updatedLeave={...leaveData,return_record_id:id,return_status:'completed',actual_return:data.actual_return,return_recorded_at:now,return_recorded_by:u.email};
  returnSyncUpdates.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='leave' AND revision=? AND COALESCE(data::jsonb->>'return_record_id','') IN ('',?)")
  .bind(JSON.stringify(updatedLeave),now,mutation,returnLeaveRecord.id,returnLeaveRecord.revision,id));
  // Older returns must not overwrite a later actual return on the employee profile.
