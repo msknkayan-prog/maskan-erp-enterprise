@@ -741,7 +741,7 @@ if(routedRequest&&details.employee_id&&(current==='draft'||current==='project_ma
    details.manager_submitted_by=u.email;
    details.manager_submitted_at=now;
   }
- }else if(decision==='approve'&&!isManager&&!isDirector){
+ }else if(!isManager&&!isDirector){
   throw Error('هذا الطلب بانتظار اعتماد مدير المشروع المعين على مشروع الموظف');
  }
 }
