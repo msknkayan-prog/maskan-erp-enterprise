@@ -781,14 +781,15 @@ if(routedRequest&&details.employee_id&&(current==='draft'||current==='project_ma
  // Approval follows the employee's explicitly assigned direct manager, independently of the project manager.
  const managerEmail=String(employeeData.manager_email||details.direct_manager?.email||'').trim().toLowerCase();
  const managerName=String(employeeData.manager||details.direct_manager?.name||'').trim();
- if(!managerEmail)throw Error('المدير المباشر للموظف لا يمتلك بريد اعتماد محدداً؛ حدّث سجل الموظف');
- const manager=await db.prepare('SELECT email,role,is_active,companies,projects,username FROM members WHERE lower(email)=?').bind(managerEmail).first<any>();
- if(!manager||manager.is_active===false||!['project_manager','hr','admin','projects_director'].includes(manager.role))throw Error('المدير المباشر لا يملك حساب اعتماد نشطاً');
- if(manager.companies&&manager.companies!=='*'){
+ const adminOverride=u.role==='admin'&&u.is_active!==false;
+ if(!managerEmail&&!adminOverride)throw Error('المدير المباشر للموظف لا يمتلك بريد اعتماد محدداً؛ حدّث سجل الموظف');
+ const manager=managerEmail?await db.prepare('SELECT email,role,is_active,companies,projects,username FROM members WHERE lower(email)=?').bind(managerEmail).first<any>():null;
+ if(!adminOverride&&(!manager||manager.is_active===false||!['project_manager','hr','admin','projects_director'].includes(manager.role)))throw Error('المدير المباشر لا يملك حساب اعتماد نشطاً');
+ if(!adminOverride&&manager?.companies&&manager.companies!=='*'){
   let scope:any=[];try{scope=JSON.parse(manager.companies)}catch{}
   if(!Array.isArray(scope)||!scope.includes(old.company))throw Error('المدير المباشر لا يملك صلاحية شركة الموظف');
  }
- if(manager.role==='project_manager'&&manager.projects&&manager.projects!=='*'){
+ if(!adminOverride&&manager?.role==='project_manager'&&manager.projects&&manager.projects!=='*'){
   let scope:any=[];try{scope=JSON.parse(manager.projects)}catch{}
   if(!Array.isArray(scope)||!scope.includes(projectId))throw Error('المدير المباشر لا يملك صلاحية مشروع الموظف');
  }
@@ -797,7 +798,7 @@ if(routedRequest&&details.employee_id&&(current==='draft'||current==='project_ma
  const isManager=actorEmail===managerEmail;
  if(current==='draft'){
   details.project_id=projectId;
-  details.direct_manager={name:managerName||manager.username||managerEmail,email:managerEmail,project_name:projectData.name||'',approval_role:'project_manager'};
+  details.direct_manager={name:managerName||manager?.username||managerEmail||'المدير العام — اعتماد استثنائي',email:managerEmail||u.email,project_name:projectData.name||'',approval_role:'project_manager',...(adminOverride?{admin_override:true}: {})};
   if(isManager||isDirector){
    next='projects_director';
    details.manager_submitted_by=u.email;
