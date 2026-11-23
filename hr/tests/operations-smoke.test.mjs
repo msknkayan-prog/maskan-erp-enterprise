@@ -1647,6 +1647,7 @@ test('loan disbursement automatically recalculates draft payroll, preserves appr
  assert.match(erp,/action==='disburse'/);
  assert.match(erp,/calculateScheduledAdvances\(context,data.employee_id,month,beforeLoan\)/);
  assert.match(erp,/drafts\.has\(current.batch_id\)/);
+ assert.match(erp,/\['draft','manager_review'\]\.includes\(b.status\)/);
  assert.match(erp,/split_confirmed:false/);
  assert.match(erp,/advance_schedule_synced_at:now/);
  assert.match(erp,/payroll_synced:synced.length/);
