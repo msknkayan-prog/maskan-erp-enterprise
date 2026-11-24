@@ -2738,3 +2738,10 @@ test('appointment direct manager search is populated and supports registered pen
  assert.match(api,/resolveEmployeeDirectManager\(db,company,manager\.email,manager\.name,true\)/);
  assert.match(api,/project_manager_choices/);
 });
+
+
+test('working company register displays the resolved label without a second enum lookup',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/const value=employeeRegisterValue\(row,f.key,rows\);if\(f.key==='working_company'\)return value\|\|'—';/);
+ assert.equal(employeeRegisterValue({company:'مسكن الكيان',data:{working_company:'المعايير العصرية'}},'working_company',[]),'مؤسسة المعايير العصرية لأعمال التكييف');
+});
