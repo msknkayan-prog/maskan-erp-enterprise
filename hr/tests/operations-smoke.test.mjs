@@ -250,16 +250,16 @@ test('monthly payroll print and expanded approval controls exist',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  assert.match(ui,/function cyclePrint\(/);
  assert.match(ui,/onClick=\{cyclePrint\}/);
- for(const action of ['managers_approve','projects_approve','finance_pay'])assert.ok(ui.includes(action));
+ for(const action of ['projects_approve','finance_pay'])assert.ok(ui.includes(action));
 });
 
-test('printable monthly payroll includes overtime and four-stage approvals',()=>{
+test('printable monthly payroll includes overtime and two-stage approvals',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const print=ui.slice(ui.indexOf('function cyclePrint(){'),ui.indexOf('function cycleReceipt('));
  assert.match(print,/'الساعات الإضافية','قيمة الساعات الإضافية'/);
  assert.match(print,/money\(d\.overtime_hours\),money\(d\.overtime\)/);
  assert.match(print,/money\(total\('overtime_hours'\)\),money\(total\('overtime'\)\)/);
- assert.match(print,/إعداد مساعد الإدارة<\/div><div>مراجعة مدراء المشاريع<\/div><div>اعتماد إدارة المشاريع<\/div><div>مراجعة وصرف المالية/);
+ assert.match(print,/اعتماد إدارة المشاريع<\/div><div>صرف المالية أو المدير العام/);
  assert.doesNotMatch(print,/اعتماد المدير الإداري|توثيق صرف المالية/);
  const receipt=ui.slice(ui.indexOf('function cycleReceipt('),ui.indexOf('function cycleReceipt(')+4500);
  assert.match(receipt,/عدد الساعات الإضافية/);
@@ -465,7 +465,7 @@ test('payroll management searches available and enrolled employees by normalized
 test('monthly payroll offers a unified draft-only manager for add, edit, exclude, restore and submit',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
- for(const term of ['payrollManageBatchId','payrollAddEmployeeId','payrollAvailableEmployees','cycleAddEmployee','فتح إدارة المسير','حذف من المسير (استبعاد)','إرسال المسير إلى مدراء المشاريع'])assert.ok(ui.includes(term),term);
+ for(const term of ['payrollManageBatchId','payrollAddEmployeeId','payrollAvailableEmployees','cycleAddEmployee','فتح إدارة المسير','حذف من المسير (استبعاد)','إرسال المسير إلى إدارة المشاريع'])assert.ok(ui.includes(term),term);
  assert.match(ui,/action:'add_employee'/);
  assert.match(ui,/batch_revision:batch.revision/);
  assert.match(ui,/payrollManagedBatch.status==='draft'/);
@@ -519,8 +519,8 @@ test('monthly payroll approvals use green completion and orange active states wi
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
  const modules=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
- assert.match(ui,/payrollStageLabels=\['مساعد الإدارة','مدراء المشاريع','إدارة المشاريع','المالية · اعتماد','المالية · صرف'\]/);
- assert.match(ui,/payrollStages=\['draft','manager_review','projects_review','finance_review','finance_approved','paid'\]/);
+ assert.match(ui,/payrollStageLabels=\['اعتماد إدارة المشاريع','المالية أو المدير العام · صرف'\]/);
+ assert.match(ui,/payrollStages=\['projects_review','finance_review','paid'\]/);
  assert.match(ui,/payroll-compact-stage/);
  assert.match(ui,/state==='done'\?'✓ '/);
  assert.match(ui,/payroll-month-pill/);
@@ -1853,23 +1853,18 @@ test('advances display administrative approvals only, without finance or payout 
  assert.doesNotMatch(ui,/row.module==='advances'\?\[\.\.\.requestApprovalStages,advanceFinanceStage/);
  assert.match(ui,/اعتماد مبلغ الصرف وتقييده/);
 });
-test('finance separately approves monthly payroll before recording payment',()=>{
+test('finance or general manager records payment only after director approval',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
- assert.match(ui,/cycleTransition\(b,'finance_approve'\)/);
- assert.match(ui,/اعتماد المالية للمسير/);
- assert.match(ui,/b.status==='finance_approved'/);
- assert.match(ui,/توثيق الصرف الفعلي/);
- assert.match(ui,/المالية · اعتماد','المالية · صرف/);
- assert.match(backend,/action==='finance_approve'/);
+ assert.doesNotMatch(ui,/cycleTransition\(b,'finance_approve'\)/);
+ assert.match(ui,/تعميد وتوثيق الصرف الفعلي/);
  assert.match(backend,/const isFinance=u=>\['admin','finance'\]\.includes\(u.role\)\|\|isRequestFinanceActor\(u\)/);
- assert.match(ui,/b.status==='finance_review'&&\(\['admin','finance'\]\.includes\(user\?\.role\)\|\|isRequestFinanceActor\(user\)\)/);
- assert.match(backend,/finance_approve:'finance_approved',finance_pay:'paid'/);
- assert.match(backend,/modern\?'finance_approved':'finance'/);
- assert.match(backend,/finance_approved_at:now,finance_approved_by:u.email/);
- assert.match(backend,/المالية المخول والمسير في مرحلة المراجعة المالية/);
- assert.match(backend,/لا يمكن توثيق صرف المسير قبل اعتماد المالية المستقل/);
- assert.match(backend,/action==='finance_pay'\)\{/);
+ assert.match(backend,/projects_approve:'finance_review',finance_pay:'paid'/);
+ assert.match(backend,/if\(!body.confirm_payment\)/);
+ assert.match(backend,/projects_approved_by:u.email/);
+ assert.match(backend,/paid_by:u.email/);
+ assert.match(backend,/if\(!isFinance\(u\)/);
+ assert.match(backend,/if\(action==='finance_pay'\)\{/);
 });
 test('company employee dashboard offers live KPIs and filtered staff report export',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
@@ -1907,17 +1902,14 @@ test('leave and advance approvals show assigned project manager and horizontal s
  for(const term of ['request-approval-guide','request-approval-summary','approvalStages','المدير المباشر المختص','دورة اعتماد الطلب'])assert.ok(ui.includes(term),term);
  for(const term of ['Direct Manager','Project Manager','التسلسل: إعداد الطلب'])assert.ok(print.includes(term),term);
 });
-test('payroll approval requires authorized project managers for every staff row and protects final handoff',()=>{
+test('payroll approval no longer depends on project managers and retains director authorization',()=>{
  const cycle=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
- assert.match(cycle,/ensureAssignedPayrollManager/);
- assert.match(cycle,/await ensureAssignedPayrollManager\(row\.data\.project_id,b\.company,row\.data\.employee_id\)/);
- assert.match(cycle,/await ensureAssignedPayrollManager\(e\.data\.project_id,batch\.company,e\.data\.employee_id\)/);
- assert.match(cycle,/await canManageProject\(u,projectId,batch\.company,employee\.data\.employee_id\)/);
- assert.match(cycle,/isAuthorizedProjectManagerAccount\(manager,managerName/);
- assert.match(cycle,/manager_reviewed_by/);
- assert.match(cycle,/\['admin','projects_director'\]\.includes\(u\.role\)/);
- assert.match(ui,/إرسال لإدارة المشاريع بعد مراجعة المدراء/);
+ assert.doesNotMatch(cycle,/await ensureAssignedPayrollManager\(/);
+ assert.match(cycle,/!isProjectsDirector\(u\)\|\|!permission\(u,'payroll','approve'\)/);
+ assert.match(cycle,/!e.data.split_confirmed/);
+ assert.match(cycle,/const chargedProject=await db.prepare/);
+ assert.match(ui,/اعتماد إدارة المشاريع وإرسال للصرف/);
 });
 
 test('project manager can view payroll employees only from projects assigned to own active account',async()=>{
