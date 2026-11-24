@@ -2752,3 +2752,13 @@ test('document serial validators accept real numeric sequence values',()=>{
  assert.ok(!erp.includes(String.raw`/^\\d{4,12}$/`));
  assert.ok(!erp.includes(String.raw`/^\\d{4,8}$/`));
 });
+
+
+test('advance amount and installment count immediately populate monthly deduction',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ assert.match(ui,/module==='advances'&&\['amount','installments'\]\.includes\(f.key\)/);
+ assert.match(ui,/data\.monthly_deduction=cents>0&&Number\.isInteger\(count\)&&count>=1&&count<=60\?String\(Math\.floor\(cents\/count\)\/100\):''/);
+ assert.equal(Math.floor(Math.round(7500*100)/10)/100,750);
+ assert.equal(Math.floor(Math.round(9000*100)/9)/100,1000);
+ assert.equal(Math.floor(Math.round(100*100)/3)/100,33.33);
+});
