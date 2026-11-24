@@ -902,7 +902,7 @@ test('named employee delegation overrides project owner for both visibility rule
  assert.match(ui,/حفظ تكليف الموظفين/);
  assert.match(erp,/assign_manager_employees/);
  assert.match(erp,/delegated_manager_email/);
- assert.match(payroll,/ensureAssignedPayrollManager\(e\.data\.project_id,batch\.company,e\.data\.employee_id\)/);
+ assert.doesNotMatch(payroll,/await ensureAssignedPayrollManager\(/);
  assert.match(ui,/إضافة قسم الدفاع المدني/);
 });
 
