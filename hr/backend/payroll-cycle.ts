@@ -18,7 +18,7 @@ const allowed=(u,co)=>u.role==='admin'||u.companies==='*'||!u.companies||(()=>{t
 const parse=r=>({...r,data:JSON.parse(r.data)});
 const db=env.DB;
 async function batchOf(id){const b=await db.prepare("SELECT * FROM records WHERE id=? AND module='payroll_batches'").bind(id).first();if(!b)throw Error('المسير غير موجود');return parse(b);}
-const isPrep=u=>['admin','administrative_assistant'].includes(u.role);
+const isPrep=u=>['admin','administrative_assistant','projects_director'].includes(u.role);
 const isManager=u=>['admin','project_manager'].includes(u.role)||u.role==='hr'&&String(u.email||'').trim().toLowerCase()==='magdiosman0@gmail.com';
 const canManageProject=async(u,project,company,employeeId='')=>{
  if(u.role==='admin')return true;
@@ -104,8 +104,8 @@ export async function POST(req){
   const u=await identity();
   const body=await req.json();
   const action=String(body.action||'');
-  const modern=Number(body.workflow_version)===2;
-  const prepAllowed=modern?isPrep(u):['admin','hr'].includes(u.role);
+  const modern=true; // Enforce the current workflow for all clients.
+  const prepAllowed=isPrep(u);
   const now=nowIso(),mutation=crypto.randomUUID();
   if(action==='generate'){
    if(!prepAllowed||!permission(u,'payroll','edit'))return err('غير مخول بالتوليد',403);
@@ -162,7 +162,7 @@ export async function POST(req){
    return response({ok:true,generated:results});
   }
   if(action==='bulk_submit'){
-   if(!modern||!prepAllowed||!permission(u,'payroll','edit'))return err('الإرسال الجماعي من صلاحيات مساعد الإدارة فقط',403);
+   if(!prepAllowed||!permission(u,'payroll','edit'))return err('الإرسال الجماعي من صلاحيات إعداد المسير فقط',403);
    const ids=body.batch_ids;
    if(!Array.isArray(ids)||!ids.length||ids.length>50||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'))throw Error('قائمة المسيرات غير صحيحة');
    const revisions=body.revisions||{},stmts=[];
@@ -183,14 +183,14 @@ export async function POST(req){
       if(keyed(auto)!==keyed(current)||cents(d.advance_deduction)!==auto.reduce((n,x)=>n+cents(x.amount),0))
        throw Error('تغيرت أقساط سلف الموظف '+(d.employee_name||'')+'؛ حدّث أقساط السلف والغياب داخل المسير قبل إرساله');
       if(!row.data.split_confirmed||!Number.isFinite(Number(row.data.net))||cents(row.data.cash_amount)+cents(row.data.bank_amount)!==cents(row.data.net)||row.data.needs_review&&!row.data.exception_note)throw Error('مراجعة الأجور غير مكتملة: '+b.company);
-       await ensureAssignedPayrollManager(row.data.project_id,b.company,row.data.employee_id);
+       // No project-manager approval is required; cost allocation is checked at director approval.
      }
-     stmts.push(db.prepare("UPDATE records SET status='manager_review',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='payroll_batches' AND revision=? AND status='draft'").bind(now,mutation,id,b.revision));
+     stmts.push(db.prepare("UPDATE records SET status='projects_review',revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='payroll_batches' AND revision=? AND status='draft'").bind(now,mutation,id,b.revision));
      stmts.push(db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,id,'payroll_batch_bulk_submit',now,JSON.stringify({company:b.company,month:b.data.month})));
    }
    const results=await db.batch(stmts);
    if(results.filter((_,i)=>i%2===0).some(r=>!r.meta.changes))throw Error('تعارض في تحديث المسيرات؛ حدّث القائمة');
-   return response({ok:true,submitted:ids.length,status:'manager_review'});
+   return response({ok:true,submitted:ids.length,status:'projects_review'});
   }
   const batch=await batchOf(String(body.batch_id||''));
   if(!allowed(u,batch.company)||!permission(u,'payroll','view'))return err('ليس ضمن نطاق صلاحياتك',403);
@@ -307,9 +307,9 @@ export async function POST(req){
    return response({ok:true,excluded:excluding});
   }
   if(action==='update'){
-   const managerEditing=modern&&isManager(u)&&batch.status==='manager_review';
-   const prepEditing=prepAllowed&&batch.status==='draft';
-   if(!permission(u,'payroll','edit')||!(prepEditing||managerEditing))return err('صلاحية التعديل تقتصر على مساعد الإدارة أثناء التجهيز ومدير المشروع أثناء المراجعة',403);
+   const managerEditing=false;
+   const prepEditing=prepAllowed&&['draft','manager_review','projects_review'].includes(batch.status);
+   if(!permission(u,'payroll','edit')||!(prepEditing||managerEditing))return err('التعديل متاح لمخولي إعداد المسير قبل اعتماد إدارة المشاريع',403);
    const employee=monthly.find(r=>r.id===body.row_id);if(!employee)throw Error('الموظف غير مرتبط بالمسير');
    if(employee.revision!==body.revision)throw Error('تم تعديل بيانات الموظف من مستخدم آخر؛ أعد التحميل');
    if(employee.data.excluded)throw Error('أعد الموظف إلى المسير أولًا قبل تعديل بياناته');
@@ -369,7 +369,7 @@ export async function POST(req){
   const financeAllocations=[];
   // A loan that becomes payable after the monthly payroll was reviewed cannot
   // silently disappear from payroll. Require a fresh sync and renewed approvals.
-  if(['submit','finance_approve','finance_pay'].includes(action)){
+  if(['submit','projects_approve','finance_pay'].includes(action)){
    const context=await paidLoanContext();
    for(const row of monthly.filter(r=>!r.data.excluded)){
     const d=row.data;
@@ -393,8 +393,9 @@ export async function POST(req){
     if(invalid)throw Error('يوجد موظف غير نشط في المسير؛ يجب استبعاده أو تعديل حالته إلى نشط في سجل الموظفين قبل الاعتماد أو الصرف');
    }
   }
-  if(action==='submit'){
-   if(!prepAllowed||batch.status!=='draft')return err('الإرسال من صلاحيات إعداد المسير فقط',403);
+  if(action==='submit'||action==='projects_approve'){
+   if(action==='submit'&&(!prepAllowed||batch.status!=='draft'))return err('الإرسال من صلاحيات إعداد المسير فقط',403);
+   if(action==='projects_approve'&&(!isProjectsDirector(u)||!permission(u,'payroll','approve')||!['draft','manager_review','projects_review'].includes(batch.status)))return err('اعتماد إدارة المشاريع ليس ضمن صلاحياتك أو المرحلة الحالية',403);
    if(monthly.length!==Number(batch.data.employee_count))throw Error('قائمة الموظفين غير مكتملة');
    if(monthly.every(r=>r.data.excluded))throw Error('لا يمكن إرسال مسير استُبعد منه جميع الموظفين');
    for(const e of monthly.filter(r=>!r.data.excluded)){
@@ -407,39 +408,10 @@ export async function POST(req){
     if(!chargedProject)throw Error('مركز تكلفة مشروع أحد الموظفين غير موجود');
     const chargedData=JSON.parse(chargedProject.data||'{}');
     if(chargedData._deleted||chargedData._archived||(chargedProject.company!==chargedCompany&&!(Array.isArray(chargedData._shared_companies)&&chargedData._shared_companies.includes(chargedCompany))))throw Error('مركز تكلفة مشروع أحد الموظفين لا يتبع شركة تحميل راتبه');
-     if(modern)await ensureAssignedPayrollManager(e.data.project_id,batch.company,e.data.employee_id);
+     // Director approval validates payroll and cost allocation without a manager approval.
    }
-  }else if(!modern&&action==='admin_approve'){
-   if(!['admin','administrative_manager'].includes(u.role)||batch.status!=='admin_review')return err('الاعتماد الإداري ليس ضمن صلاحيتك أو المرحلة',403);
-  }else if(action==='finance_approve'){
-   if(!isFinance(u)||batch.status!=='finance_review')return err('اعتماد المالية يتطلب حساب المالية المخول والمسير في مرحلة المراجعة المالية',403);
-   if(modern){
-    if(monthly.length!==Number(batch.data.employee_count)||monthly.every(r=>r.data.excluded))throw Error('مسير الرواتب غير مكتمل');
-    for(const row of monthly.filter(r=>!r.data.excluded)){
-     if(!row.data.manager_reviewed||!row.data.split_confirmed||cents(row.data.cash_amount)+cents(row.data.bank_amount)!==cents(row.data.net))throw Error('يجب استكمال مراجعة وتوزيع رواتب جميع الموظفين قبل اعتماد المالية');
-     if(row.data.needs_review&&!row.data.exception_note)throw Error('يجب توضيح استثناءات المسير قبل اعتماد المالية');
-    }
-   }
-  }else if(action==='managers_approve'){
-   if(!modern||!['admin','projects_director'].includes(u.role)||batch.status!=='manager_review')return err('يكتمل تسليم المسير لإدارة المشاريع من المدير العام أو إدارة المشاريع بعد مراجعة مدراء المشاريع',403);
-   const included=monthly.filter(r=>!r.data.excluded);
-   if(!included.length||included.some(r=>!r.data.manager_reviewed))throw Error('لم تكتمل مراجعة مدراء المشاريع لجميع الموظفين');
-   const employees=(await db.prepare("SELECT id,data FROM records WHERE module='employees'").all()).results;
-   const projects=(await db.prepare("SELECT id,company,data FROM records WHERE module='projects'").all()).results;
-   for(const row of included){
-    const employee=employees.find(e=>e.id===row.data.employee_id);
-    const projectId=String(row.data.project_id||employee&&JSON.parse(employee.data).project_id||'');
-    const assigned=projects.find(p=>p.id===projectId);
-    if(!assigned)throw Error('المسير يتضمن موظفًا دون مشروع مسجل: '+row.data.employee_name);
-    const delegated=String(employee?JSON.parse(employee.data||'{}').delegated_manager_email||'':'').trim().toLowerCase();
-    const managerEmail=delegated||String(JSON.parse(assigned.data).manager_email||'').toLowerCase();
-    if(!managerEmail||String(row.data.manager_reviewed_by||'').toLowerCase()!==managerEmail&&row.data.manager_reviewed_by!==u.email&&u.role!=='admin')throw Error('تحتاج مراجعة موظف من مدير مشروعه المخوّل: '+row.data.employee_name);
-   }
-   // Each manager may review only their assigned projects; final handoff requires every included row marked reviewed.
-  }else if(action==='projects_approve'){
-   if(!isProjectsDirector(u)||batch.status!=='projects_review')return err('اعتماد إدارة المشاريع ليس ضمن صلاحياتك أو المرحلة الحالية',403);
   }else if(action==='finance_pay'){
-   if(!isFinance(u)||batch.status!==(modern?'finance_approved':'finance'))return err('لا يمكن توثيق صرف المسير قبل اعتماد المالية المستقل وبصلاحية المالية',403);
+   if(!isFinance(u)||!['finance_review','finance_approved','finance'].includes(batch.status))return err('الصرف متاح للمالية أو المدير العام بعد اعتماد إدارة المشاريع',403);
    if(!String(body.reference||'').trim()||String(body.reference).length>200)throw Error('مرجع الصرف مطلوب');
    if(!body.confirm_payment)throw Error('يجب تأكيد الصرف الفعلي قبل إصدار السندات');
    if(monthly.length!==Number(batch.data.employee_count)||monthly.every(r=>r.data.excluded))throw Error('قائمة المسير غير مكتملة');
@@ -462,17 +434,17 @@ export async function POST(req){
     }
    }
    for(const row of monthly.filter(r=>!r.data.excluded)){
-    if((modern&&!row.data.manager_reviewed)||!row.data.split_confirmed||cents(row.data.cash_amount)+cents(row.data.bank_amount)!==cents(row.data.net))throw Error('لا يمكن صرف مسير غير معتمد أو غير متطابق');
+    if(!row.data.split_confirmed||cents(row.data.cash_amount)+cents(row.data.bank_amount)!==cents(row.data.net))throw Error('لا يمكن صرف مسير غير معتمد أو غير متطابق');
     if(row.data.needs_review&&!row.data.exception_note)throw Error('استثناء دون مبرر');
    }
   }else if(action==='return'){
    if(!String(body.note||'').trim())throw Error('سبب الإعادة مطلوب');
-   if(!((modern&&isManager(u)&&batch.status==='manager_review')||(isProjectsDirector(u)&&batch.status==='projects_review')||(isFinance(u)&&['finance_review','finance_approved'].includes(batch.status))||(!modern&&(['admin','administrative_manager'].includes(u.role)&&batch.status==='admin_review'))))return err('لا تملك صلاحية إعادة هذا المسير',403);
+   if(!((isProjectsDirector(u)&&['manager_review','projects_review','admin_review'].includes(batch.status))||(isFinance(u)&&['finance_review','finance_approved','finance'].includes(batch.status))))return err('لا تملك صلاحية إعادة هذا المسير',403);
   }else throw Error('عملية غير معروفة');
-  const next=(modern?{submit:'manager_review',managers_approve:'projects_review',projects_approve:'finance_review',finance_approve:'finance_approved',finance_pay:'paid',return:'draft'}:{submit:'admin_review',admin_approve:'finance_review',finance_approve:'projects_review',projects_approve:'finance',finance_pay:'paid',return:'draft'})[action];
+  const next={submit:'projects_review',projects_approve:'finance_review',finance_pay:'paid',return:'draft'}[action];
   const newData={...batch.data,
-   ...(action==='finance_approve'&&modern?{finance_approved_at:now,finance_approved_by:u.email,finance_approval_note:String(body.note||'').trim().slice(0,1000)}:{}),
-   ...(action==='finance_pay'?{paid_at:now,paid_by:u.email,payment_reference:String(body.reference).trim()}:{}),
+   ...(action==='projects_approve'?{projects_approved_at:now,projects_approved_by:u.email,workflow_version:3}:{}),
+   ...(action==='finance_pay'?{finance_approved_at:batch.data.finance_approved_at||now,finance_approved_by:batch.data.finance_approved_by||u.email,paid_at:now,paid_by:u.email,payment_reference:String(body.reference).trim()}:{}),
    ...(action==='return'?{returned_at:now,return_note:String(body.note).trim().slice(0,1000)}:{})};
   const ledgerStatements=[];
   if(action==='finance_pay'){
