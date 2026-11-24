@@ -135,7 +135,7 @@ function EmployeeDirectManagerCell({employee,rows,managers,disabled,onSave}){
  const [selected,setSelected]=useState('__project__');
  const currentKey=managers.find(m=>normalizeManagerName(m.name)===normalizeManagerName(employee.data?.manager))?.key;
  const display=employeeRegisterValue(employee,'manager',rows)||'غير محدد';
- return <div className="employee-direct-manager" style={{display:'grid',gap:5,minWidth:170}}>
+ return <div className="employee-direct-manager" style={{display:'flex',flexDirection:'row',alignItems:'center',flexWrap:'nowrap',gap:7,minWidth:'max-content',whiteSpace:'nowrap'}}>
   {!editing?<><strong>{display}</strong>{employee.data?._direct_manager_manual&&<small>تعيين مستقل</small>}{!disabled&&<button type="button" aria-label={'تغيير المدير المباشر للموظف '+(employee.data?.name||'')} onClick={()=>{setSelected(employee.data?._direct_manager_manual?currentKey||'__project__':'__project__');setEditing(true)}}>تغيير المدير</button>}</>:
   <><select aria-label={'اختيار المدير المباشر للموظف '+(employee.data?.name||'')} value={selected} onChange={e=>setSelected(e.target.value)} disabled={disabled}>
    <option value="__project__">تلقائيًا حسب مدير المشروع</option>
