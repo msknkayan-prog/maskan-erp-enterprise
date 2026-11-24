@@ -586,7 +586,7 @@ if(body.action==='backfill_appointment_numbers'){
  const statements:any[]=[];
  for(const row of missing){
   const serial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
-  if(!serial||!/^\\d{4,12}$/.test(String(serial)))throw Error('تعذر توليد الرقم التسلسلي للتعيين');
+  if(!serial||!/^\d{4,12}$/.test(String(serial)))throw Error('تعذر توليد الرقم التسلسلي للتعيين');
   const documentNo='APT-'+saudiDate().slice(0,4)+'-'+String(serial).padStart(6,'0');
   const data={...JSON.parse(row.data||'{}'),document_no:documentNo,document_no_backfilled_at:now,document_no_backfilled_by:u.email};
   statements.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='appointments' AND revision=? AND COALESCE(NULLIF(TRIM(data::jsonb->>'document_no'),''),'')=''").bind(JSON.stringify(data),now,mutation,row.id,row.revision));
@@ -1318,7 +1318,7 @@ if(salaryFieldsChanged){
 }
 if(mod==='projects'&&!old){
  const serial=await db.prepare("SELECT nextval('hr.project_code_seq')::text AS code").first<any>();
- if(!serial?.code||!/^\\d{4,8}$/.test(String(serial.code)))throw Error('تعذر توليد رمز تسلسلي للمشروع');
+ if(!serial?.code||!/^\d{4,8}$/.test(String(serial.code)))throw Error('تعذر توليد رمز تسلسلي للمشروع');
  data.code=String(serial.code);
 }
 // Allocate one database-backed serial for every newly saved HR form. The sequence is
@@ -1330,12 +1330,12 @@ if(old){
  if(originalNo)data.document_no=originalNo;
  if(['appointments','employees'].includes(mod)&&!originalNo){
   const serial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
-  if(!serial||!/^\\d{4,12}$/.test(String(serial)))throw Error('تعذر توليد رقم النموذج');
+  if(!serial||!/^\d{4,12}$/.test(String(serial)))throw Error('تعذر توليد رقم النموذج');
   data.document_no=(mod==='employees'?'EMP':'APT')+'-'+saudiDate().slice(0,4)+'-'+String(serial).padStart(6,'0');
  }
 }else{
  const serial=(await db.prepare("SELECT nextval('hr.project_code_seq')::text AS serial").first<any>())?.serial;
- if(!serial||!/^\\d{4,12}$/.test(String(serial)))throw Error('تعذر توليد رقم النموذج؛ أعد المحاولة');
+ if(!serial||!/^\d{4,12}$/.test(String(serial)))throw Error('تعذر توليد رقم النموذج؛ أعد المحاولة');
  const prefix=({appointments:'APT',leave:'LEV',advances:'ADV',warnings:'WRN',resignations:'RES',returns:'RTW',leave_dues:'LDU',settlements:'SET',terminations:'TER',repayments:'RPA',payroll:'PAY',payroll_batches:'PBA',employees:'EMP',projects:'PRJ',project_managers:'MGR',company_profiles:'CMP'} as Record<string,string>)[mod]||'HR';
  data.document_no=prefix+'-'+saudiDate().slice(0,4)+'-'+String(serial).padStart(6,'0');
 }
