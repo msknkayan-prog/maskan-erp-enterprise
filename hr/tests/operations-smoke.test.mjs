@@ -2737,3 +2737,18 @@ test('working company register displays the resolved label without a second enum
  assert.match(ui,/const value=employeeRegisterValue\(row,f.key,rows\);if\(f.key==='working_company'\)return value\|\|'—';/);
  assert.equal(employeeRegisterValue({company:'مسكن الكيان',data:{working_company:'المعايير العصرية'}},'working_company',[]),'مؤسسة المعايير العصرية لأعمال التكييف');
 });
+
+
+test('document serial validators accept real numeric sequence values',()=>{
+ const erp=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
+ const validators=[...erp.matchAll(/\/\^\\d\{4,(?:8|12)\}\$\//g)].map(m=>m[0]);
+ assert.ok(validators.length>=6);
+ for(const source of validators){
+  const re=new RegExp(source.slice(1,-1));
+  assert.equal(re.test('1163'),true);
+  assert.equal(re.test('001163'),true);
+  assert.equal(re.test('abc123'),false);
+ }
+ assert.ok(!erp.includes(String.raw`/^\\d{4,12}$/`));
+ assert.ok(!erp.includes(String.raw`/^\\d{4,8}$/`));
+});
