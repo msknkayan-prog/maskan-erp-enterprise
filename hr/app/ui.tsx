@@ -584,7 +584,7 @@ const list=scoped.filter(r=>{
  return searchWords.every(word=>haystack.includes(word));
 });
 const name=id=>rows.find(r=>r.id===id)?.data.name||'غير متاح';
-const registerDisplay=(row,f)=>{if(f.key==='contract_expiry'&&row.data?.contract_expiry_mode!=='manual')return nextContractExpiry(row.data?.hire_date,today)||'—';const value=employeeRegisterValue(row,f.key,rows);const original=modules.employees.fields.find(x=>x.key===f.key);return original&&enumOptions[original.type]?(enumOptions[original.type].find(o=>o[0]===value)?.[1]||'—'):value===0?'0':value||'—';};
+const registerDisplay=(row,f)=>{if(f.key==='contract_expiry'&&row.data?.contract_expiry_mode!=='manual')return nextContractExpiry(row.data?.hire_date,today)||'—';const value=employeeRegisterValue(row,f.key,rows);if(f.key==='working_company')return value||'—';const original=modules.employees.fields.find(x=>x.key===f.key);return original&&enumOptions[original.type]?(enumOptions[original.type].find(o=>o[0]===value)?.[1]||'—'):value===0?'0':value||'—';};
 // Imported historical forms may contain nested employee/manager objects; React cannot render objects as text.
 const safeRecordText=value=>{
  if(value===null||value===undefined||value==='')return '—';
