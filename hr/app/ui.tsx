@@ -1381,7 +1381,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   const source=[employee.data?.name,employee.data?.code,employee.code,employee.data?.identity,employee.data?.project_name,companyDisplayName(employee.company)].join(' ');
   return normalizeSearch(source).includes(normalizeSearch(advanceEmployeeSearch));
  }).sort((a,b)=>companyDisplayName(a.company).localeCompare(companyDisplayName(b.company),'ar')||String(a.data?.name||'').localeCompare(String(b.data?.name||''),'ar'));
- const allAdvances=rows.filter(record=>record.module==='advances');
+ const allAdvances=rows.filter(record=>record.module==='advances'&&!record.data?._deleted&&record.status!=='rejected');
  const allRepayments=rows.filter(record=>record.module==='repayments');
  const canCreate=permittedWrite(user||{},'advances');
  const canDelete=['admin','hr'].includes(user?.role)&&canCreate&&permission(user||{},'advances','edit');
@@ -1402,12 +1402,15 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
    <small style={{fontSize:10,color:'#87745a'}}>يمكن التمرير بالسحب أيضًا</small>
   </div>
   <div className="table-wrap" ref={advanceTableScrollRef} dir="rtl" style={{overflowX:'auto',scrollBehavior:'smooth',scrollbarGutter:'stable'}}><table className="employee-register">
-   <thead><tr><th>الشركة</th><th>الرقم الوظيفي</th><th>اسم الموظف</th><th>المشروع</th><th>عدد السلف</th><th>معتمد بانتظار الصرف</th><th>السلف المقيدة والمصروفة</th><th>السداد الافتتاحي</th><th>إجمالي السداد</th><th>المتبقي</th><th>الإجراءات</th></tr></thead>
+   <thead><tr><th>الشركة</th><th>الرقم الوظيفي</th><th>اسم الموظف</th><th>المشروع</th><th>عدد السلف</th><th>إجمالي السلف المسجلة</th><th>قيد الاعتماد / مسودة</th><th>معتمد بانتظار الصرف</th><th>السلف المقيدة والمصروفة</th><th>السداد الافتتاحي</th><th>إجمالي السداد</th><th>المتبقي</th><th>الإجراءات</th></tr></thead>
    <tbody>{matchingEmployees.map(employee=>{
     const loans=allAdvances.filter(advance=>advance.data?.employee_id===employee.id&&advance.company===employee.company);
     const issued=loans.filter(advance=>advance.status==='paid'&&advance.data?.paid_at);
     const pendingDisbursement=loans.filter(advance=>['approved','finance_approved'].includes(advance.status)&&!advance.data?.paid_at);
-    const pendingAmount=pendingDisbursement.reduce((sum,advance)=>sum+Number(advance.data?.amount||0),0);
+    const sumAdvanceAmounts=list=>list.reduce((sum,advance)=>sum+Math.round(Number(advance.data?.amount||0)*100),0)/100;
+    const totalRegistered=sumAdvanceAmounts(loans);
+    const awaitingApproval=sumAdvanceAmounts(loans.filter(advance=>!['paid','approved','finance_approved'].includes(advance.status)));
+    const pendingAmount=sumAdvanceAmounts(pendingDisbursement);
     const loanIds=new Set(issued.map(advance=>advance.id));
     const settled=allRepayments.filter(payment=>loanIds.has(payment.data?.advance_id)&&!payment.data?._deleted);
     const totalIssued=issued.reduce((sum,advance)=>sum+Number(advance.data?.amount||0),0);
@@ -1420,7 +1423,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
      <td><span className="company-tag">{companyDisplayName(employee.company)}</span></td>
      <td>{employee.data?.code||employee.code||'—'}</td><td><strong>{employee.data?.name||'غير محدد'}</strong></td>
      <td>{project?.data?.name||employee.data?.project_name||'—'}</td>
-     <td>{loans.length}</td><td><strong>{money(pendingAmount)} ر.س</strong>{pendingDisbursement.length>0&&<small style={{display:'block',color:'#936d2c'}}>بانتظار توثيق الصرف</small>}</td><td>{money(totalIssued)} ر.س</td><td>{money(openingPaid)} ر.س</td><td>{money(totalPaid)} ر.س</td><td><strong>{money(balance)} ر.س</strong></td>
+     <td>{loans.length}</td><td><strong>{money(totalRegistered)} ر.س</strong></td><td>{money(awaitingApproval)} ر.س</td><td><strong>{money(pendingAmount)} ر.س</strong>{pendingDisbursement.length>0&&<small style={{display:'block',color:'#936d2c'}}>بانتظار توثيق الصرف</small>}</td><td>{money(totalIssued)} ر.س</td><td>{money(openingPaid)} ر.س</td><td>{money(totalPaid)} ر.س</td><td><strong>{money(balance)} ر.س</strong></td>
 
      <td style={{minWidth:350}}><div className="row-actions" style={{display:'flex',flexDirection:'row',gap:4,alignItems:'center',justifyContent:'flex-start',flexWrap:'nowrap',width:'max-content',whiteSpace:'nowrap'}}>
       {canCreate&&<button type="button" className="primary" style={{fontSize:11,padding:'5px 8px',minHeight:28}} onClick={()=>{setFormError('');setLinkedEmployee(null);setEdit({company:employee.company,data:{employee_id:employee.id,amount:'0',date:saudiDate(),installments:'1',first_month:saudiDate().slice(0,7),notes:''}})}}>+ إضافة</button>}
@@ -1435,7 +1438,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
     </tr>;
    })}</tbody>
   </table></div></>}
-  <div className="footnote" style={{padding:'9px 14px'}}>الأزرار الأساسية أفقية. حذف السلفة متاح للمسودات فقط؛ السداد الافتتاحي إجراء مالي موثق بمرجع وتاريخ، ويُخصم من السلف المعتمدة الأقدم. إجمالي السداد يشمل السداد الافتتاحي والسدادات الأخرى مرة واحدة. الرصيد المتبقي = السلف المقيدة والمصروفة − السدادات الفعلية؛ المعتمد بانتظار الصرف يظهر منفصلًا ولا يدخل جدول خصم الرواتب حتى يوثق المعتمد صرفه.</div>
+  <div className="footnote" style={{padding:'9px 14px'}}>إجمالي السلف المسجلة يشمل المسودات والطلبات قيد الاعتماد والمعتمدة والمصروفة، ويستبعد المحذوفة والمرفوضة. يستطيع المدير العام تعديل وحذف السلف غير المصروفة بعد الاعتماد. السداد الافتتاحي إجراء مالي موثق بمرجع وتاريخ، ويُخصم من السلف المعتمدة الأقدم. إجمالي السداد يشمل السداد الافتتاحي والسدادات الأخرى مرة واحدة. الرصيد المتبقي = السلف المقيدة والمصروفة − السدادات الفعلية؛ المعتمد بانتظار الصرف يظهر منفصلًا ولا يدخل جدول خصم الرواتب حتى يوثق المعتمد صرفه.</div>
  </section>;
 })()}
 
@@ -1482,21 +1485,22 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  const employeeLoans=rows.filter(r=>r.module==='advances'&&r.data?.employee_id===advanceManager.id&&r.company===employee?.company&&!r.data?._deleted).sort((a,b)=>String(b.data?.date||b.created_at).localeCompare(String(a.data?.date||a.created_at)));
  const canChange=permittedWrite(user||{},'advances')&&permission(user||{},'advances','edit');
  const canRemove=canChange&&['admin','hr'].includes(user?.role);
- const visibleLoans=advanceManager.mode==='delete'?employeeLoans.filter(r=>r.status==='draft'):employeeLoans;
+ const canAmendLoan=loan=>loan.status==='draft'||(user?.role==='admin'&&loan.status!=='paid');
+ const visibleLoans=advanceManager.mode==='delete'?employeeLoans.filter(canAmendLoan):employeeLoans;
  return <div className="modal-backdrop" onClick={()=>setAdvanceManager(null)}><section className="modal" role="dialog" aria-modal="true" dir="rtl" aria-label="إدارة سلف الموظف" onClick={e=>e.stopPropagation()} style={{maxWidth:760,width:'min(94vw,760px)',maxHeight:'85vh',overflowY:'auto'}}>
-  <div className="modal-head"><div><h2>إدارة سلف الموظف — {employee?.data?.name||'الموظف'}</h2><small>{companyDisplayName(employee?.company||'')} · {employee?.data?.code||''} · {employeeLoans.length} سلفة</small></div><button type="button" onClick={()=>setAdvanceManager(null)} aria-label="إغلاق"><X/></button></div>
+  <div className="modal-head"><div><h2>إدارة سلف الموظف — {employee?.data?.name||'الموظف'}</h2><small>{companyDisplayName(employee?.company||'')} · {employee?.data?.code||''} · {employeeLoans.filter(r=>r.status!=='rejected').length} سلفة · إجمالي المسجلة {money(employeeLoans.filter(r=>r.status!=='rejected').reduce((sum,r)=>sum+Math.round(Number(r.data?.amount||0)*100),0)/100)} ر.س</small></div><button type="button" onClick={()=>setAdvanceManager(null)} aria-label="إغلاق"><X/></button></div>
   <div className="row-actions" style={{display:'flex',flexDirection:'row',gap:6,flexWrap:'wrap',marginBottom:12}}>
-   {[['view','عرض السلف'],['edit','تعديل المسودات'],['delete','حذف المسودات']].map(([mode,label])=><button key={mode} type="button" className={advanceManager.mode===mode?'primary':''} onClick={()=>setAdvanceManager({...advanceManager,mode})}>{label}</button>)}
+   {[['view','عرض السلف'],['edit','تعديل السلف'],['delete','حذف السلف']].map(([mode,label])=><button key={mode} type="button" className={advanceManager.mode===mode?'primary':''} onClick={()=>setAdvanceManager({...advanceManager,mode})}>{label}</button>)}
   </div>
-  {!visibleLoans.length?<div className="empty"><p>{advanceManager.mode==='delete'?'لا توجد سلف مسودة قابلة للحذف. لا يمكن حذف المعتمدة أو المصروفة.':'لا توجد سلف مسجلة لهذا الموظف بهذه الحالة.'}</p></div>:
+  {!visibleLoans.length?<div className="empty"><p>{advanceManager.mode==='delete'?'لا توجد سلف قابلة للحذف ضمن صلاحياتك. السلف المصروفة تتطلب تسوية مالية.':'لا توجد سلف مسجلة لهذا الموظف بهذه الحالة.'}</p></div>:
    <div className="table-wrap"><table><thead><tr><th>التاريخ</th><th>المبلغ</th><th>حالة السلفة</th><th>الإجراء</th></tr></thead><tbody>{visibleLoans.map(loan=><tr key={loan.id}><td>{loan.data?.date||'—'}</td><td>{money(loan.data?.amount)} ر.س</td><td>{states[loan.status]||loan.status}</td><td><div className="row-actions" style={{display:'flex',gap:6,flexWrap:'nowrap'}}>
-    <button type="button" onClick={()=>{setAdvanceManager(null);setLinkedEmployee(null);setEdit({...loan,data:{...loan.data}})}}>{loan.status==='draft'&&canChange?'تعديل':'عرض'}</button>
-    {loan.status==='draft'&&canRemove&&<button type="button" className="danger-action" disabled={saving} onClick={async()=>{await deleteDraftRequest(loan);setAdvanceManager(null);}}>حذف</button>}
+    <button type="button" onClick={()=>{setAdvanceManager(null);setLinkedEmployee(null);setEdit({...loan,data:{...loan.data}})}}>{canAmendLoan(loan)&&canChange?'تعديل':'عرض'}</button>
+    {canAmendLoan(loan)&&canRemove&&<button type="button" className="danger-action" disabled={saving} onClick={async()=>{await deleteDraftRequest(loan);setAdvanceManager(null);}}>حذف</button>}
     {['paid','approved','finance_approved'].includes(loan.status)&&<button type="button" onClick={()=>{setAdvanceManager(null);setSchedulePanel({id:loan.id,mode:loan.data?.schedule_mode||'auto',kind:'defer_installment',month:saudiDate().slice(0,7)})}}>الجدولة / التأجيل</button>}
  {['approved','finance_approved'].includes(loan.status)&&isRequestFinanceActor(user)&&<button type="button" className="primary" disabled={saving} onClick={async()=>{await gmFinalizeAdvance(loan);setAdvanceManager(null);}}>اعتماد الصرف وربطه بالرواتب</button>}
     {loan.status==='paid'&&<small>سلفة مقيدة في حساب الموظف · الخصم الشهري {money(loan.data?.monthly_deduction||loan.data?.installment_amount||0)} ر.س · بدء الجدولة {loan.data?.first_month||'—'}</small>}
     {loan.status==='paid'&&<button type="button" onClick={()=>{setAdvanceManager(null);setLinkedFinance({kind:'repayments',parentId:loan.id,amount:'',date:saudiDate(),reference:'',method:'cash',travel_amount:'0',other_amount:'0',deductions:'0',notes:''})}}>سداد / السجل</button>}
-    {loan.status!=='draft'&&<small>معتمد/قيد إجراء — لا يُحذف</small>}
+    {!canAmendLoan(loan)&&<small>يتطلب صلاحية المدير العام أو تسوية مالية</small>}
    </div></td></tr>)}</tbody></table></div>}
   {advanceManager.mode==='delete'&&!canRemove&&<p className="footnote">حذف المسودات يتطلب صلاحية المدير العام أو شؤون الموظفين وصلاحية التعديل.</p>}
  </section></div>;
