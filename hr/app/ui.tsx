@@ -1174,7 +1174,9 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  </tbody></table></div>
  </section>}
 {module==='overview'&&(()=>{
- const activeEmployeeRows=scoped.filter(r=>r.module==='employees'&&!r.data?._archived&&!r.data?._deleted);
+ const allDashboardEmployees=rows.filter(r=>r.module==='employees'&&!r.data?._archived&&!r.data?._deleted);
+ const dashboardWorkCompany=r=>canonicalCompany(r.data?.working_company||r.company);
+ const activeEmployeeRows=allDashboardEmployees.filter(r=>!company||dashboardWorkCompany(r)===canonicalCompany(company));
  const isActive=r=>['active','نشط','على رأس العمل','علي راس العمل'].includes(String(r.data?.employment_status||r.data?.employee_status||'').trim());
  const activeStaff=activeEmployeeRows.filter(isActive).length;
  const approvedLeaves=scoped.filter(r=>r.module==='leave'&&r.status==='approved'&&!r.data?._deleted).length;
@@ -1186,7 +1188,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  const periodPayroll=scoped.filter(r=>r.module==='payroll'&&r.data?.month===currentPeriod&&!r.data?.excluded&&!r.data?._deleted);
  const currentPayrollNet=periodPayroll.reduce((total,r)=>total+Number(r.data?.net||0),0);
  const outstandingApprovals=scoped.filter(r=>!r.data?._deleted&&(r.module==='advances'&&['approved','finance_approved'].includes(r.status)||['leave','advances','resignations','terminations','leave_dues','payroll_batches'].includes(r.module)&&['project_manager','projects_director','hr','finance','manager_review','projects_review','finance_review','finance_approved'].includes(r.status))).length;
- const companyStats=companies.map(c=>{const list=scoped.filter(r=>r.company===c&&!r.data?._deleted);const emp=list.filter(r=>r.module==='employees'&&!r.data?._archived);return {name:c,total:emp.length,active:emp.filter(isActive).length,leaves:list.filter(r=>r.module==='leave'&&r.status==='approved').length,advances:list.filter(r=>r.module==='advances'&&['approved','finance_approved'].includes(r.status)&&!r.data?.paid_at).length};}).filter(x=>x.total||x.leaves||x.advances);
+ const companyStats=[...companies,'غير محددة'].filter(c=>!company||canonicalCompany(company)===canonicalCompany(c)).map(c=>{const list=scoped.filter(r=>canonicalCompany(r.company)===canonicalCompany(c)&&!r.data?._deleted);const emp=allDashboardEmployees.filter(r=>dashboardWorkCompany(r)===canonicalCompany(c));const sponsored=allDashboardEmployees.filter(r=>canonicalCompany(r.company)===canonicalCompany(c)&&String(r.data?.sponsorship||'').trim()==='yes');return {name:c,total:emp.length,sponsored:sponsored.length,active:emp.filter(isActive).length,leaves:list.filter(r=>r.module==='leave'&&r.status==='approved').length,advances:list.filter(r=>r.module==='advances'&&['approved','finance_approved'].includes(r.status)&&!r.data?.paid_at).length};}).filter(x=>x.total||x.sponsored||x.leaves||x.advances||company===x.name);
  const cards=[['الموظفون المسجلون',activeEmployeeRows.length,'نشط: '+activeStaff,Users,'employees'],['الإجازات المعتمدة',approvedLeaves,'طلبات إجازة',CalendarDays,'leave'],['السلف قيد الصرف',openAdvances.length,'رصيد السلف المصروفة: '+money(outstanding)+' ر.س',Wallet,'advances'],['طلبات تنتظر إجراء',outstandingApprovals,'لا تشمل المسودات',FileText,'pending_requests'],['صافي مسير الشهر',money(currentPayrollNet)+' ر.س',currentPeriod+' · '+periodBatches.length+' مسير',ChartNoAxesCombined,'payroll']];
  return <div dir="rtl" className="executive-dashboard" style={{display:'grid',gap:16,width:'100%',alignContent:'start'}}>
  <section className="panel" style={{padding:18,borderRadius:13,border:'1px solid #e3d7bc'}}>
@@ -1203,13 +1205,13 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
  </section>
  <section className="panel dashboard-company-summary" style={{padding:18,width:'100%',border:'1px solid #e3d7bc',borderRadius:13}}>
   <div className="panel-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10,marginBottom:12}}>
-   <div><h2 style={{margin:0}}>ملخص الشركات</h2><small>مؤشرات مختصرة بحسب الشركة المختارة · اضغط اسم الشركة لعرض بياناتها</small></div>
+   <div><h2 style={{margin:0}}>ملخص الشركات</h2><small>الموظفون حسب الشركة التي يعملون بها · الموظفون على الكفالة حسب شركة السجل وحالة الكفالة نعم · اضغط اسم الشركة لتصفية المؤشرات</small></div>
    <span style={{padding:'5px 12px',background:'#f7efda',color:'#816321',borderRadius:20,fontSize:12,fontWeight:700}}>{companyStats.length} شركة ذات بيانات</span>
   </div>
   <div style={{overflowX:'auto',border:'1px solid #e9dfc9',borderRadius:10}}>
    <table style={{width:'100%',borderCollapse:'collapse',textAlign:'right'}}>
-    <thead><tr style={{background:'#f8f3e7'}}><th>الشركة</th><th>الموظفون</th><th>النشطون</th><th>الإجازات المعتمدة</th><th>السلف قيد الصرف</th></tr></thead>
-    <tbody>{companyStats.map(c=><tr key={c.name}><td><button type="button" onClick={()=>setCompany(c.name)} style={{fontWeight:700,color:'#795b21',background:'transparent',border:'none',cursor:'pointer',padding:'5px 2px'}}>{companyDisplayName(c.name)}</button></td><td>{c.total}</td><td>{c.active}</td><td>{c.leaves}</td><td>{c.advances}</td></tr>)}{!companyStats.length&&<tr><td colSpan={5} style={{padding:20,textAlign:'center',color:'#77847b'}}>لا توجد بيانات ضمن نطاق الشركة المختارة.</td></tr>}</tbody>
+    <thead><tr style={{background:'#f8f3e7'}}><th>الشركة</th><th>الموظفون</th><th>الموظفون على الكفالة</th><th>النشطون</th><th>الإجازات المعتمدة</th><th>السلف قيد الصرف</th></tr></thead>
+    <tbody>{companyStats.map(c=><tr key={c.name}><td><button type="button" onClick={()=>setCompany(c.name)} style={{fontWeight:700,color:'#795b21',background:'transparent',border:'none',cursor:'pointer',padding:'5px 2px'}}>{companyDisplayName(c.name)}</button></td><td>{c.total}</td><td>{c.sponsored}</td><td>{c.active}</td><td>{c.leaves}</td><td>{c.advances}</td></tr>)}{!companyStats.length&&<tr><td colSpan={6} style={{padding:20,textAlign:'center',color:'#77847b'}}>لا توجد بيانات ضمن نطاق الشركة المختارة.</td></tr>}</tbody>
    </table>
   </div>
  </section>
@@ -1410,7 +1412,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
     const sumAdvanceAmounts=list=>list.reduce((sum,advance)=>sum+Math.round(Number(advance.data?.amount||0)*100),0)/100;
     const totalRegistered=sumAdvanceAmounts(loans);
     const awaitingApproval=sumAdvanceAmounts(loans.filter(advance=>!['paid','approved','finance_approved'].includes(advance.status)));
-    const pendingAmount=sumAdvanceAmounts(pendingDisbursement);
+    const pendingAmount=pendingDisbursement.reduce((sum,advance)=>sum+Math.round(Number(advance.data?.amount||0)*100),0)/100;
     const loanIds=new Set(issued.map(advance=>advance.id));
     const settled=allRepayments.filter(payment=>loanIds.has(payment.data?.advance_id)&&!payment.data?._deleted);
     const totalIssued=issued.reduce((sum,advance)=>sum+Number(advance.data?.amount||0),0);
