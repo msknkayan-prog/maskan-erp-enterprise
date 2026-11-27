@@ -116,7 +116,7 @@ test('Magdi onboarding and project approval preserve the general manager role in
 
 test('all approved direct managers are selectable before login identities are created',()=>{
  const options=employeeDirectManagerOptions([],[],'مسكن الكيان');
- assert.equal(options.filter(option=>option.key.startsWith('roster:')).length,7);
+ assert.equal(options.filter(option=>option.key.startsWith('roster:')).length,8);
  for(const name of ['م مجدي محجوب','أ. عثمان محمد أحمد','م محمد يوسف','م. أمجد فؤاد']){
   assert.ok(options.some(option=>normalizeManagerName(option.name)===normalizeManagerName(name)),name);
  }
@@ -609,13 +609,14 @@ test('monthly payroll stores salary-charged company and project cost center inde
  const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
  assert.match(ui,/aria-label="شركة تحميل الراتب في المسير"/);
  assert.match(ui,/aria-label="مركز تكلفة المشروع في المسير"/);
- assert.match(ui,/cycleEdit\.data\.cost_company/);
+ assert.match(ui,/cycleEdit\.data\.working_company/);
  assert.match(ui,/const cycleCostProjectName=\(id,fallback=''/);
  assert.match(ui,/aria-label="مركز تكلفة المشروع في المسير" type="text" readOnly/);
  assert.match(ui,/<th>أيام الاستحقاق<\/th>/);
  assert.match(ui,/<th>خصم الغياب<\/th>/);
  assert.match(ui,/استحقاق الحضور في المسير/);
- assert.match(ui,/cost_company:co,cost_project_id:valid\?current:''/);
+ assert.match(ui,/const cost_company=canonicalCompany\(row\.data\.working_company\|\|row\.company\)/);
+ assert.match(ui,/const cyclePaymentSources=Object\.values/);
  assert.match(ui,/شركة تحميل الراتب/);
  assert.match(ui,/مركز تكلفة المشروع/);
  assert.match(ui,/const cycleCostBreakdown=Object\.values/);
@@ -625,7 +626,7 @@ test('monthly payroll stores salary-charged company and project cost center inde
  assert.match(backend,/const cost_company=canonicalCompany/);
  assert.match(backend,/!companies\.includes\(cost_company\)\|\|!allowed\(u,cost_company\)/);
  assert.match(backend,/if\(!costProject\)throw Error/);
- assert.match(backend,/costProject\.company!==cost_company/);
+ assert.match(backend,/canonicalCompany\(costProject\.company\)!==cost_company/);
  assert.match(backend,/managerEditing&&cost_project_id!==String\(old\.cost_project_id\|\|old\.project_id\|\|''\)/);
  assert.match(backend,/const data=\{\.\.\.old,cost_company,cost_project_id,basic/);
  assert.doesNotMatch(backend,/UPDATE records SET company=\?/);
@@ -634,11 +635,12 @@ test('monthly payroll stores salary-charged company and project cost center inde
 test('payroll allocation cannot be changed by project managers and is validated before submission',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
- assert.match(ui,/aria-label="شركة تحميل الراتب في المسير" required disabled=\{user\?\.role==='project_manager'\}/);
+ assert.match(ui,/aria-label="شركة تحميل الراتب في المسير" readOnly/);
  assert.match(backend,/managerEditing&&cost_company!==canonicalCompany\(old\.cost_company\|\|batch\.company\)/);
- assert.match(backend,/const chargedCompany=canonicalCompany\(e\.data\.cost_company\|\|batch\.company\)/);
+ assert.match(backend,/const chargedCompany=canonicalCompany\(e\.data\.working_company\|\|batch\.company\)/);
+ assert.match(backend,/canonicalCompany\(e\.data\.cost_company\|\|batch\.company\)!==chargedCompany/);
  assert.match(backend,/if\(!chargedProject\)throw Error/);
- assert.match(backend,/chargedProject\.company!==chargedCompany/);
+ assert.match(backend,/canonicalCompany\(chargedProject\.company\)!==chargedCompany/);
 });
 
 test('air conditioning department is selectable for employees and project managers',()=>{
@@ -2141,9 +2143,10 @@ test('project manager editor shows selected name and preserves registered accoun
  assert.match(erp,/if\(recordData&&String\(recordData\.email/);
  assert.match(erp,/لا يمكن تغيير حساب مدير مشروع مسجل إلى حساب آخر/);
 });
-test('seven approved project managers are selectable without duplicating Othman',async()=>{
+test('eight approved project managers are selectable without duplicating Othman',async()=>{
  const {preferredProjectManagers,preferredManagerForName,suggestedProjectsForManager}=await import('../lib/project-manager-roster.mjs');
- assert.deepEqual(preferredProjectManagers.map(p=>p.name),['م محمداحمد','م الهادي الرحيمة','م محمد يوسف','أ مصعب عبد القيوم','م مجدي محجوب','أ. عثمان محمد أحمد','م. أمجد فؤاد']);
+ assert.deepEqual(preferredProjectManagers.map(p=>p.name),['م محمداحمد','م الهادي الرحيمة','م محمد يوسف','أ مصعب عبد القيوم','م مجدي محجوب','أ. عثمان محمد أحمد','م محمد إسماعيل','م. أمجد فؤاد']);
+ assert.equal(preferredManagerForName('م محمد اسماعيل')?.id,'mohamed_ismail');
  assert.equal(preferredManagerForName('أ.عثمان محمداحمد')?.id,'othman');
  assert.equal(preferredManagerForName('م امجد فؤاد')?.id,'amjad_fouad');
  for(const name of ['م محمد أحمد','م الهادي الرحمة','م الهادي الرحيمة','أ.مصعب عبد القيوم','أ عثمان محمد أحمد'])assert.ok(preferredManagerForName(name),name);
