@@ -8,6 +8,25 @@ import {isAuthorizedProjectManagerAccount,magdiProjectManagerName} from './proje
 import {calculateScheduledAdvances} from '../lib/payroll-advance-schedule.mjs';
 import {salaryAbsenceDeduction} from '../lib/payroll-attendance.mjs';
 import {payrollAttendanceForSalary} from '../lib/payroll-month-bridges.mjs';
+async function validatedProjectAllocation(db,raw,primary,company){
+ const items=raw==null?[{project_id:primary,percent:100}]:raw;
+ if(!Array.isArray(items)||items.length<1||items.length>100)throw Error('حدد توزيع تكلفة الراتب على مشروع أو أكثر');
+ let total=0;const seen=new Set(),result=[];
+ for(const item of items){
+  const id=String(item?.project_id||'').trim(),percent=Number(item?.percent);
+  const bp=Math.round(percent*100);
+  if(!id||seen.has(id)||!Number.isFinite(percent)||bp<=0||bp>10000||Math.abs(percent*100-bp)>1e-6)throw Error('يجب اختيار مشاريع مختلفة ونسب موجبة بدقة منزلتين عشريتين');
+  seen.add(id);total+=bp;
+  const project=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(id).first();
+  if(!project)throw Error('أحد مشاريع توزيع التكلفة غير موجود');
+  const d=JSON.parse(project.data||'{}');
+  if(d._deleted||d._archived||!(canonicalCompany(project.company)===company||Array.isArray(d._shared_companies)&&d._shared_companies.some(c=>canonicalCompany(c)===company)))throw Error('جميع مشاريع توزيع التكلفة يجب أن تتبع شركة العمل');
+  result.push({project_id:id,percent:bp/100});
+ }
+ if(total!==10000)throw Error('يجب أن يساوي مجموع نسب توزيع التكلفة 100%');
+ return result;
+}
+
 const response=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 const err=(message,status=400)=>response({error:message},status);
 const cents=x=>Math.round(Number(x||0)*100);
@@ -338,6 +357,7 @@ export async function POST(req){
    const costProjectData=JSON.parse(costProject.data||'{}');
    if(costProjectData._deleted||costProjectData._archived||canonicalCompany(costProject.company)!==cost_company&&!(Array.isArray(costProjectData._shared_companies)&&costProjectData._shared_companies.some(c=>canonicalCompany(c)===cost_company)))throw Error('المشروع لا يتبع شركة العمل؛ اختر مشروعاً صحيحاً في سجل الموظف');
    if(managerEditing&&cost_project_id!==String(old.cost_project_id||old.project_id||''))return err('تغيير مركز تكلفة المشروع من صلاحية إعداد المسير؛ يمكن لمدير المشروع مراجعة تكليف موظفيه فقط',403);
+   const cost_allocations=await validatedProjectAllocation(db,input.cost_allocations??old.cost_allocations,cost_project_id,cost_company);
    const basic=amount(input.basic,'الراتب الأساسي');
    const housing=amount(input.housing,'بدل السكن');
    const transport=amount(input.transport,'بدل النقل');
@@ -361,7 +381,7 @@ export async function POST(req){
    if(cents(cash_amount)+cents(bank_amount)!==cents(net))throw Error('إجمالي الكاش والتحويل يجب أن يساوي صافي الراتب');
    const exception_note=String(input.exception_note||'').trim().slice(0,1000);
    if(old.needs_review&&!exception_note)throw Error('الموظف غير النشط يحتاج توضيح قرار إدراجه في مسير الرواتب');
-   const data={...old,cost_company,cost_project_id,basic,housing,transport,salary,bonus,extra_allowance,overtime_hours,absence_days,overtime,absence_deduction,advance_deduction,advance_allocations,deductions,net,cash_amount,bank_amount,split_confirmed:true,exception_note,notes:String(input.notes||'').slice(0,2000),method:cash_amount&&bank_amount?'mixed':cash_amount?'cash':'bank',reviewed_by:u.email,reviewed_at:now,manager_reviewed:managerEditing?true:false,manager_notes:managerEditing?String(input.manager_notes||'').trim().slice(0,2000):old.manager_notes||'',manager_reviewed_by:managerEditing?u.email:null,manager_reviewed_at:managerEditing?now:null};
+   const data={...old,cost_company,cost_project_id,cost_allocations,basic,housing,transport,salary,bonus,extra_allowance,overtime_hours,absence_days,overtime,absence_deduction,advance_deduction,advance_allocations,deductions,net,cash_amount,bank_amount,split_confirmed:true,exception_note,notes:String(input.notes||'').slice(0,2000),method:cash_amount&&bank_amount?'mixed':cash_amount?'cash':'bank',reviewed_by:u.email,reviewed_at:now,manager_reviewed:managerEditing?true:false,manager_notes:managerEditing?String(input.manager_notes||'').trim().slice(0,2000):old.manager_notes||'',manager_reviewed_by:managerEditing?u.email:null,manager_reviewed_at:managerEditing?now:null};
    const res=await db.batch([db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND module='payroll' AND EXISTS(SELECT 1 FROM records b WHERE b.id=? AND b.status=?)")
     .bind(JSON.stringify(data),now,mutation,employee.id,employee.revision,batch.id,batch.status),
     db.prepare("INSERT INTO audit(id,actor,record_id,action,at,details) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),u.email,employee.id,'payroll_employee_edit',now,JSON.stringify({batch_id:batch.id,month:batch.data.month,cost_company,cost_project_id,previous_cost_company:old.cost_company||batch.company,previous_cost_project_id:old.cost_project_id||old.project_id||''}))]);
@@ -413,6 +433,7 @@ export async function POST(req){
     if(!chargedProject)throw Error('مركز تكلفة مشروع أحد الموظفين غير موجود');
     const chargedData=JSON.parse(chargedProject.data||'{}');
     if(chargedData._deleted||chargedData._archived||(canonicalCompany(chargedProject.company)!==chargedCompany&&!(Array.isArray(chargedData._shared_companies)&&chargedData._shared_companies.some(c=>canonicalCompany(c)===chargedCompany))))throw Error('مركز تكلفة مشروع أحد الموظفين لا يتبع شركة عمله');
+    await validatedProjectAllocation(db,e.data.cost_allocations,chargedProjectId,chargedCompany);
      // Director approval validates payroll and cost allocation without a manager approval.
    }
   }else if(action==='finance_pay'){
