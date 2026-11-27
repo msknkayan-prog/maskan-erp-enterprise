@@ -321,18 +321,22 @@ export async function POST(req){
    const input=body.data||{},old=employee.data;
    // Payroll cost allocation is independent of the employee's legal employer
    // (records.company) and of the project used to route manager approvals.
-   const cost_company=canonicalCompany(input.cost_company||old.cost_company||batch.company);
+   const cost_company=canonicalCompany(old.working_company||batch.company);
+   if(cost_company!==canonicalCompany(batch.company))throw Error('شركة العمل لا تطابق شركة المسير؛ راجع سجل الموظف');
+   if(input.cost_company&&canonicalCompany(input.cost_company)!==cost_company)throw Error('تحمل تكلفة الراتب كاملة على شركة العمل فقط');
    if(!companies.includes(cost_company)||!allowed(u,cost_company))return err('شركة تحميل الراتب خارج نطاق الصلاحيات أو غير مسجلة',403);
    if(managerEditing&&cost_company!==canonicalCompany(old.cost_company||batch.company))return err('تغيير شركة تحميل الراتب من صلاحية إعداد المسير فقط',403);
-   const linkedEmployee=await db.prepare("SELECT data FROM records WHERE id=? AND module='employees'").bind(old.employee_id).first();
-   const assignedProjectId=String(linkedEmployee?JSON.parse(linkedEmployee.data||'{}').project_id||'':old.project_id||'').trim();
+   const linkedEmployee=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='employees'").bind(old.employee_id).first();
+   const employeeMaster=linkedEmployee?JSON.parse(linkedEmployee.data||'{}'):null;
+   if(!employeeMaster||canonicalCompany(employeeMaster.working_company||linkedEmployee.company)!==cost_company)throw Error('راجع شركة العمل الحالية في سجل الموظف قبل مراجعة المسير');
+   const assignedProjectId=String(employeeMaster.project_id||'').trim();
    const cost_project_id=assignedProjectId;
    if(String(input.cost_project_id||assignedProjectId).trim()!==assignedProjectId)throw Error('مركز التكلفة مرتبط بمشروع الموظف؛ صحّح المشروع في سجل الموظفين أولًا');
    if(!cost_project_id)throw Error('حدد مركز تكلفة المشروع الذي سيتحمل الراتب');
    const costProject=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(cost_project_id).first();
    if(!costProject)throw Error('مركز تكلفة المشروع غير موجود في سجل المشاريع');
    const costProjectData=JSON.parse(costProject.data||'{}');
-   if(costProjectData._deleted||costProjectData._archived||costProject.company!==cost_company&&!(Array.isArray(costProjectData._shared_companies)&&costProjectData._shared_companies.includes(cost_company)))throw Error('مركز التكلفة لا يتبع شركة تحميل الراتب المختارة');
+   if(costProjectData._deleted||costProjectData._archived||canonicalCompany(costProject.company)!==cost_company&&!(Array.isArray(costProjectData._shared_companies)&&costProjectData._shared_companies.some(c=>canonicalCompany(c)===cost_company)))throw Error('المشروع لا يتبع شركة العمل؛ اختر مشروعاً صحيحاً في سجل الموظف');
    if(managerEditing&&cost_project_id!==String(old.cost_project_id||old.project_id||''))return err('تغيير مركز تكلفة المشروع من صلاحية إعداد المسير؛ يمكن لمدير المشروع مراجعة تكليف موظفيه فقط',403);
    const basic=amount(input.basic,'الراتب الأساسي');
    const housing=amount(input.housing,'بدل السكن');
@@ -401,13 +405,14 @@ export async function POST(req){
    for(const e of monthly.filter(r=>!r.data.excluded)){
     if(!e.data.split_confirmed||!Number.isFinite(Number(e.data.net))||cents(e.data.cash_amount)+cents(e.data.bank_amount)!==cents(e.data.net))throw Error('يجب مراجعة وتوزيع صافي راتب جميع الموظفين قبل الإرسال');
     if(e.data.needs_review&&!e.data.exception_note)throw Error('راجع استثناءات الموظفين غير النشطين أو اختلاف بيانات الرواتب');
-    const chargedCompany=canonicalCompany(e.data.cost_company||batch.company);
+    const chargedCompany=canonicalCompany(e.data.working_company||batch.company);
+    if(chargedCompany!==canonicalCompany(batch.company)||canonicalCompany(e.data.cost_company||batch.company)!==chargedCompany)throw Error('راجع تحميل الراتب على شركة العمل قبل إرسال المسير');
     const chargedProjectId=String(e.data.cost_project_id||'');
     if(!companies.includes(chargedCompany)||!chargedProjectId)throw Error('يجب تحديد شركة تحميل الراتب ومركز تكلفة المشروع لكل موظف قبل إرسال المسير');
     const chargedProject=await db.prepare("SELECT company,data FROM records WHERE id=? AND module='projects'").bind(chargedProjectId).first();
     if(!chargedProject)throw Error('مركز تكلفة مشروع أحد الموظفين غير موجود');
     const chargedData=JSON.parse(chargedProject.data||'{}');
-    if(chargedData._deleted||chargedData._archived||(chargedProject.company!==chargedCompany&&!(Array.isArray(chargedData._shared_companies)&&chargedData._shared_companies.includes(chargedCompany))))throw Error('مركز تكلفة مشروع أحد الموظفين لا يتبع شركة تحميل راتبه');
+    if(chargedData._deleted||chargedData._archived||(canonicalCompany(chargedProject.company)!==chargedCompany&&!(Array.isArray(chargedData._shared_companies)&&chargedData._shared_companies.some(c=>canonicalCompany(c)===chargedCompany))))throw Error('مركز تكلفة مشروع أحد الموظفين لا يتبع شركة عمله');
      // Director approval validates payroll and cost allocation without a manager approval.
    }
   }else if(action==='finance_pay'){
