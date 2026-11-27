@@ -2789,3 +2789,18 @@ test('payroll project allocation is validated at review and approval and apporti
  assert.match(backend,/await validatedProjectAllocation\(db,e\.data\.cost_allocations/);
  assert.match(backend,/if\(total!==10000\)throw Error/);
 });
+
+test('iqama dashboard and register agree on expiry today, the 30-day boundary and expired records', async () => {
+ const {matchesIqamaFilter} = await import('../lib/iqama-expiry.mjs');
+ const today = '2026-11-27';
+ const employee = iqama_expiry => ({data: {iqama_expiry}});
+ for (const date of ['2026-11-27', '2026-12-27']) {
+  assert.equal(matchesIqamaFilter(employee(date), 'due_soon', today), true);
+  assert.equal(matchesIqamaFilter(employee(date), 'expired', today), false);
+ }
+ assert.equal(matchesIqamaFilter(employee('2026-11-26'), 'expired', today), true);
+ for (const date of ['2026-11-26', '2026-12-28', '2026-11-31', '']) {
+  assert.equal(matchesIqamaFilter(employee(date), 'due_soon', today), false);
+ }
+ assert.equal(matchesIqamaFilter({data: {iqama_expiry: today, _deleted: true}}, 'due_soon', today), false);
+});
