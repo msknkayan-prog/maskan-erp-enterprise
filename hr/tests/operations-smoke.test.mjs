@@ -2659,7 +2659,9 @@ test('employee forms show immutable automatically generated numbers and preserve
  const modules=readFileSync(new URL('../lib/modules.mjs',import.meta.url),'utf8');
  const backendModules=readFileSync(new URL('../backend/modules.mjs',import.meta.url),'utf8');
  const api=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- assert.match(ui,/رقم النموذج: <b>\{edit.data\?\.document_no/);
+ assert.doesNotMatch(ui,/رقم النموذج: <b>\{edit.data\?\.document_no/);
+ assert.match(ui,/module!=='employees'&&!tableFields.some/);
+ assert.match(ui,/module==='employees'&&f.key==='document_no'/);
  assert.match(ui,/f.key==='document_no'\?<input type="text" readOnly/);
  assert.match(ui,/لم يتم حفظ التعديل:/);
  for(const x of [modules,backendModules])assert.match(x,/f\('document_no','رقم نموذج بيانات الموظف'\)/);
