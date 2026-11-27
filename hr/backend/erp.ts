@@ -1,22 +1,24 @@
 // @ts-nocheck
+import {leaveEntitlement,leaveBalanceCharge} from '../lib/modules.mjs';
 import {env} from './runtime.ts';
 import {currentUser} from './runtime.ts';
-import {modules,companies,normalize,workflow,canWrite,canRead,annualLeave,operationalModules,relationModules,visible,permission,saudiDate,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners} from './modules.mjs';
+import {modules,companies,normalize,workflow,canWrite,canRead,operationalModules,relationModules,visible,permission,saudiDate,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners} from './modules.mjs';
 import {isReturnEligibleLeave,employeeOnLeave} from '../lib/return-to-work.mjs';
 import {calculateScheduledAdvances,advanceCents} from '../lib/payroll-advance-schedule.mjs';
 import {returnPeriodAttendance,salaryAbsenceDeduction} from '../lib/payroll-attendance.mjs';
 import {employeeDirectManagerOptions,normalizeManagerName,magdiGeneralManagerEmail,magdiProjectManagerName,isMagdiGeneralManagerAccount,isAuthorizedProjectManagerAccount,preferredManagerForName} from './project-manager-roster.mjs';
 export const dynamic='force-dynamic';
+async function usedAnnualLeave(db:any,employeeId:string,company:string,restart:string){
+ const approved=(await db.prepare("SELECT data FROM records WHERE module='leave' AND status='approved' AND company=? AND json_extract(data,'$.employee_id')=?").bind(company,employeeId).all()).results;
+ return approved.reduce((sum:number,row:any)=>sum+leaveBalanceCharge(JSON.parse(row.data||'{}'),restart),0);
+}
 async function calculateAnnualLeaveSplit(db:any,employeeId:string,company:string,total:number){
  const record=await db.prepare("SELECT data FROM records WHERE id=? AND module='employees' AND company=?").bind(employeeId,company).first<any>();
  if(!record)throw Error('الموظف المحدد غير موجود');
  const e=JSON.parse(record.data||'{}');
- const at=e.contract_expiry_mode==='manual'&&e.contract_expiry?e.contract_expiry:saudiDate();
- const accrued=annualLeave(e.hire_date,at);
- if((e.contract_expiry_mode==='manual'||e.leave_balance_mode!=='manual')&&!accrued&&e.opening_leave_confirmed!=='yes')throw Error('أكمل تاريخ التعيين أو اعتمد رصيد الإجازات المرحّل');
- const entitled=e.contract_expiry_mode!=='manual'&&e.leave_balance_mode==='manual'?Number(e.manual_leave_entitlement||0):(accrued?.accrued||0)+(e.opening_leave_confirmed==='yes'?Number(e.opening_leave||0):0);
- const approved=(await db.prepare("SELECT data FROM records WHERE module='leave' AND status='approved' AND company=?").bind(company).all()).results;
- const used=approved.map((r:any)=>JSON.parse(r.data||'{}')).filter((d:any)=>d.employee_id===employeeId&&(d.balance_deducted??(!d.leave_type||d.leave_type==='annual'))).reduce((n:number,d:any)=>n+Number(d.paid_days??Math.max(0,Number(d.days||0)-Number(d.unpaid_days||0))),0);
+ const entitled=leaveEntitlement(e);
+ if(entitled===null)throw Error('أكمل تاريخ التعيين أو اعتمد رصيد الإجازات المرحّل');
+ const used=await usedAnnualLeave(db,employeeId,company,e.leave_restart_date);
  const available=Math.max(0,entitled-used);
  const paid=Math.min(total,Math.floor(available+1e-8)),unpaid=total-paid;
  return {paid_days:paid,unpaid_days:unpaid,leave_payment:unpaid===0?'paid':paid===0?'unpaid':'mixed',balance_deducted:paid>0,available:entitled-used};
@@ -966,7 +968,16 @@ if(mod==='leave'&&next==='approved'&&details.leave_type==='annual'){
  Object.assign(details,{paid_days:split.paid_days,unpaid_days:split.unpaid_days,leave_payment:split.leave_payment,balance_deducted:split.balance_deducted});
 }
 let balanceCondition='';let balanceArgs:any[]=[];
-if(mod==='leave'&&current==='hr'&&JSON.parse(old.data).leave_type==='sick'&&next!=='draft'&&next!=='rejected'){const count=await db.prepare('SELECT count(*) n FROM files WHERE record_id=?').bind(old.id).first<any>();if(!count?.n||body.medical_verified!==true)throw Error('تحقق من المرفق الطبي وأكّد مراجعته قبل الاعتماد');}if(mod==='leave'&&next==='approved'){const employee=await db.prepare('SELECT data FROM records WHERE id=? AND module=? AND company=?').bind(details.employee_id,'employees',old.company).first<any>();if(!employee)throw Error('الموظف غير موجود');const e=JSON.parse(employee.data);const service=annualLeave(e.hire_date,e.contract_expiry_mode==='manual'&&e.contract_expiry?e.contract_expiry:saudiDate());const leaves=(await db.prepare("SELECT data FROM records WHERE module='leave' AND status='approved' AND company=?").bind(old.company).all()).results;const used=leaves.map((r:any)=>JSON.parse(r.data)).filter((d:any)=>d.employee_id===details.employee_id&&(d.balance_deducted??(!d.leave_type||d.leave_type==='annual'))).reduce((n:number,d:any)=>n+Number(d.paid_days??d.days),0);if(details.balance_deducted??(!details.leave_type||details.leave_type==='annual')){if((e.contract_expiry_mode==='manual'||e.leave_balance_mode!=='manual')&&!service&&e.opening_leave_confirmed!=='yes')throw Error('استكمل تاريخ التعيين أو اعتمد رصيد الإجازة المرحّل');const available=e.contract_expiry_mode!=='manual'&&e.leave_balance_mode==='manual'?Number(e.manual_leave_entitlement||0):(service?.accrued||0)+(e.opening_leave_confirmed==='yes'?Number(e.opening_leave||0):0);const charge=Number(details.paid_days??details.days);if(charge>available-used)throw Error('رصيد الإجازة غير كاف');balanceCondition=" AND (COALESCE((SELECT SUM(CAST(COALESCE(json_extract(data,'$.paid_days'),json_extract(data,'$.days')) AS REAL)) FROM records WHERE module='leave' AND status='approved' AND json_extract(data,'$.employee_id')=? AND coalesce(json_extract(data,'$.balance_deducted'),CASE WHEN coalesce(json_extract(data,'$.leave_type'),'annual')='annual' THEN 1 ELSE 0 END)=1),0)+?<=?)";balanceArgs=[details.employee_id,charge,available];}}
+if(mod==='leave'&&current==='hr'&&JSON.parse(old.data).leave_type==='sick'&&next!=='draft'&&next!=='rejected'){const count=await db.prepare('SELECT count(*) n FROM files WHERE record_id=?').bind(old.id).first<any>();if(!count?.n||body.medical_verified!==true)throw Error('تحقق من المرفق الطبي وأكّد مراجعته قبل الاعتماد');}if(mod==='leave'&&next==='approved'){const employee=await db.prepare('SELECT data FROM records WHERE id=? AND module=? AND company=?').bind(details.employee_id,'employees',old.company).first<any>();if(!employee)throw Error('الموظف غير موجود');const e=JSON.parse(employee.data);if(details.balance_deducted??(!details.leave_type||details.leave_type==='annual')){
+ const available=leaveEntitlement(e);
+ if(available===null)throw Error('استكمل تاريخ التعيين أو اعتمد رصيد الإجازة المرحّل');
+ const restart=e.leave_restart_date||'';
+ const used=await usedAnnualLeave(db,details.employee_id,old.company,restart);
+ const charge=leaveBalanceCharge(details,restart);
+ if(charge>available-used)throw Error('رصيد الإجازة غير كاف');
+ balanceCondition=` AND (COALESCE((SELECT SUM(GREATEST(0,COALESCE(CAST(json_extract(data,'$.paid_days') AS NUMERIC),COALESCE(CAST(json_extract(data,'$.days') AS NUMERIC),0)-COALESCE(CAST(json_extract(data,'$.unpaid_days') AS NUMERIC),0)))) FROM records WHERE module='leave' AND status='approved' AND company=? AND json_extract(data,'$.employee_id')=? AND COALESCE(json_extract(data,'$._deleted'),'false') NOT IN ('true','1') AND COALESCE(json_extract(data,'$.balance_deducted'),CASE WHEN COALESCE(json_extract(data,'$.leave_type'),'annual')='annual' THEN 1 ELSE 0 END)=1 AND COALESCE(NULLIF(json_extract(data,'$.end'),''),?)>=?),0)+?<=?)`;
+ balanceArgs=[old.company,details.employee_id,restart,restart,charge,available];
+}}
 const result=await db.batch([db.prepare('UPDATE records SET status=?,data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=?'+balanceCondition).bind(next,JSON.stringify(details),now,mutation,old.id,old.revision,...balanceArgs),db.prepare('INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)').bind(crypto.randomUUID(),u.email,old.id,'transition',now,JSON.stringify({from:current,to:next,note:String(body.note||'').slice(0,2000)}),old.id,mutation)]);if(!result[0].meta.changes)throw Error('تغير السجل أو الرصيد؛ حدّث الصفحة وأعد المحاولة');return json({ok:true});}
 if(mod==='employees'&&['archive_employee','restore_employee'].includes(body.action)){
  if(!permittedWrite(u,'employees')||!permission(u,'employees','edit')||!['admin','hr'].includes(u.role))throw Error('403');
@@ -999,6 +1010,12 @@ if(!permittedWrite(u,mod)||!permission(u,mod,'edit'))throw Error('403');if(old&&
 if(mod==='employees'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 if(mod==='projects'&&!old)body.data={...(body.data||{}),code:'AUTO'};
 const data={...(previous||{}),...normalize(mod,body)};
+if(mod==='employees'&&previous&&!Object.hasOwn(body.data||{},'leave_restart_date'))data.leave_restart_date=previous.leave_restart_date||'';
+if(mod==='employees' && (data.leave_restart_date||'')!==(previous?.leave_restart_date||'')){
+ if(u.role!=='admin')throw Error('تعديل تاريخ تسوية الإجازة من صلاحيات المدير العام');
+ const date=data.leave_restart_date;
+ if(date&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date||!data.hire_date||date<data.hire_date||date>saudiDate()))throw Error('أدخل تاريخ تسوية صحيحًا بين تاريخ التعيين واليوم');
+}
 if(mod==='appointments'&&!data.employee_id)throw Error('اختر الموظف الموجود أو استخدم خيار تعيين موظف جديد لإنشاء سجل الموظف تلقائيًا');
 if(mod==='employees'&&!old){data.opening_leave='0';data.opening_leave_confirmed='no';}
 if(mod==='employees'&&old&&previous?.opening_leave_confirmed==='yes'&&!Object.prototype.hasOwnProperty.call(body.data||{},'opening_leave')){data.opening_leave=previous.opening_leave;data.opening_leave_confirmed='yes';}

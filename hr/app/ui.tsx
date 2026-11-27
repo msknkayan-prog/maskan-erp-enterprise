@@ -1355,12 +1355,12 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   </label>
   <section style={{gridColumn:'1 / -1',padding:10,border:'1px solid #d9c6a0',borderRadius:8}}>
   <strong>توزيع تكلفة الراتب على المشاريع</strong>
-  {(()=>{const parts=projectAllocationParts(cycleEdit.data),multi=parts.length>1,update=next=>setCycleEdit(p=>({...p,data:{...p.data,cost_allocations:next}})),total=parts.reduce((n,p)=>n+Number(p.percent||0),0);return <>
+  {(()=>{const parts=projectAllocationParts(cycleEdit.data),multi=parts.length>1,update=next=>setCycleEdit(p=>({...p,data:{...p.data,cost_allocations:next}})),total=parts.reduce((n,p)=>n+Number(p.percent||0),0),valid=validProjectAllocation(parts),amounts=valid?apportionCost(cycleSalarySummary(cycleEdit.data).gross,parts):[];return <>
   <div style={{margin:'8px 0'}}><button type="button" onClick={()=>update([{project_id:cycleEdit.data.cost_project_id,percent:100}])}>مشروع الموظف 100%</button> <button type="button" disabled={parts.length>=Math.min(100,cycleCostProjectOptions.length)} onClick={()=>update([...parts,{project_id:'',percent:0}])}>إضافة مشروع</button></div>
   {parts.map((part,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr auto',gap:6,alignItems:'center',marginBottom:6}}>
   <select aria-label={'مشروع توزيع التكلفة '+(i+1)} value={part.project_id} onChange={e=>update(parts.map((v,j)=>i===j?{...v,project_id:e.target.value}:v))}><option value="">اختر المشروع</option>{cycleCostProjectOptions.filter(r=>r.id===part.project_id||!parts.some(p=>p.project_id===r.id)).map(r=><option key={r.id} value={r.id}>{r.data.name} · {r.data.code||r.code||''}</option>)}</select>
   <input aria-label={'نسبة المشروع '+(i+1)} type="number" min="0.01" max="100" step="0.01" value={part.percent} onChange={e=>update(parts.map((v,j)=>i===j?{...v,percent:e.target.value}:v))}/>
-  <span>{money(cycleSalarySummary(cycleEdit.data).gross*Number(part.percent||0)/100)} ر.س</span>
+  <span>{valid?money(amounts[i])+' ر.س':'—'}</span>
   <button type="button" disabled={!multi} onClick={()=>update(parts.filter((v,j)=>i!==j))}>حذف</button></div>)}
   <strong style={{color:validProjectAllocation(parts)?'#226b40':'#a32a22'}}>مجموع النسب: {money(total)}%</strong>
   </>})()}

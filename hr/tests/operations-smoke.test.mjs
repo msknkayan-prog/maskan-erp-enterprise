@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
-import {companies,modules,normalize,annualLeave,leaveAccrualAsOf,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners,visible} from '../lib/modules.mjs';
+import {companies,modules,normalize,annualLeave,leaveAccrualAsOf,leaveEntitlement,enumOptions,canRead,canWrite,permissionChoice,permittedRead,permittedWrite,isRequestStageActor,isRequestFinanceActor,requestApprovalOwners,visible} from '../lib/modules.mjs';
 
 test('leave and advance approval follows the four named accounts without changing member roles',()=>{
  const magdi={email:requestApprovalOwners.projects_director.email,role:'admin',is_active:true};
@@ -135,8 +135,8 @@ test('manager names from company projects and employees merge without duplicates
  const options=employeeDirectManagerOptions(records,members,'مسكن الكيان');
  assert.equal(options.filter(x=>x.key==='roster:magdi').length,1);
  assert.equal(options.find(x=>x.key==='roster:magdi').email,'');
- assert.equal(options.find(x=>x.key==='name:محمداسماعيل').email,'ismail@example.com');
- assert.equal(options.find(x=>x.key==='name:محمداسماعيل').directory_id,'directory1');
+ assert.equal(options.find(x=>x.key==='roster:mohamed_ismail').email,'ismail@example.com');
+ assert.equal(options.find(x=>x.key==='roster:mohamed_ismail').directory_id,'directory1');
  assert.ok(!options.some(x=>x.name==='مدير شركة أخرى'));
 });
 
@@ -2195,7 +2195,7 @@ test('integrated financial screens keep one linked record per leave and never pa
  assert.match(ui,/مستحقات الإجازة المرتبطة بالطلب/);
  assert.match(server,/data.days=Math.max\(0,paidDays\)/);
  assert.match(server,/مستحقات هذه الإجازة مسجلة بالفعل/);
- assert.match(server,/SUM\(CAST\(COALESCE\(json_extract\(data,'\$\.paid_days'\),json_extract\(data,'\$\.days'\)\)/);
+ assert.match(server,/SUM\(GREATEST\(0,COALESCE\(CAST\(json_extract\(data,'\$\.paid_days'\)/);
  assert.match(server,/السداد يتجاوز الرصيد المتبقي/);
 });
 
@@ -2220,8 +2220,10 @@ test('employee leave entitlement and contract expiration honor explicit automati
 test('manual leave entitlement is honored consistently in UI and backend final-approval balance check',()=>{
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const server=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
- assert.ok(ui.includes("d.contract_expiry_mode!=='manual'&&d.leave_balance_mode==='manual'?Number(d.manual_leave_entitlement||0)"));
- assert.ok(server.includes("e.contract_expiry_mode!=='manual'&&e.leave_balance_mode==='manual'?Number(e.manual_leave_entitlement||0)"));
+ assert.match(ui,/const entitled=leaveEntitlement\(d\)/);
+ assert.match(server,/const entitled=leaveEntitlement\(e\)/);
+ assert.match(server,/const available=leaveEntitlement\(e\)/);
+ assert.match(server,/leaveBalanceCharge\(details,restart\)/);
  assert.match(ui,/طريقة تحديد انتهاء العقد/);
 });
 
@@ -2343,7 +2345,7 @@ test('V86 annual leave automatically splits paid days and unpaid days in UI and 
  assert.match(backend,/async function calculateAnnualLeaveSplit/);
  assert.match(backend,/if\(mod==='leave'&&next==='approved'&&details\.leave_type==='annual'\)/);
  assert.match(backend,/if\(mod==='leave'&&data\.leave_type==='annual'\)/);
- assert.match(backend,/contract_expiry_mode==='manual'/);
+ assert.match(backend,/leaveEntitlement\(e\)/);
  assert.match(register,/leaveBalanceCharge\(item\.data,data\.leave_restart_date\)/);
  const split=(available,days)=>{const paid=Math.min(days,Math.max(0,Math.floor(available+1e-8)));return {paid,unpaid:days-paid}};
  assert.deepEqual(split(21,30),{paid:21,unpaid:9});
@@ -2359,7 +2361,8 @@ test('V87 manual contract date accrues leave from hire date, not saved manual 84
  const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
  const backend=readFileSync(new URL('../backend/erp.ts',import.meta.url),'utf8');
  assert.match(ui,/contract_expiry_mode:'manual',leave_balance_mode:'auto'/);
- assert.match(backend,/e.contract_expiry_mode!=='manual'&&e.leave_balance_mode==='manual'/);
+ assert.equal(leaveEntitlement(employee),114);
+ assert.match(backend,/leaveEntitlement\(e\)/);
 });
 
 // Regression: a return in a prior month must not rewrite the current month's payroll.
