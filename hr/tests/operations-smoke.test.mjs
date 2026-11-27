@@ -628,7 +628,7 @@ test('monthly payroll stores salary-charged company and project cost center inde
  assert.match(backend,/if\(!costProject\)throw Error/);
  assert.match(backend,/canonicalCompany\(costProject\.company\)!==cost_company/);
  assert.match(backend,/managerEditing&&cost_project_id!==String\(old\.cost_project_id\|\|old\.project_id\|\|''\)/);
- assert.match(backend,/const data=\{\.\.\.old,cost_company,cost_project_id,basic/);
+ assert.match(backend,/const data=\{\.\.\.old,cost_company,cost_project_id,cost_allocations,basic/);
  assert.doesNotMatch(backend,/UPDATE records SET company=\?/);
 });
 
@@ -2344,7 +2344,7 @@ test('V86 annual leave automatically splits paid days and unpaid days in UI and 
  assert.match(backend,/if\(mod==='leave'&&next==='approved'&&details\.leave_type==='annual'\)/);
  assert.match(backend,/if\(mod==='leave'&&data\.leave_type==='annual'\)/);
  assert.match(backend,/contract_expiry_mode==='manual'/);
- assert.match(register,/Number\(item\.data\.paid_days/);
+ assert.match(register,/leaveBalanceCharge\(item\.data,data\.leave_restart_date\)/);
  const split=(available,days)=>{const paid=Math.min(days,Math.max(0,Math.floor(available+1e-8)));return {paid,unpaid:days-paid}};
  assert.deepEqual(split(21,30),{paid:21,unpaid:9});
  assert.deepEqual(split(0,30),{paid:0,unpaid:30});
@@ -2766,4 +2766,23 @@ test('advance amount and installment count immediately populate monthly deductio
  assert.equal(Math.floor(Math.round(7500*100)/10)/100,750);
  assert.equal(Math.floor(Math.round(9000*100)/9)/100,1000);
  assert.equal(Math.floor(Math.round(100*100)/3)/100,33.33);
+});
+
+
+test('payroll project allocation is validated at review and approval and apportions cents exactly',()=>{
+ const ui=readFileSync(new URL('../app/ui.tsx',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../backend/payroll-cycle.ts',import.meta.url),'utf8');
+ const extract=(name,next)=>ui.slice(ui.indexOf('function '+name+'('),ui.indexOf('function '+next+'('));
+ const validate=Function(extract('validProjectAllocation','apportionCost')+';return validProjectAllocation')();
+ const apportion=Function(extract('apportionCost','salaryCompanyAllocation')+';return apportionCost')();
+ const parts=[{project_id:'a',percent:33.33},{project_id:'b',percent:33.33},{project_id:'c',percent:33.34}];
+ assert.equal(validate(parts),true);
+ assert.equal(validate([{project_id:'a',percent:99}]),false);
+ assert.equal(validate([{project_id:'a',percent:50},{project_id:'a',percent:50}]),false);
+ assert.equal(validate([{project_id:'a',percent:100},{project_id:'b',percent:0}]),false);
+ assert.equal(apportion(6000.01,parts).reduce((n,v)=>n+Math.round(v*100),0),600001);
+ assert.deepEqual(apportion(6000,[{project_id:'a',percent:60},{project_id:'b',percent:40}]),[3600,2400]);
+ assert.match(backend,/await validatedProjectAllocation\(db,input\.cost_allocations/);
+ assert.match(backend,/await validatedProjectAllocation\(db,e\.data\.cost_allocations/);
+ assert.match(backend,/if\(total!==10000\)throw Error/);
 });
