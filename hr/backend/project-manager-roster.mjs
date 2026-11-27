@@ -5,6 +5,7 @@ export const preferredProjectManagers=[
  {id:'musab',name:'أ مصعب عبد القيوم',aliases:['مصعب عبد القيوم','مصعب عبدالقيوم']},
  {id:'magdi',name:'م مجدي محجوب',aliases:['مجدي محجوب']},
  {id:'othman',name:'أ. عثمان محمد أحمد',aliases:['عثمان محمداحمد','عثمان محمد احمد','أ عثمان محمداحمد']},
+ {id:'mohamed_ismail',name:'م محمد إسماعيل',aliases:['محمد إسماعيل','محمد اسماعيل','محمداسماعيل']},
  {id:'amjad_fouad',name:'م. أمجد فؤاد',aliases:['أمجد فؤاد','امجد فؤاد','امجد فواد','أمجد فواد']}
 ];
 
@@ -37,7 +38,7 @@ export function isAuthorizedProjectManagerAccount(member,managerName=''){
 }
 
 // Direct-supervisor names are operational personnel data, not login identities.
-// Keep the seven approved names selectable even before an Auth account exists.
+// Keep the approved names selectable even before an Auth account exists.
 export function employeeDirectManagerOptions(records=[],members=[],company=''){
  const choices=new Map();
  const add=name=>{
