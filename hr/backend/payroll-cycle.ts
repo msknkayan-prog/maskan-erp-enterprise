@@ -32,6 +32,12 @@ const err=(message,status=400)=>response({error:message},status);
 const cents=x=>Math.round(Number(x||0)*100);
 const rounded=x=>Math.round(Number(x||0)*100)/100;
 const amount=(v,label)=>{const n=Number(v);if(!Number.isFinite(n)||n<0||n>10000000||Math.round(n*100)!==n*100&&Math.abs(Math.round(n*100)-n*100)>0.000001)throw Error('قيمة مالية غير صالحة: '+label);return rounded(n);};
+function payrollPaymentDefaults(employee,netValue){
+ const net=Math.max(0,cents(netValue)),method=String(employee?.payment_method||'').trim().toLowerCase();
+ const configured=Number(employee?.bank_amount);
+ const bank=method==='cash'?0:method==='bank'?net:Number.isFinite(configured)&&employee?.bank_amount!==''&&employee?.bank_amount!=null?Math.min(net,Math.max(0,cents(configured))):net;
+ return {bank_amount:bank/100,cash_amount:(net-bank)/100,method:bank===0&&net>0?'cash':bank<net?'mixed':'bank'};
+}
 const monthKsa=()=>new Date(Date.now()+3*3600000).toISOString().slice(0,7);
 const allowed=(u,co)=>u.role==='admin'||u.companies==='*'||!u.companies||(()=>{try{return JSON.parse(u.companies).includes(co)}catch{return false}})();
 const parse=r=>({...r,data:JSON.parse(r.data)});
@@ -165,8 +171,8 @@ export async function POST(req){
      const row={batch_id:id,employee_id:e.id,source_company:e.company,working_company:co,month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||e.code||'',employment_status:status,project_id:d.project_id||'',cost_company:co,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
        basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,
        absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,return_absence_days:attendance.absence_days,return_payable_days:attendance.payable_days,return_to_work_at:attendance.return_to_work_at,return_parts:attendance.return_parts,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
-       net:rounded(salary-attendance.absence_deduction-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,
-       exception_note:'',needs_review:isSuspended||salaryMismatch,review_reason:[isSuspended?'حالة الموظف غير نشطة':'',salaryMismatch?'اختلاف إجمالي الراتب عن مكوناته':''].filter(Boolean).join('؛ '),notes:'',method:'bank'};
+       net:rounded(salary-attendance.absence_deduction-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),...payrollPaymentDefaults(d,rounded(salary-attendance.absence_deduction-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0))),split_confirmed:false,
+       exception_note:'',needs_review:isSuspended||salaryMismatch,review_reason:[isSuspended?'حالة الموظف غير نشطة':'',salaryMismatch?'اختلاف إجمالي الراتب عن مكوناته':''].filter(Boolean).join('؛ '),notes:''};
      employeeInserts.push([crypto.randomUUID(),'payroll',co,e.id+':'+month+':'+id,JSON.stringify(row),u.email,now,now,mutation]);
     }
     // Send one multi-row insert per company instead of hundreds of network round-trips.
@@ -222,6 +228,7 @@ export async function POST(req){
    const loans=await paidLoanContext();
    const employeeRecords=(await db.prepare("SELECT id,data FROM records WHERE module='employees'").all()).results;
    const employeeProjectById=new Map(employeeRecords.map(row=>[String(row.id),String(JSON.parse(row.data||'{}').project_id||'')]));
+   const employeeMasterById=new Map(employeeRecords.map(row=>[String(row.id),JSON.parse(row.data||'{}')]));
    const statements=[],updates=[];
    for(const row of monthly){
     if(row.data.excluded)continue;
@@ -241,11 +248,14 @@ export async function POST(req){
     if(net<0)throw Error('خصومات الموظف '+(d.employee_name||d.employee_number||'')+' تتجاوز المستحق؛ راجع البيانات قبل المزامنة');
     const current=JSON.stringify((Array.isArray(d.advance_allocations)?d.advance_allocations:[]).map(x=>({advance_id:x.advance_id,amount:Number(x.amount)})));
     const upcoming=JSON.stringify(scheduled);
-    if(cents(d.advance_deduction)===cents(advance_deduction)&&cents(d.absence_deduction)===cents(absence_deduction)&&Number(d.absence_days||0)===absence_days&&current===upcoming&&String(d.cost_project_id||'')===costProjectId)continue;
-    const bank=Math.min(Number(d.bank_amount||0),net);
+    const master=employeeMasterById.get(String(d.employee_id));
+    const uninitialized=!d.split_confirmed&&cents(d.bank_amount)===0&&cents(d.cash_amount)===0&&net>0;
+    const defaults=uninitialized&&master?payrollPaymentDefaults(master,net):null;
+    if(!defaults&&cents(d.advance_deduction)===cents(advance_deduction)&&cents(d.absence_deduction)===cents(absence_deduction)&&Number(d.absence_days||0)===absence_days&&current===upcoming&&String(d.cost_project_id||'')===costProjectId)continue;
+    const bank=defaults?defaults.bank_amount:d.method==='bank'?net:d.method==='cash'?0:Math.min(Math.max(0,Number(d.bank_amount||0)),net);
     const updated={...d,cost_project_id:costProjectId,project_id:costProjectId,advance_deduction,advance_allocations:scheduled,absence_days,absence_deduction,return_absence_days:attendance.absence_days,
       return_payable_days:30-absence_days,return_parts:attendance.return_parts,return_to_work_at:attendance.return_to_work_at||d.return_to_work_at||null,
-      net,bank_amount:bank,cash_amount:rounded(net-bank),split_confirmed:false,manager_reviewed:false,manager_reviewed_by:null,manager_reviewed_at:null,
+      net,bank_amount:bank,cash_amount:rounded(net-bank),method:bank===0&&net>0?'cash':bank<net?'mixed':'bank',split_confirmed:false,manager_reviewed:false,manager_reviewed_by:null,manager_reviewed_at:null,
       reviewed_by:null,reviewed_at:null,review_reason:[d.review_reason,'مزامنة آلية لخصم السلف والغياب بعد المباشرة؛ يلزم إعادة مراجعة توزيع الراتب'].filter(Boolean).join('؛ '),
       payroll_deductions_synced_at:now};
     statements.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND revision=? AND module='payroll' AND EXISTS(SELECT 1 FROM records WHERE id=? AND status IN ('draft','manager_review'))")
@@ -290,9 +300,9 @@ export async function POST(req){
    const rowId=crypto.randomUUID();
    const data={batch_id:batch.id,employee_id:employeeId,source_company:original.company,working_company:batch.company,month:batch.data.month,employee_name:d.name||d.employee_name||'',employee_number:d.code||d.employee_number||original.code||'',employment_status:status,project_id:d.project_id||'',cost_company:batch.company,cost_project_id:d.project_id||'',manager_reviewed:false,manager_notes:'',
     basic,housing,transport,salary,bonus:0,extra_allowance:0,overtime_hours:0,overtime:0,absence_days:attendance.absence_days,absence_deduction:attendance.absence_deduction,return_absence_days:attendance.absence_days,return_payable_days:attendance.payable_days,return_to_work_at:attendance.return_to_work_at,return_parts:attendance.return_parts,advance_deduction:advanceAllocations.reduce((sum,a)=>sum+cents(a.amount),0)/100,advance_allocations:advanceAllocations,deductions:0,
-    net:rounded(salary-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),cash_amount:0,bank_amount:0,split_confirmed:false,excluded:false,
+    net:rounded(salary-attendance.absence_deduction-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0)),...payrollPaymentDefaults(d,rounded(salary-attendance.absence_deduction-advanceAllocations.reduce((sum,a)=>sum+Number(a.amount),0))),split_confirmed:false,excluded:false,
     exception_note:'',needs_review:mismatch,review_reason:mismatch?'اختلاف إجمالي الراتب عن مكوناته':'',
-    notes:'',method:'bank',added_to_batch_at:now,added_to_batch_by:u.email};
+    notes:'',added_to_batch_at:now,added_to_batch_by:u.email};
    const newBatch={...batch.data,employee_count:Number(batch.data.employee_count)+1};
    const result=await db.batch([
     db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='payroll_batches' AND status='draft' AND revision=?").bind(JSON.stringify(newBatch),now,mutation,batch.id,batch.revision),
