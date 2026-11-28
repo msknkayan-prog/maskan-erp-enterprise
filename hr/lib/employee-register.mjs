@@ -2,7 +2,7 @@ import {annualLeave,leaveAccrualAsOf,leaveEntitlement,leaveBalanceCharge,nextCon
 export const employeeRegisterFields = [
  ['working_company','الشركة التي يعمل بها'],['code','الرقم الوظيفي'],['name','اسم الموظف'],['manager','المدير المباشر'],['project_code','رمز المشروع'],['project_manager_name','اسم مدير المشروع'],
  ['hire_date','تاريخ التعيين'],['job','المسمى الوظيفي'],['department','القسم'],
- ['nationality','الجنسية'],['identity','الهوية أو الإقامة'],['phone','الجوال'],
+ ['nationality','الجنسية'],['gender','الجنس'],['identity','الهوية أو الإقامة'],['phone','الجوال'],
  ['email','البريد الإلكتروني'],['basic','الراتب الأساسي'],['housing','بدل السكن'],
  ['transport','بدل النقل'],['salary','الراتب الشهري الإجمالي'],['bank_amount','تحويل بنكي'],['cash_amount','المتبقي كاش'],['payment_method','طريقة الصرف'],['bank','البنك'],
  ['iban','الآيبان'],['sponsorship','حالة الكفالة'],['opening_leave','رصيد افتتاحي للإجازات'],
