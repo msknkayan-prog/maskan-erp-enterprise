@@ -587,6 +587,7 @@ const activeEmployeeFilters=Object.entries(employeeFieldFilters).filter(([key,va
 const employeeFilterMatch=(r)=>activeEmployeeFilters.every(([key,expected])=>{
  if(key==='project_manager_filter')return managerProjectDirectory.some(m=>m.key===expected&&m.company===r.company&&m.projects.some(p=>p.id===r.data?.project_id));
  if(key==='project_filter')return String(r.data?.project_id||'')===expected;
+ if(key==='gender')return String(r.data?.gender||'')===expected;
  const raw=key==='company'?r.company:employeeRegisterValue(r,key,rows);
  const field=modules.employees.fields.find(f=>f.key===key);
  const shown=field&&enumOptions[field.type]?(enumOptions[field.type].find(o=>o[0]===raw)?.[1]||raw):raw;
@@ -1847,7 +1848,7 @@ return <div className="app"><aside><a className="brand" href="/"><div className=
   <div className="modal-head"><div><span className="eyebrow">بحث متقدم</span><h2>فلاتر سجل الموظفين لكل حقل</h2></div><button type="button" onClick={()=>setEmployeeFilterOpen(false)} aria-label="إغلاق الفلاتر"><X/></button></div>
   <p>يمكن تصفية الموظفين بأي حقل أو بعدة حقول معًا. تُطبَّق الفلاتر على الجدول والطباعة وتصدير Excel دون تعديل سجلات الموظفين.</p>
   <div className="form-grid">{availableEmployeeFields.map(f=><label key={f.key}>{f.label}
-   {f.key==='company'||['employment_status','sponsorship','payment_method'].includes(f.key)?
+   {f.key==='gender'?<select value={employeeFieldFilters.gender||''} onChange={e=>setEmployeeFieldFilters(old=>({...old,gender:e.target.value}))}><option value="">الكل</option><option value="male">ذكر</option><option value="female">أنثى</option></select>:f.key==='company'||['employment_status','sponsorship','payment_method'].includes(f.key)?
     <select value={employeeFieldFilters[f.key]||''} onChange={e=>setEmployeeFieldFilters(old=>({...old,[f.key]:e.target.value}))}><option value="">جميع القيم</option>{[...new Set(rows.filter(r=>r.module==='employees').map(r=>{
      const v=f.key==='company'?r.company:employeeRegisterValue(r,f.key,rows);
      const type=modules.employees.fields.find(x=>x.key===f.key)?.type;
