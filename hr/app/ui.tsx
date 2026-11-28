@@ -603,13 +603,16 @@ async function approveAdvanceBulk(all){
  if(!window.confirm('اعتماد '+selected.length+' طلب سلفة بإجمالي '+money(total)+' ر.س؟ الاعتماد الإداري فقط، دون قيد الصرف أو الخصم.'))return;
  setSaving(true);let success=0;const failed=[];
  try{
-  for(const row of selected){
+  for(let offset=0;offset<selected.length;offset+=4){
+   await Promise.all(selected.slice(offset,offset+4).map(async row=>{
    try{
     const stages=row.status==='draft'?['draft','projects_director','hr']:row.status==='project_manager'?['project_manager','projects_director','hr']:row.status==='projects_director'?['projects_director','hr']:row.status==='hr'?['hr']:['finance'];
     let revision=row.revision;
     for(const stage of stages){await post({action:'transition',module:'advances',id:row.id,revision,decision:'approve',note:'اعتماد جماعي إداري من المدير العام دون صرف'});revision++;}
     success++;
    }catch(e){failed.push((row.data?.document_no||row.code||row.id)+': '+(e.message||'تعذر الاعتماد'));}
+   }));
+   notify('اكتمل '+Math.min(offset+4,selected.length)+' من '+selected.length+' طلب · نجح '+success+' · تعذر '+failed.length);
   }
   setAdvanceBulkSelected(selected.filter(r=>failed.some(f=>f.startsWith((r.data?.document_no||r.code||r.id)+':'))).map(r=>r.id));
   notify('تم اعتماد '+success+' من '+selected.length+' طلب. '+(failed.length?'تعذر استكمال '+failed.length+' طلب: '+failed.join(' | '):'لم يُسجل أي صرف.'));
