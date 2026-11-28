@@ -1299,7 +1299,7 @@ if(mod==='returns'){
 }
 
 const centsOf=(value:any)=>Math.round(Number(value||0)*100);
-const salaryFieldsChanged=mod==='employees'&&Boolean(old)&&['basic','housing','transport','salary'].some(k=>centsOf(previous?.[k])!==centsOf(data[k]));
+const salaryFieldsChanged=mod==='employees'&&Boolean(old)&&(['basic','housing','transport','salary','bank_amount','cash_amount'].some(k=>centsOf(previous?.[k])!==centsOf(data[k]))||String(previous?.payment_method||'')!==String(data.payment_method||''));
 const linkedPayrollUpdates:any[]=[];
 const synchronizedMonths:string[]=[];
 if(salaryFieldsChanged){
@@ -1308,7 +1308,7 @@ if(salaryFieldsChanged){
  const rows=(await db.prepare("SELECT * FROM records WHERE module='payroll'").all()).results;
  for(const r of rows){
   const d=JSON.parse(r.data||'{}');
-  if(d.employee_id!==old.id)continue;
+  if(d.employee_id!==old.id||d.excluded)continue;
   const batch:any=batches.get(d.batch_id);
   if(!batch)throw Error('تعذر تحديد مسير الرواتب المرتبط بالموظف، يرجى مراجعة المالية');
   if(batch.status==='paid')continue;
@@ -1317,18 +1317,18 @@ if(salaryFieldsChanged){
   const hours=Number(d.overtime_hours||0),bonus=Number(d.bonus||0),additional=Number(d.extra_allowance||0);
   const overtime=Math.round(hours*(salary/30/8+0.5*base/30/8)*100)/100;
   const net=Math.round((salary+bonus+additional+overtime-Number(d.absence_deduction||0)-Number(d.advance_deduction||0)-Number(d.deductions||0))*100)/100;
-  const bank=Number(d.bank_amount||0);
-  if(!Number.isFinite(net)||net<0||centsOf(bank)>centsOf(net))throw Error('الراتب الجديد أقل من التحويل البنكي أو الخصومات في مسير '+(JSON.parse(batch.data||'{}').month||'')+'؛ عدّل توزيع الصرف أو الخصومات أولًا');
+  const bank=Math.min(Math.max(0,Number(data.bank_amount||0)),Math.max(0,net));
+  if(!Number.isFinite(net)||!Number.isFinite(bank)||net<0||centsOf(bank)>centsOf(net))throw Error('الراتب الجديد أقل من التحويل البنكي أو الخصومات في مسير '+(JSON.parse(batch.data||'{}').month||'')+'؛ عدّل توزيع الصرف أو الخصومات أولًا');
   const cash=(centsOf(net)-centsOf(bank))/100;
-  const revised={...d,basic:base,housing,transport,salary,overtime,net,cash_amount:cash,
+  const revised={...d,basic:base,housing,transport,salary,overtime,net,bank_amount:bank,cash_amount:cash,method:bank===0&&cash>0?'cash':cash>0?'mixed':'bank',
     split_confirmed:false,manager_reviewed:false,manager_reviewed_by:null,manager_reviewed_at:null,
     reviewed_by:null,reviewed_at:null,needs_review:true,
-    review_reason:[d.review_reason,'تغير الراتب الأساسي أو مكونات الراتب من سجل الموظفين؛ يلزم إعادة المراجعة'].filter(Boolean).join('؛ '),
+    review_reason:[d.review_reason,'تغير الراتب أو توزيع الصرف من سجل الموظفين؛ يلزم إعادة المراجعة'].filter(Boolean).join('؛ '),
     employee_salary_synced_at:now,employee_salary_synced_by:u.email,employee_salary_source_revision:old.revision+1};
   linkedPayrollUpdates.push(db.prepare("UPDATE records SET data=?,revision=revision+1,updated_at=?,mutation=? WHERE id=? AND module='payroll' AND revision=? AND EXISTS(SELECT 1 FROM records b WHERE b.id=? AND b.status IN ('draft','manager_review'))")
     .bind(JSON.stringify(revised),now,mutation,r.id,r.revision,batch.id));
   linkedPayrollUpdates.push(db.prepare("INSERT INTO audit SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM records WHERE id=? AND mutation=?)")
-    .bind(crypto.randomUUID(),u.email,r.id,'payroll_salary_sync',now,JSON.stringify({employee_id:old.id,month:d.month,old_basic:d.basic,new_basic:base,old_salary:d.salary,new_salary:salary,old_net:d.net,new_net:net,requires_review:true}),r.id,mutation));
+    .bind(crypto.randomUUID(),u.email,r.id,'payroll_salary_sync',now,JSON.stringify({employee_id:old.id,month:d.month,old_basic:d.basic,new_basic:base,old_salary:d.salary,new_salary:salary,old_net:d.net,new_net:net,old_bank:d.bank_amount,new_bank:bank,old_cash:d.cash_amount,new_cash:cash,requires_review:true}),r.id,mutation));
   synchronizedMonths.push(d.month||JSON.parse(batch.data||'{}').month||'');
  }
  data._last_salary_change={at:now,by:u.email,from_basic:previous?.basic,to_basic:data.basic,from_salary:previous?.salary,to_salary:data.salary,synchronized_payroll_months:synchronizedMonths};
