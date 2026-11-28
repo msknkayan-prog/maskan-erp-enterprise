@@ -1,7 +1,7 @@
 import {annualLeave,leaveAccrualAsOf,leaveEntitlement,leaveBalanceCharge,nextContractExpiry,serviceDuration,companyDisplayName} from './modules.mjs';
 export const employeeRegisterFields = [
  ['working_company','الشركة التي يعمل بها'],['code','الرقم الوظيفي'],['name','اسم الموظف'],['manager','المدير المباشر'],['project_code','رمز المشروع'],['project_manager_name','اسم مدير المشروع'],
- ['hire_date','تاريخ التعيين'],['job','المسمى الوظيفي'],['department','القسم'],
+ ['hire_date','تاريخ التعيين'],['contract_start','تاريخ بداية العقد الحالي'],['job','المسمى الوظيفي'],['department','القسم'],
  ['nationality','الجنسية'],['gender','الجنس'],['identity','الهوية أو الإقامة'],['phone','الجوال'],
  ['email','البريد الإلكتروني'],['basic','الراتب الأساسي'],['housing','بدل السكن'],
  ['transport','بدل النقل'],['salary','الراتب الشهري الإجمالي'],['bank_amount','تحويل بنكي'],['cash_amount','المتبقي كاش'],['payment_method','طريقة الصرف'],['bank','البنك'],
@@ -26,7 +26,7 @@ export function employeeRegisterValue(row,key,rows){
  }
  if(key==='project_manager_name')return project?.data.manager_name||data.project_manager_name||'';
  if(key==='project_id')return project?.data.name||data.project_name||data['اسم المشروع']||'';
- if(key==='contract_expiry')return data.contract_expiry_mode==='manual'?(data.contract_expiry||'حدد تاريخ انتهاء العقد'):nextContractExpiry(data.hire_date)||'أكمل تاريخ التعيين';
+ if(key==='contract_expiry')return data.contract_expiry_mode==='manual'?(data.contract_expiry||'حدد تاريخ انتهاء العقد'):nextContractExpiry(data.contract_start||data.hire_date)||'أكمل تاريخ التعيين';
  if(key==='service_years'){const span=serviceDuration(data.hire_date);return span?span.years+' سنة، '+span.months+' شهر، '+span.days+' يوم':'أكمل تاريخ التعيين';}
  if(key==='service_total_days')return serviceDuration(data.hire_date)?.totalDays??'أكمل تاريخ التعيين';
  if(key==='accrued_leave')return data.leave_restart_date?leaveEntitlement(data):data.contract_expiry_mode!=='manual'&&data.leave_balance_mode==='manual'?Number(data.manual_leave_entitlement||0):service?.accrued??'أكمل تاريخ التعيين';
